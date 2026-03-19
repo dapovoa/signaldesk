@@ -1,0 +1,203 @@
+import { EventEmitter } from 'events'
+
+export interface DetectedQuestion {
+  text: string
+  confidence: number
+  questionType: 'direct' | 'indirect' | 'scenario' | 'unknown'
+}
+
+export class QuestionDetector extends EventEmitter {
+  private transcriptBuffer: string[] = []
+  private minWords = 5
+  private minChars = 28
+  private confidenceThreshold = 0.68
+  private readonly strongStarters = new Set([
+    'what',
+    'how',
+    'why',
+    'when',
+    'where',
+    'who',
+    'which',
+    'tell me',
+    'describe',
+    'explain',
+    'o que',
+    'como',
+    'porquê',
+    'porque',
+    'quando',
+    'onde',
+    'quem',
+    'qual',
+    'quais',
+    'diga-me',
+    'explique'
+  ])
+  private readonly interviewPromptStarters = new Set([
+    'based on your',
+    'imagine',
+    'suppose',
+    'walk me through',
+    'how would you',
+    'think about',
+    'baseado na sua',
+    'baseado na tua',
+    'imagine que',
+    'suponha que',
+    'como abordaria',
+    'como abordarias',
+    'pensa em'
+  ])
+  private readonly metaIgnoreFragments = new Set([
+    'got it',
+    'sorry for',
+    'makes sense',
+    'moving on',
+    'next question',
+    'entendi',
+    'desculpe',
+    'desculpa',
+    'faz sentido',
+    'passamos à próxima',
+    'passamos para a próxima'
+  ])
+
+  addTranscript(text: string, isFinal: boolean): void {
+    if (isFinal && text.trim()) {
+      this.transcriptBuffer.push(text.trim())
+    }
+  }
+
+  checkEarlyDetection(_text: string): DetectedQuestion | null {
+    return null
+  }
+
+  onUtteranceEnd(): void {
+    const fullText = this.getCurrentBuffer()
+    this.transcriptBuffer = []
+
+    if (!fullText) return
+
+    if (this.shouldIgnore(fullText)) {
+      console.log(`[QuestionDetector] Ignored short/noise turn: "${fullText}"`)
+      return
+    }
+
+    const detection = this.analyzeTurn(fullText)
+    if (!detection || detection.confidence < this.confidenceThreshold) {
+      console.log(`[QuestionDetector] Ignored low-confidence turn: "${fullText}"`)
+      return
+    }
+
+    console.log(
+      `[QuestionDetector] Turn analyzed: "${fullText}" - Confidence: ${detection.confidence.toFixed(2)}, Type: ${detection.questionType}`
+    )
+
+    console.log(`[QuestionDetector] RESPONSE NEEDED: "${fullText}"`)
+    this.emit('questionDetected', detection)
+  }
+
+  isQuestion(text: string): boolean {
+    const normalized = this.normalizeText(text)
+    return Boolean(normalized) && !this.shouldIgnore(normalized)
+  }
+
+  clearBuffer(): void {
+    this.transcriptBuffer = []
+  }
+
+  getCurrentBuffer(): string {
+    return this.normalizeText(this.transcriptBuffer.join(' '))
+  }
+
+  setConfidenceThreshold(_threshold: number): void {
+    this.confidenceThreshold = _threshold
+  }
+
+  private normalizeText(text: string): string {
+    return text.replace(/\s+/g, ' ').trim()
+  }
+
+  private shouldIgnore(text: string): boolean {
+    if (!text) return true
+
+    const lower = text.toLowerCase()
+    const words = text.split(/\s+/).length
+
+    if (words <= 3 && text.length < 20) {
+      return true
+    }
+
+    for (const fragment of this.metaIgnoreFragments) {
+      if (lower.includes(fragment)) {
+        return true
+      }
+    }
+
+    if (/^(eu|i|we|nós|my|o meu|a minha)\b/i.test(lower) && !lower.includes('?')) {
+      return true
+    }
+
+    return false
+  }
+
+  private analyzeTurn(text: string): DetectedQuestion | null {
+    const lower = text.toLowerCase()
+    const words = lower.split(/\s+/)
+    const firstWord = words[0] || ''
+    let confidence = 0.4
+
+    if (text.trim().endsWith('?')) {
+      confidence += 0.35
+    }
+
+    if (this.strongStarters.has(firstWord) || this.startsWithMultiWordStarter(lower, this.strongStarters)) {
+      confidence += 0.3
+    }
+
+    for (const starter of this.interviewPromptStarters) {
+      if (lower.includes(starter)) {
+        confidence += 0.25
+        break
+      }
+    }
+
+    if (text.length > 45) {
+      confidence += 0.1
+    }
+
+    if (text.length < this.minChars || words.length < this.minWords) {
+      confidence -= 0.2
+    }
+
+    if (confidence < this.confidenceThreshold) {
+      return null
+    }
+
+    let questionType: DetectedQuestion['questionType'] = 'unknown'
+    if (confidence >= 0.75 && text.includes('?')) {
+      questionType = 'direct'
+    } else if (confidence >= 0.68) {
+      questionType = 'indirect'
+    } else if (confidence >= 0.6) {
+      questionType = 'scenario'
+    }
+
+    return {
+      text,
+      confidence: Math.min(0.98, confidence),
+      questionType
+    }
+  }
+
+  private startsWithMultiWordStarter(text: string, starters: Set<string>): boolean {
+    for (const starter of starters) {
+      if (starter.includes(' ') && text.startsWith(starter)) {
+        return true
+      }
+    }
+
+    return false
+  }
+}
