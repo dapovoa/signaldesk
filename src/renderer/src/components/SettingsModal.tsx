@@ -7,6 +7,24 @@ interface ModelOption {
   name: string
 }
 
+const AWARENESS_LIMITS = {
+  cvSummary: 700,
+  jobTitle: 60,
+  companyName: 30,
+  jobDescription: 1600,
+  companyContext: 250
+} as const
+
+const normalizeAwarenessText = (value: string): string =>
+  value.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+
+const clampAwarenessField = (
+  field: keyof typeof AWARENESS_LIMITS,
+  value: string
+): string => normalizeAwarenessText(value).slice(0, AWARENESS_LIMITS[field])
+
+const getAwarenessLength = (value: string): number => normalizeAwarenessText(value).length
+
 const OPENAI_OAUTH_MODEL_OPTIONS: ModelOption[] = [
   { id: 'gpt-5.4', name: 'gpt-5.4' },
   { id: 'gpt-5.4-mini', name: 'gpt-5.4-mini' },
@@ -92,8 +110,7 @@ const normalizeSettingsForUi = (settings: AppSettings): AppSettings => {
 
   return {
     ...settings,
-    llmModel,
-    llmReasoningMode: settings.llmReasoningMode || 'fast'
+    llmModel
   }
 }
 
@@ -170,9 +187,6 @@ export function SettingsModal(): React.ReactNode | null {
         ? localSettings.llmOauthToken?.trim()
         : localSettings.llmApiKey?.trim()
     const baseURL = localSettings.llmBaseUrl?.trim()
-    const disableThinking =
-      provider === 'openai-compatible' ? localSettings.llmDisableThinking : false
-
     if (!credential) {
       setModels([])
       setModelsError(null)
@@ -206,8 +220,7 @@ export function SettingsModal(): React.ReactNode | null {
           authMode,
           baseURL: provider === 'openai-compatible' ? baseURL : undefined,
           customHeaders:
-            provider === 'openai-compatible' ? localSettings.llmCustomHeaders : undefined,
-          disableThinking
+            provider === 'openai-compatible' ? localSettings.llmCustomHeaders : undefined
         })
 
         if (result.success) {
@@ -237,8 +250,7 @@ export function SettingsModal(): React.ReactNode | null {
     localSettings.llmProvider,
     localSettings.llmAuthMode,
     localSettings.llmBaseUrl,
-    localSettings.llmCustomHeaders,
-    localSettings.llmDisableThinking
+    localSettings.llmCustomHeaders
   ])
 
   if (!showSettings) return null
@@ -297,9 +309,6 @@ export function SettingsModal(): React.ReactNode | null {
         ? localSettings.llmOauthToken?.trim()
         : localSettings.llmApiKey?.trim()
     const baseURL = localSettings.llmBaseUrl?.trim()
-    const disableThinking =
-      provider === 'openai-compatible' ? localSettings.llmDisableThinking : false
-
     if (!credential) {
       setConnectionStatus('error')
       setConnectionMessage('Credential is required before testing the connection.')
@@ -325,7 +334,6 @@ export function SettingsModal(): React.ReactNode | null {
         baseURL: provider === 'openai-compatible' ? baseURL : undefined,
         customHeaders:
           provider === 'openai-compatible' ? localSettings.llmCustomHeaders : undefined,
-        disableThinking,
         model: localSettings.llmModel
       })
 
@@ -832,47 +840,7 @@ export function SettingsModal(): React.ReactNode | null {
                 />
               </div>
 
-              <label className="settings-soft-block flex items-start gap-3 px-3 py-3">
-                <input
-                  type="checkbox"
-                  checked={localSettings.llmDisableThinking}
-                  onChange={(e) =>
-                    setLocalSettings({
-                      ...localSettings,
-                      llmDisableThinking: e.target.checked
-                    })
-                  }
-                  className="mt-1 rounded border-dark-600 bg-dark-800 text-blue-500 focus:ring-blue-500"
-                />
-                <span className="space-y-1">
-                  <span className="block text-sm text-dark-100">Disable provider thinking</span>
-                  <span className="block text-xs text-dark-500">
-                    Sends `enable_thinking=false` on chat requests when the provider supports it.
-                  </span>
-                </span>
-              </label>
             </>
-          )}
-
-          {(localSettings.llmProvider === 'openai' ||
-            localSettings.llmProvider === 'openai-oauth') && (
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-dark-200">Reasoning</label>
-              <select
-                value={localSettings.llmReasoningMode}
-                onChange={(e) =>
-                  setLocalSettings({
-                    ...localSettings,
-                    llmReasoningMode: e.target.value as AppSettings['llmReasoningMode']
-                  })
-                }
-                className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors"
-              >
-                <option value="fast">Fast</option>
-                <option value="balanced">Balanced</option>
-                <option value="deep">Deep</option>
-              </select>
-            </div>
           )}
 
           <div className="space-y-2">
@@ -935,10 +903,21 @@ export function SettingsModal(): React.ReactNode | null {
           </div>
 
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-dark-200">CV Summary</label>
+            <div className="flex items-center justify-between gap-3">
+              <label className="block text-sm font-medium text-dark-200">CV Summary</label>
+              <span className="text-xs text-dark-400">
+                {getAwarenessLength(localSettings.cvSummary)}/{AWARENESS_LIMITS.cvSummary}
+              </span>
+            </div>
             <textarea
               value={localSettings.cvSummary}
-              onChange={(e) => setLocalSettings({ ...localSettings, cvSummary: e.target.value })}
+              onChange={(e) =>
+                setLocalSettings({
+                  ...localSettings,
+                  cvSummary: clampAwarenessField('cvSummary', e.target.value)
+                })
+              }
+              maxLength={AWARENESS_LIMITS.cvSummary}
               placeholder="Summarize your background, strengths, and relevant experience..."
               rows={5}
               className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors resize-y"
@@ -946,34 +925,65 @@ export function SettingsModal(): React.ReactNode | null {
           </div>
 
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-dark-200">Role / Position</label>
+            <div className="flex items-center justify-between gap-3">
+              <label className="block text-sm font-medium text-dark-200">Role / Position</label>
+              <span className="text-xs text-dark-400">
+                {getAwarenessLength(localSettings.jobTitle)}/{AWARENESS_LIMITS.jobTitle}
+              </span>
+            </div>
             <input
               type="text"
               value={localSettings.jobTitle}
-              onChange={(e) => setLocalSettings({ ...localSettings, jobTitle: e.target.value })}
+              onChange={(e) =>
+                setLocalSettings({
+                  ...localSettings,
+                  jobTitle: clampAwarenessField('jobTitle', e.target.value)
+                })
+              }
+              maxLength={AWARENESS_LIMITS.jobTitle}
               placeholder="e.g. Senior Backend Engineer"
               className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
             />
           </div>
 
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-dark-200">Company</label>
+            <div className="flex items-center justify-between gap-3">
+              <label className="block text-sm font-medium text-dark-200">Company</label>
+              <span className="text-xs text-dark-400">
+                {getAwarenessLength(localSettings.companyName)}/{AWARENESS_LIMITS.companyName}
+              </span>
+            </div>
             <input
               type="text"
               value={localSettings.companyName}
-              onChange={(e) => setLocalSettings({ ...localSettings, companyName: e.target.value })}
+              onChange={(e) =>
+                setLocalSettings({
+                  ...localSettings,
+                  companyName: clampAwarenessField('companyName', e.target.value)
+                })
+              }
+              maxLength={AWARENESS_LIMITS.companyName}
               placeholder="Company name"
               className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
             />
           </div>
 
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-dark-200">Job Description</label>
+            <div className="flex items-center justify-between gap-3">
+              <label className="block text-sm font-medium text-dark-200">Job Description</label>
+              <span className="text-xs text-dark-400">
+                {getAwarenessLength(localSettings.jobDescription)}/{AWARENESS_LIMITS.jobDescription}
+              </span>
+            </div>
             <textarea
               value={localSettings.jobDescription}
               onChange={(e) =>
-                setLocalSettings({ ...localSettings, jobDescription: e.target.value })
+                setLocalSettings({
+                  ...localSettings,
+                  jobDescription: clampAwarenessField('jobDescription', e.target.value)
+                })
               }
+              maxLength={AWARENESS_LIMITS.jobDescription}
               placeholder="Paste the job description or the main requirements..."
               rows={6}
               className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors resize-y"
@@ -981,12 +991,21 @@ export function SettingsModal(): React.ReactNode | null {
           </div>
 
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-dark-200">Company Context</label>
+            <div className="flex items-center justify-between gap-3">
+              <label className="block text-sm font-medium text-dark-200">Company Context</label>
+              <span className="text-xs text-dark-400">
+                {getAwarenessLength(localSettings.companyContext)}/{AWARENESS_LIMITS.companyContext}
+              </span>
+            </div>
             <textarea
               value={localSettings.companyContext}
               onChange={(e) =>
-                setLocalSettings({ ...localSettings, companyContext: e.target.value })
+                setLocalSettings({
+                  ...localSettings,
+                  companyContext: clampAwarenessField('companyContext', e.target.value)
+                })
               }
+              maxLength={AWARENESS_LIMITS.companyContext}
               placeholder="Add product, market, team, stack, culture, or other company details..."
               rows={5}
               className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors resize-y"

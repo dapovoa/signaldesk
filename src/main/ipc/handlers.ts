@@ -68,9 +68,7 @@ const getProviderConfig = (settings: AppSettings) => {
           : undefined
         : isOpenAICompatible
         ? settings.llmCustomHeaders
-        : undefined,
-    disableThinking:
-      settings.llmProvider === 'openai-oauth' ? false : isOpenAICompatible ? settings.llmDisableThinking : false
+        : undefined
   }
 }
 
@@ -282,7 +280,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         authMode?: 'api-key' | 'oauth-token'
         baseURL?: string
         customHeaders?: string
-        disableThinking?: boolean
       }
     ) => {
       const provider = payload?.provider || 'openai'
@@ -356,7 +353,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         authMode?: 'api-key' | 'oauth-token'
         baseURL?: string
         customHeaders?: string
-        disableThinking?: boolean
         model?: string
       }
     ) => {
@@ -462,10 +458,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
             messages: [{ role: 'user', content: 'ping' }],
             max_completion_tokens: 1,
             temperature: 0
-          }
-
-          if (provider === 'openai-compatible' && payload?.disableThinking) {
-            probeRequest.extra_body = { enable_thinking: false }
           }
 
           await client.chat.completions.create(probeRequest as never)
@@ -599,9 +591,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         baseURL: providerConfig.baseURL,
         customHeaders: providerConfig.customHeaders,
         chatgptAccountId: settings.llmOauthAccountId,
-        disableThinking: providerConfig.disableThinking,
         useResponsesApi: shouldUseResponsesApi(settings),
-        reasoningMode: settings.llmReasoningMode,
         model: settings.llmModel,
         cvSummary: settings.cvSummary,
         jobTitle: settings.jobTitle,
@@ -667,7 +657,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           console.log('[Pipeline] debounce elapsed -> detector')
           questionDetector?.onUtteranceEnd()
           utteranceDebounceTimer = null
-        }, 1200)
+        }, 750)
         mainWindow?.webContents.send('utterance-end')
       })
 
@@ -929,7 +919,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         apiKey: providerConfig.apiKey,
         baseURL: providerConfig.baseURL,
         customHeaders: providerConfig.customHeaders,
-        disableThinking: providerConfig.disableThinking,
         model: settings.llmModel || 'gpt-4o-mini'
       })
 
@@ -939,9 +928,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           baseURL: providerConfig.baseURL,
           customHeaders: providerConfig.customHeaders,
           chatgptAccountId: settings.llmOauthAccountId,
-          disableThinking: providerConfig.disableThinking,
           useResponsesApi: shouldUseResponsesApi(settings),
-          reasoningMode: settings.llmReasoningMode,
           model: settings.llmModel,
           cvSummary: settings.cvSummary,
           jobTitle: settings.jobTitle,
@@ -964,9 +951,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           baseURL: providerConfig.baseURL,
           customHeaders: providerConfig.customHeaders,
           chatgptAccountId: settings.llmOauthAccountId,
-          disableThinking: providerConfig.disableThinking,
           useResponsesApi: shouldUseResponsesApi(settings),
-          reasoningMode: settings.llmReasoningMode,
           model: settings.llmModel,
           cvSummary: settings.cvSummary,
           jobTitle: settings.jobTitle,

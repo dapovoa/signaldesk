@@ -12,7 +12,6 @@ export interface VisionServiceConfig {
   apiKey: string
   baseURL?: string
   customHeaders?: string
-  disableThinking?: boolean
   model?: string
 }
 
@@ -87,10 +86,6 @@ If you find ANY of these, respond with JSON where isQuestion=true and include th
         max_completion_tokens: 1000,
         temperature: 0.2,
         response_format: { type: 'json_object' }
-      }
-
-      if (this.config.disableThinking && this.config.baseURL) {
-        request.extra_body = { enable_thinking: false }
       }
 
       const response = await this.client.chat.completions.create(request as never)

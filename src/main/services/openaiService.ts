@@ -13,9 +13,7 @@ export interface OpenAIConfig {
   baseURL?: string
   customHeaders?: string
   chatgptAccountId?: string
-  disableThinking?: boolean
   useResponsesApi?: boolean
-  reasoningMode?: 'fast' | 'balanced' | 'deep'
   model?: string
   maxTokens?: number
   temperature?: number
@@ -28,24 +26,6 @@ export interface OpenAIConfig {
 
 const isChatGPTCodexBackend = (config: OpenAIConfig): boolean =>
   config.baseURL?.includes('chatgpt.com/backend-api/codex') ?? false
-
-const getReasoningEffort = (
-  config: OpenAIConfig
-): 'low' | 'medium' | undefined => {
-  if (config.baseURL) {
-    return undefined
-  }
-
-  switch (config.reasoningMode) {
-    case 'balanced':
-      return 'low'
-    case 'deep':
-      return 'medium'
-    case 'fast':
-    default:
-      return undefined
-  }
-}
 
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message
@@ -131,13 +111,15 @@ Language behavior (very important):
 Most importantly: Keep answers simple, direct, and to the point. Get straight to the answer—no long intros, no rambling, no unnecessary details and unnecessary conclusions.
 
 CRITICAL - Answer simplicity:
-- Default to 1-3 short sentences
+- Default to 2-4 short spoken sentences
 - For simple questions, give a straightforward, simple answer—NO explanation unless the question specifically asks for one
 - If the question is "What is X?" or "Do you know Y?", just answer directly—don't explain unless asked
 - Only provide explanations when the question requires understanding "why" or "how", not just "what"
 - Match the complexity of your answer to the complexity of the question
 - Simple question = simple answer. Complex question = explanation only if needed
 - If the interviewer wants more detail, they will ask a follow-up
+- Optimize for quick reading on screen while speaking aloud
+- Prefer one compact paragraph, not multiple blocks
 
 CRITICAL - Avoid AI-sounding patterns:
 - NEVER start with phrases like "Certainly!", "I'd be happy to...", "Let me explain...", "That's a great question", or "I understand..."
@@ -149,14 +131,16 @@ CRITICAL - Avoid AI-sounding patterns:
 - AVOID sounding like you're teaching or lecturing—just answer naturally
 - Don't front-load context before the answer
 - Don't turn short prompts into long mini-speeches
+- NO markdown
+- NO bullet lists
+- NO numbered lists
+- NO headings or labels
+- NO meta phrases like "In summary", "My answer would be", or "A good example is"
 
 When answering:
-- Answer the question directly and simply—usually 1-3 sentences is enough, often just 1 sentence for simple questions
+- Answer the question directly and simply—usually 2-4 short spoken sentences is enough, and 1-2 sentences for very simple questions
 - For simple questions, give a straightforward, simple answer—NO explanation unless the question specifically asks for one
 - Get to the point quickly, then stop
-- Use **bold** formatting for important words, key terms, technologies, or concepts that are essential to the answer
-- Use bullet points only when the interviewer explicitly asks for a list, steps, or trade-offs
-- Format your answer so it's easy to read and share—make key information stand out visually
 - Talk like a normal person would, not like you're reading from a script
 - For experience questions, just tell your story naturally—no need to force the STAR format unless it flows that way
 - For technical questions, explain things simply and clearly, like you're talking to a colleague
@@ -165,6 +149,9 @@ When answering:
 - Don't overthink it—just answer the question directly like you would in a real conversation
 - If you can say it in fewer words, do that
 - Sound like you're speaking, not writing an essay
+- Keep the answer easy to scan in real time
+- Avoid long clauses and dense paragraphs
+- End cleanly once the core answer is delivered
 
 The goal is to sound like a real person giving a simple, direct answer in a genuine conversation—not an AI, not ChatGPT, not a robot. Be yourself, keep it simple and pointed, and sound human.
 `
@@ -411,24 +398,12 @@ First, identify what the question is asking, then provide:
       const model = this.config.model || 'gpt-4o-mini'
       const visionModel = model.includes('gpt-4o') ? model : 'gpt-4o-mini'
 
-        const request: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming & {
-          extra_body?: { enable_thinking: boolean }
-          reasoning_effort?: 'low' | 'medium'
-        } = {
+      const request: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
         model: visionModel,
         messages: messages,
         max_completion_tokens: this.config.maxTokens || 2000, // More tokens for detailed solutions
         temperature: this.config.temperature || 0.7,
         stream: true
-      }
-
-      if (this.config.disableThinking && this.config.baseURL) {
-        request.extra_body = { enable_thinking: false }
-      }
-
-      const reasoningEffort = getReasoningEffort(this.config)
-      if (reasoningEffort) {
-        request.reasoning_effort = reasoningEffort
       }
 
       const stream = await this.client.chat.completions.create(request)
@@ -507,24 +482,12 @@ First, identify what the question is asking, then provide:
 
   private async streamAnswerWithChatCompletions(messages: Message[]): Promise<string> {
     let fullResponse = ''
-    const request: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming & {
-      extra_body?: { enable_thinking: boolean }
-      reasoning_effort?: 'low' | 'medium'
-    } = {
+    const request: OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming = {
       model: this.config.model || 'gpt-4o-mini',
       messages: messages,
       max_completion_tokens: this.config.maxTokens || 160,
       temperature: this.config.temperature || 0.4,
       stream: true
-    }
-
-    if (this.config.disableThinking && this.config.baseURL) {
-      request.extra_body = { enable_thinking: false }
-    }
-
-    const reasoningEffort = getReasoningEffort(this.config)
-    if (reasoningEffort) {
-      request.reasoning_effort = reasoningEffort
     }
 
     const stream = await this.client!.chat.completions.create(request)
@@ -557,7 +520,6 @@ First, identify what the question is asking, then provide:
         ]
       }))
 
-    const reasoningEffort = getReasoningEffort(this.config)
     const request = {
       model: this.config.model || 'gpt-4o-mini',
       instructions: this.systemPrompt,
@@ -568,15 +530,13 @@ First, identify what the question is asking, then provide:
             tool_choice: 'auto',
             parallel_tool_calls: false,
             store: false,
-            stream: true,
-            include: reasoningEffort ? ['reasoning.encrypted_content'] : []
+            stream: true
           }
         : {
             max_output_tokens: this.config.maxTokens || 160,
             temperature: this.config.temperature || 0.4,
             stream: true
-          }),
-      ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {})
+          })
     }
 
     const responseStream = isChatGPTCodexBackend(this.config)

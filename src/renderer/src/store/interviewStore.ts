@@ -33,8 +33,6 @@ export interface AppSettings {
   llmOauthAccountId: string
   llmBaseUrl: string
   llmCustomHeaders: string
-  llmDisableThinking: boolean
-  llmReasoningMode: 'fast' | 'balanced' | 'deep'
   llmModel: string
   transcriptionLanguage: 'auto' | 'en' | 'pt'
   alwaysOnTop: boolean
@@ -130,8 +128,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   llmOauthAccountId: '',
   llmBaseUrl: '',
   llmCustomHeaders: '',
-  llmDisableThinking: false,
-  llmReasoningMode: 'fast',
   llmModel: 'gpt-4o-mini',
   transcriptionLanguage: 'auto',
   alwaysOnTop: true,

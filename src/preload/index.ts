@@ -38,8 +38,6 @@ export interface AppSettings {
   llmOauthAccountId: string
   llmBaseUrl: string
   llmCustomHeaders: string
-  llmDisableThinking: boolean
-  llmReasoningMode: 'fast' | 'balanced' | 'deep'
   llmModel: string
   transcriptionLanguage: 'auto' | 'en' | 'pt'
   alwaysOnTop: boolean
@@ -91,7 +89,6 @@ const api = {
       authMode?: 'api-key' | 'oauth-token'
       baseURL?: string
       customHeaders?: string
-      disableThinking?: boolean
     }
   ): Promise<{ success: boolean; models: Array<{ id: string; name: string }>; error?: string }> =>
     ipcRenderer.invoke('fetch-openai-models', payload),
@@ -103,7 +100,6 @@ const api = {
       authMode?: 'api-key' | 'oauth-token'
       baseURL?: string
       customHeaders?: string
-      disableThinking?: boolean
       model?: string
     }
   ): Promise<{ success: boolean; message: string; modelCount?: number; hasPreferredModel?: boolean }> =>

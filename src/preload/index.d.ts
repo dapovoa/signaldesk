@@ -36,8 +36,6 @@ export interface AppSettings {
   llmOauthAccountId: string
   llmBaseUrl: string
   llmCustomHeaders: string
-  llmDisableThinking: boolean
-  llmReasoningMode: 'fast' | 'balanced' | 'deep'
   llmModel: string
   transcriptionLanguage: 'auto' | 'en' | 'pt'
   alwaysOnTop: boolean
@@ -86,7 +84,6 @@ export interface Api {
       authMode?: 'api-key' | 'oauth-token'
       baseURL?: string
       customHeaders?: string
-      disableThinking?: boolean
     }
   ) => Promise<{ success: boolean; models: Array<{ id: string; name: string }>; error?: string }>
   testProviderConnection: (payload: {
@@ -96,7 +93,6 @@ export interface Api {
     authMode?: 'api-key' | 'oauth-token'
     baseURL?: string
     customHeaders?: string
-    disableThinking?: boolean
     model?: string
   }) => Promise<{ success: boolean; message: string; modelCount?: number; hasPreferredModel?: boolean }>
   testTranscriptionConnection: (payload: {

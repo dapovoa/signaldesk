@@ -24,8 +24,6 @@ export interface AppSettings {
   llmOauthAccountId: string
   llmBaseUrl: string
   llmCustomHeaders: string
-  llmDisableThinking: boolean
-  llmReasoningMode: 'fast' | 'balanced' | 'deep'
   llmModel: string
   transcriptionLanguage: 'auto' | 'en' | 'pt'
   alwaysOnTop: boolean
@@ -48,6 +46,20 @@ const OPENAI_OAUTH_MODEL_OPTIONS = [
   'gpt-5.1-codex-max',
   'gpt-5.1-codex-mini'
 ]
+
+const AWARENESS_LIMITS = {
+  cvSummary: 700,
+  jobTitle: 60,
+  companyName: 30,
+  jobDescription: 1600,
+  companyContext: 250
+} as const
+
+const normalizeAwarenessText = (value: string | undefined): string =>
+  typeof value === 'string' ? value.replace(/\r\n/g, '\n').replace(/\r/g, '\n') : ''
+
+const clampText = (value: string | undefined, maxLength: number): string =>
+  normalizeAwarenessText(value).slice(0, maxLength)
 
 const getSuggestedModels = (settings: Pick<AppSettings, 'llmProvider' | 'llmBaseUrl'>): string[] => {
   if (settings.llmProvider === 'openai-oauth') {
@@ -113,8 +125,12 @@ const normalizeSettings = (settings: AppSettings): AppSettings => {
 
   return {
     ...settings,
-    llmModel,
-    llmReasoningMode: settings.llmReasoningMode || 'fast'
+    cvSummary: clampText(settings.cvSummary, AWARENESS_LIMITS.cvSummary),
+    jobTitle: clampText(settings.jobTitle, AWARENESS_LIMITS.jobTitle),
+    companyName: clampText(settings.companyName, AWARENESS_LIMITS.companyName),
+    jobDescription: clampText(settings.jobDescription, AWARENESS_LIMITS.jobDescription),
+    companyContext: clampText(settings.companyContext, AWARENESS_LIMITS.companyContext),
+    llmModel
   }
 }
 
@@ -180,10 +196,6 @@ const DEFAULT_SETTINGS: AppSettings = {
     process.env.OPENAI_CUSTOM_HEADERS ||
     process.env.VITE_OPENAI_CUSTOM_HEADERS ||
     '',
-  llmDisableThinking:
-    process.env.LLM_DISABLE_THINKING === 'true' ||
-    process.env.VITE_LLM_DISABLE_THINKING === 'true',
-  llmReasoningMode: 'fast',
   llmModel:
     process.env.LLM_MODEL ||
     process.env.VITE_LLM_MODEL ||
@@ -239,9 +251,6 @@ export class SettingsManager {
         }
         if (!savedSettings.llmCustomHeaders && savedSettings.openaiCustomHeaders) {
           savedSettings.llmCustomHeaders = savedSettings.openaiCustomHeaders
-        }
-        if (savedSettings.llmDisableThinking === undefined) {
-          savedSettings.llmDisableThinking = false
         }
         if (!savedSettings.llmModel && savedSettings.openaiModel) {
           savedSettings.llmModel = savedSettings.openaiModel
