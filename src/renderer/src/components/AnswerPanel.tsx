@@ -1,10 +1,18 @@
-import { Check, Copy, Sparkles, Trash2 } from 'lucide-react'
+import { Check, Copy, Sparkles, Trash2, Wand2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useInterview } from '../hooks/useInterview'
 import { MarkdownRenderer } from './MarkdownRenderer'
 
 export function AnswerPanel(): React.JSX.Element {
-  const { answers, currentAnswer, currentQuestion, isGenerating, clearHistory } = useInterview()
+  const {
+    answers,
+    currentAnswer,
+    currentQuestion,
+    currentAnswerTruncated,
+    isGenerating,
+    clearHistory,
+    generateAnswerManually
+  } = useInterview()
   const scrollRef = useRef<HTMLDivElement>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
@@ -52,19 +60,29 @@ export function AnswerPanel(): React.JSX.Element {
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-cyan-300" />
           <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-dark-300">
-            Suggested Answers
+            Answers
           </span>
         </div>
-        {hasContent && (
+        <div className="flex items-center gap-2">
           <button
-            onClick={clearHistory}
-            className="flex items-center gap-1 rounded-xl border border-white/5 bg-white/[0.04] px-2.5 py-1.5 text-xs text-dark-400 transition-colors hover:border-red-400/15 hover:bg-red-500/10 hover:text-red-300"
-            title="Clear all answers"
+            onClick={generateAnswerManually}
+            disabled={isGenerating}
+            className="flex items-center justify-center rounded-xl border border-cyan-400/15 bg-cyan-400/8 px-2.5 py-1.5 text-cyan-200 transition-colors hover:border-cyan-300/25 hover:bg-cyan-400/12 hover:text-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
+            title="Generate answer from the current transcript"
           >
-            <Trash2 className="w-3 h-3" />
-            <span>Clear</span>
+            <Wand2 className="w-4 h-4" />
           </button>
-        )}
+          {hasContent && (
+            <button
+              onClick={clearHistory}
+              className="flex items-center gap-1 rounded-xl border border-white/5 bg-white/[0.04] px-2.5 py-1.5 text-xs text-dark-400 transition-colors hover:border-red-400/15 hover:bg-red-500/10 hover:text-red-300"
+              title="Clear all answers"
+            >
+              <Trash2 className="w-3 h-3" />
+              <span>Clear</span>
+            </button>
+          )}
+        </div>
       </div>
 
       <div
@@ -88,19 +106,22 @@ export function AnswerPanel(): React.JSX.Element {
             {answers.map((answer) => (
               <div
                 key={answer.id}
-                className="animate-fade-in overflow-hidden rounded-[22px] border border-white/6 bg-white/[0.035]"
+                className="animate-fade-in overflow-hidden rounded-[22px] bg-white/[0.035]"
               >
-                <div className="border-b border-white/5 bg-white/[0.03] px-4 py-3">
-                  <p className="text-sm font-medium leading-6 text-dark-300">
+                <div className="bg-white/[0.03] px-4 py-3">
+                  <p className="flex items-center gap-2 text-sm font-medium leading-6 text-dark-300">
                     <span className="mr-2 text-[11px] uppercase tracking-[0.24em] text-dark-500">
-                      Prompt
+                      Q:
                     </span>
-                    {answer.question.length > 100
-                      ? answer.question.slice(0, 100) + '...'
-                      : answer.question}
+                    <span className="min-w-0 flex-1 truncate">{answer.question}</span>
                   </p>
                 </div>
                 <div className="p-4">
+                  {answer.truncated && (
+                    <p className="mb-3 rounded-lg border border-amber-400/15 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                      Output cut short by the model token limit.
+                    </p>
+                  )}
                   <MarkdownRenderer content={answer.answer} />
                   <div className="mt-3 flex justify-end">
                     <button
@@ -126,20 +147,23 @@ export function AnswerPanel(): React.JSX.Element {
 
             {/* Current streaming answer */}
             {(currentAnswer || isGenerating) && (
-              <div className="animate-fade-in overflow-hidden rounded-[22px] border border-cyan-400/16 bg-gradient-to-br from-cyan-400/10 to-teal-400/6">
+              <div className="animate-fade-in overflow-hidden rounded-[22px] bg-gradient-to-br from-cyan-400/10 to-teal-400/6">
                 {currentQuestion && (
-                  <div className="border-b border-cyan-400/12 bg-cyan-400/6 px-4 py-3">
-                    <p className="text-sm font-medium leading-6 text-cyan-50">
+                  <div className="bg-cyan-400/6 px-4 py-3">
+                    <p className="flex items-center gap-2 text-sm font-medium leading-6 text-cyan-50">
                       <span className="mr-2 text-[11px] uppercase tracking-[0.24em] text-cyan-300/80">
-                        Live
+                        Q:
                       </span>
-                      {currentQuestion.length > 100
-                        ? currentQuestion.slice(0, 100) + '...'
-                        : currentQuestion}
+                      <span className="min-w-0 flex-1 truncate">{currentQuestion}</span>
                     </p>
                   </div>
                 )}
                 <div className="p-4">
+                  {currentAnswerTruncated && (
+                    <p className="mb-3 rounded-lg border border-amber-400/15 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                      Output cut short by the model token limit.
+                    </p>
+                  )}
                   {currentAnswer ? (
                     <p className="whitespace-pre-wrap text-[15px] leading-6 text-dark-100">
                       {currentAnswer}

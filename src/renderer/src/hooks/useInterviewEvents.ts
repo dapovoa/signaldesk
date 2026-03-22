@@ -12,10 +12,14 @@ export function useInterviewEvents() {
     setSpeaking,
     setCurrentQuestion,
     updateCurrentAnswer,
+    markCurrentAnswerTruncated,
     finalizeAnswer,
     setError,
     setCapturing,
-    setSettings
+    setSettings,
+    setAvatarProfile,
+    setAvatarIndexStatus,
+    setAvatarReindexProgress
   } = useInterviewStore()
 
   // Use ref to ensure listeners are only set up once
@@ -25,14 +29,20 @@ export function useInterviewEvents() {
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const savedSettings = await window.api.getSettings()
+        const [savedSettings, avatarProfile, avatarIndexStatus] = await Promise.all([
+          window.api.getSettings(),
+          window.api.getAvatarProfile(),
+          window.api.getAvatarIndexStatus()
+        ])
         setSettings(savedSettings)
+        setAvatarProfile(avatarProfile)
+        setAvatarIndexStatus(avatarIndexStatus)
       } catch (err) {
-        console.error('Failed to load settings:', err)
+        console.error('Failed to load app state:', err)
       }
     }
     loadSettings()
-  }, [setSettings])
+  }, [setAvatarIndexStatus, setAvatarProfile, setSettings])
 
   // Set up event listeners ONCE
   useEffect(() => {
@@ -78,6 +88,10 @@ export function useInterviewEvents() {
       finalizeAnswer(answer)
     })
 
+    const unsubAnswerTruncated = window.api.onAnswerTruncated(() => {
+      markCurrentAnswerTruncated()
+    })
+
     const unsubCaptureError = window.api.onCaptureError((errorMsg) => {
       setError(errorMsg)
       setCapturing(false)
@@ -98,6 +112,10 @@ export function useInterviewEvents() {
       setError(data.message)
     })
 
+    const unsubAvatarReindexProgress = window.api.onAvatarReindexProgress((progress) => {
+      setAvatarReindexProgress(progress)
+    })
+
     return () => {
       console.log('Cleaning up IPC event listeners')
       unsubTranscript()
@@ -106,10 +124,12 @@ export function useInterviewEvents() {
       unsubQuestionDetected()
       unsubAnswerStream()
       unsubAnswerComplete()
+      unsubAnswerTruncated()
       unsubCaptureError()
       unsubAnswerError()
       unsubQuestionDetectedFromImage()
       unsubScreenshotNoQuestion()
+      unsubAvatarReindexProgress()
       listenersSetUp.current = false
     }
   }, [
@@ -118,8 +138,10 @@ export function useInterviewEvents() {
     setSpeaking,
     setCurrentQuestion,
     updateCurrentAnswer,
+    markCurrentAnswerTruncated,
     finalizeAnswer,
     setError,
-    setCapturing
+    setCapturing,
+    setAvatarReindexProgress
   ])
 }

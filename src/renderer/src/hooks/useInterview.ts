@@ -17,6 +17,7 @@ export function useInterview() {
     answers,
     currentAnswer,
     currentQuestion,
+    currentAnswerTruncated,
     settings,
     error,
     isSessionActive,
@@ -65,6 +66,31 @@ export function useInterview() {
     }
   }, [clearAll])
 
+  const generateAnswerManually = useCallback(async () => {
+    const state = useInterviewStore.getState()
+    const transcriptText = [
+      ...state.transcripts.slice(-4).map((entry) => entry.text.trim()),
+      state.currentTranscript.trim()
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .trim()
+
+    if (!transcriptText) {
+      setError('No question detected yet')
+      return
+    }
+
+    try {
+      setError(null)
+      await window.api.generateAnswerManually(transcriptText)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to generate answer'
+      setError(errorMessage)
+      console.error('Manual answer generation error:', err)
+    }
+  }, [setError])
+
   const captureAndAnalyzeScreenshot = useCallback(async () => {
     try {
       setError(null)
@@ -108,6 +134,7 @@ export function useInterview() {
     answers,
     currentAnswer,
     currentQuestion,
+    currentAnswerTruncated,
     settings,
     error: error || audioError,
     audioSource,
@@ -117,6 +144,7 @@ export function useInterview() {
     startInterview,
     stopInterview,
     clearHistory,
-    captureAndAnalyzeScreenshot
+    captureAndAnalyzeScreenshot,
+    generateAnswerManually
   }
 }

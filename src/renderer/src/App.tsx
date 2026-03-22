@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { AnswerPanel } from './components/AnswerPanel'
+import { AvatarModal } from './components/AvatarModal'
 import { Header } from './components/Header'
 import { HistoryPanel } from './components/HistoryPanel'
 import { SettingsModal } from './components/SettingsModal'
@@ -33,6 +34,7 @@ function App(): React.JSX.Element {
           </div>
         </main>
       </div>
+      <AvatarModal />
       <SettingsModal />
     </div>
   )
