@@ -1,4 +1,5 @@
-import { BrowserWindow, clipboard, desktopCapturer, ipcMain } from 'electron'
+import { BrowserWindow, clipboard, desktopCapturer, ipcMain, shell } from 'electron'
+import * as fs from 'fs'
 import { AnswerEntry } from '../../preload/index'
 import {
   CHATGPT_CODEX_BASE_URL,
@@ -12,6 +13,12 @@ import { QuestionDetector } from '../services/questionDetector'
 import { ScreenshotService } from '../services/screenshotService'
 import { AppSettings, SettingsManager } from '../services/settingsManager'
 import { testAssemblyAIConnection } from '../services/assemblyAIRealtime'
+import { AvatarKnowledgeService } from '../services/avatarKnowledgeService'
+import {
+  AvatarProfile,
+  AvatarProfileManager,
+  getDefaultAvatarSourceDirectory
+} from '../services/avatarProfileManager'
 import { streamChatGPTCodexResponse } from '../services/chatgptCodexClient'
 import { VisionService } from '../services/visionService'
 import { WhisperService } from '../services/whisperService'
@@ -23,6 +30,8 @@ let settingsManager: SettingsManager | null = null
 let historyManager: HistoryManager | null = null
 let screenshotService: ScreenshotService | null = null
 let visionService: VisionService | null = null
+let avatarKnowledgeService: AvatarKnowledgeService | null = null
+let avatarProfileManager: AvatarProfileManager | null = null
 let mainWindow: BrowserWindow | null = null
 let isCapturing = false
 let isGeneratingAnswer = false
@@ -83,6 +92,32 @@ const shouldUseResponsesApi = (settings: AppSettings): boolean => {
   }
 
   return settings.llmProvider === 'openai' && settings.llmAuthMode !== 'oauth-token'
+}
+
+const getDeepSeekOverrides = (settings: AppSettings) => {
+  const isDeepSeek =
+    settings.llmProvider === 'openai-compatible' &&
+    (settings.llmBaseUrl?.toLowerCase().includes('deepseek') ||
+      settings.llmModel?.toLowerCase().startsWith('deepseek-'))
+
+  if (!isDeepSeek) {
+    return {}
+  }
+
+  const isReasonerModel = settings.llmModel?.toLowerCase() === 'deepseek-reasoner'
+
+  return {
+    maxTokens: settings.deepseekMaxTokens,
+    temperature: settings.deepseekTemperature,
+    topP: settings.deepseekTopP,
+    extraBody: isReasonerModel
+      ? undefined
+      : {
+          thinking: {
+            type: 'disabled'
+          }
+        }
+  }
 }
 
 const isOpenAIOAuthExpired = (settings: AppSettings): boolean =>
@@ -176,12 +211,94 @@ const validateTranscriptionSettings = (settings: AppSettings): string | null => 
   return null
 }
 
+const buildInterviewContext = (profile: AvatarProfile): string => {
+  const sections = [
+    { label: 'Candidate Background', value: profile.cvSummary.trim() },
+    { label: 'Target Role', value: profile.jobTitle.trim() },
+    { label: 'Company', value: profile.companyName.trim() },
+    { label: 'Job Description', value: profile.jobDescription.trim() },
+    { label: 'Company Details', value: profile.companyContext.trim() }
+  ].filter((section) => section.value)
+
+  return sections.map((section) => `${section.label}:\n${section.value}`).join('\n\n')
+}
+
+const buildIdentityBase = (profile: AvatarProfile): string => profile.identityBase.trim()
+
+const ensureDirectory = (directory: string): void => {
+  fs.mkdirSync(directory, { recursive: true })
+}
+
+const logAvatarContext = (question: string, avatarContext?: { snippets: Array<{
+  title: string
+  sectionTitle: string
+  kind: string
+  tags: string[]
+  distance: number
+}>; promptContext: string } | null): void => {
+  if (!avatarContext) {
+    console.log('[AvatarRAG] no retrieved memory:', { question })
+    return
+  }
+
+  console.log('[AvatarRAG] retrieved memory:', {
+    question,
+    promptContextLength: avatarContext.promptContext.length,
+    snippets: avatarContext.snippets.map((snippet) => ({
+      title: snippet.title,
+      sectionTitle: snippet.sectionTitle,
+      kind: snippet.kind,
+      tags: snippet.tags,
+      distance: Number(snippet.distance.toFixed(4))
+    }))
+  })
+}
+
+const generateAnswerForQuestion = async (questionText: string): Promise<void> => {
+  if (!openaiService) {
+    throw new Error('Answer generation is not available')
+  }
+
+  if (isGeneratingAnswer) {
+    throw new Error('An answer is already being generated')
+  }
+
+  const trimmedQuestion = questionText.trim()
+  if (!trimmedQuestion) {
+    throw new Error('No question text provided')
+  }
+
+  isGeneratingAnswer = true
+  mainWindow?.webContents.send('question-detected', {
+    text: trimmedQuestion,
+    confidence: 1,
+    questionType: 'direct'
+  })
+
+  try {
+    const profile = avatarProfileManager?.getProfile()
+    const avatarContext = await avatarKnowledgeService?.buildContextPack(trimmedQuestion)
+    logAvatarContext(trimmedQuestion, avatarContext)
+    await openaiService.generateAnswer(trimmedQuestion, {
+      identityBase: profile ? buildIdentityBase(profile) : '',
+      interviewContext: profile ? buildInterviewContext(profile) : '',
+      avatarContext: avatarContext?.promptContext
+    })
+  } catch (error) {
+    isGeneratingAnswer = false
+    throw error
+  }
+}
+
 export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false): void {
   mainWindow = window
   isWaylandSession = waylandFlag
   settingsManager = new SettingsManager()
   historyManager = new HistoryManager()
   questionDetector = new QuestionDetector()
+  avatarProfileManager = new AvatarProfileManager()
+  settingsManager.flushPendingMigrations()
+  avatarKnowledgeService = new AvatarKnowledgeService(avatarProfileManager.getProfile())
 
   // Settings handlers
   ipcMain.handle('get-settings', () => {
@@ -204,6 +321,55 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
   ipcMain.handle('has-api-keys', () => {
     return settingsManager?.hasApiKeys()
+  })
+
+  ipcMain.handle('get-avatar-profile', () => {
+    return avatarProfileManager?.getProfile()
+  })
+
+  ipcMain.handle('update-avatar-profile', async (_event, updates: Partial<AvatarProfile>) => {
+    if (!avatarProfileManager) {
+      throw new Error('Avatar profile manager not initialized')
+    }
+
+    const profile = avatarProfileManager.updateProfile(updates)
+    avatarKnowledgeService?.updateProfile(profile)
+    return profile
+  })
+
+  ipcMain.handle('open-avatar-memory-folder', async () => {
+    const targetDirectory = getDefaultAvatarSourceDirectory()
+    ensureDirectory(targetDirectory)
+    const error = await shell.openPath(targetDirectory)
+
+    return {
+      success: !error,
+      path: targetDirectory,
+      error: error || undefined
+    }
+  })
+
+  ipcMain.handle('get-avatar-index-status', async () => {
+    if (!avatarProfileManager || !avatarKnowledgeService) {
+      throw new Error('Avatar services not initialized')
+    }
+
+    return avatarKnowledgeService.getStatus(avatarProfileManager.getProfile())
+  })
+
+  ipcMain.handle('reindex-avatar-sources', async () => {
+    if (!avatarProfileManager || !avatarKnowledgeService) {
+      throw new Error('Avatar services not initialized')
+    }
+
+    return avatarKnowledgeService.reindex(avatarProfileManager.getProfile(), (progress) => {
+      mainWindow?.webContents.send('avatar-reindex-progress', progress)
+    })
+  })
+
+  ipcMain.handle('generate-answer-manually', async (_event, questionText: string) => {
+    await generateAnswerForQuestion(questionText)
+    return { success: true }
   })
 
   ipcMain.handle('get-window-capabilities', () => {
@@ -338,6 +504,57 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         const errorMessage = error instanceof Error ? error.message : 'Failed to fetch models'
         console.error('Error fetching models:', errorMessage)
         return { success: false, error: errorMessage, models: [] }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'fetch-ollama-embedding-models',
+    async (_event, payload?: { baseURL?: string }) => {
+      const normalizedBaseUrl = (payload?.baseURL?.trim() || process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434').replace(/\/+$/, '')
+
+      try {
+        const response = await fetch(`${normalizedBaseUrl}/api/tags`, {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json'
+          }
+        })
+
+        if (!response.ok) {
+          const body = await response.text()
+          throw new Error(`Ollama tags request failed: ${response.status} ${body}`)
+        }
+
+        const payloadJson = (await response.json()) as {
+          models?: Array<{
+            name?: string
+            model?: string
+            details?: {
+              family?: string
+              families?: string[]
+            }
+          }>
+        }
+
+        const models = (payloadJson.models || [])
+          .map((model) => {
+            const id = model.name?.trim() || model.model?.trim() || ''
+            if (!id) return null
+
+            return {
+              id,
+              name: id
+            }
+          })
+          .filter((model): model is { id: string; name: string } => Boolean(model))
+          .sort((left, right) => left.id.localeCompare(right.id))
+
+        return { success: true, models }
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Failed to fetch Ollama models'
+        console.error('Error fetching Ollama embedding models:', errorMessage)
+        return { success: false, error: errorMessage, models: [] as Array<{ id: string; name: string }> }
       }
     }
   )
@@ -593,11 +810,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         chatgptAccountId: settings.llmOauthAccountId,
         useResponsesApi: shouldUseResponsesApi(settings),
         model: settings.llmModel,
-        cvSummary: settings.cvSummary,
-        jobTitle: settings.jobTitle,
-        companyName: settings.companyName,
-        jobDescription: settings.jobDescription,
-        companyContext: settings.companyContext
+        ...getDeepSeekOverrides(settings)
       })
 
       // Set up OpenAI event listeners ONCE
@@ -612,6 +825,11 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         mainWindow?.webContents.send('answer-complete', answer)
       })
 
+      openaiService.on('truncated', () => {
+        console.warn('[Pipeline] answer truncated by max token limit')
+        mainWindow?.webContents.send('answer-truncated')
+      })
+
       openaiService.on('error', (error) => {
         isGeneratingAnswer = false
         console.error('[Pipeline] answer-error event:', error)
@@ -619,6 +837,9 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
       // Set up Whisper event listeners
       whisperService.on('transcript', async (event) => {
+        if (!isCapturing) {
+          return
+        }
         console.log('[Pipeline] transcript received:', {
           text: event.text,
           isFinal: event.isFinal
@@ -637,8 +858,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
             console.log('[Pipeline] early detection triggered:', earlyDetection)
             mainWindow?.webContents.send('question-detected', earlyDetection)
             try {
-              isGeneratingAnswer = true
-              await openaiService.generateAnswer(earlyDetection.text)
+              await generateAnswerForQuestion(earlyDetection.text)
             } catch (error) {
               isGeneratingAnswer = false
               console.error('[Pipeline] early detection answer failed:', error)
@@ -649,6 +869,9 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       })
 
       whisperService.on('utteranceEnd', () => {
+        if (!isCapturing) {
+          return
+        }
         console.log('[Pipeline] utterance end -> debounce')
         if (utteranceDebounceTimer) {
           clearTimeout(utteranceDebounceTimer)
@@ -657,11 +880,14 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           console.log('[Pipeline] debounce elapsed -> detector')
           questionDetector?.onUtteranceEnd()
           utteranceDebounceTimer = null
-        }, 750)
+        }, 1200)
         mainWindow?.webContents.send('utterance-end')
       })
 
       whisperService.on('speechStarted', () => {
+        if (!isCapturing) {
+          return
+        }
         mainWindow?.webContents.send('speech-started')
       })
 
@@ -673,6 +899,9 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
       // Set up question detector listener ONCE
       questionDetector?.on('questionDetected', async (detection) => {
+        if (!isCapturing) {
+          return
+        }
         if (isGeneratingAnswer) {
           console.log('[Pipeline] skipping detector trigger while answer is already generating')
           return
@@ -682,8 +911,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
         if (openaiService) {
           try {
-            isGeneratingAnswer = true
-            await openaiService.generateAnswer(detection.text)
+            await generateAnswerForQuestion(detection.text)
           } catch (error) {
             isGeneratingAnswer = false
             console.error('[Pipeline] detector answer failed:', error)
@@ -692,9 +920,9 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         }
       })
 
+      isCapturing = true
       // Start Whisper service
       await whisperService.start()
-      isCapturing = true
       console.log('Audio capture started successfully')
 
       return { success: true }
@@ -714,14 +942,16 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     }
 
     if (whisperService) {
-      await whisperService.stop()
-      whisperService.removeAllListeners()
+      const service = whisperService
       whisperService = null
+      service.removeAllListeners()
+      await service.stop()
     }
 
     if (openaiService) {
-      openaiService.removeAllListeners()
+      const service = openaiService
       openaiService = null
+      service.removeAllListeners()
     }
 
     // Remove question detector listeners to prevent duplicates on next start
@@ -930,11 +1160,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           chatgptAccountId: settings.llmOauthAccountId,
           useResponsesApi: shouldUseResponsesApi(settings),
           model: settings.llmModel,
-          cvSummary: settings.cvSummary,
-          jobTitle: settings.jobTitle,
-          companyName: settings.companyName,
-          jobDescription: settings.jobDescription,
-          companyContext: settings.companyContext
+          ...getDeepSeekOverrides(settings)
         })
 
         // Set up OpenAI event listeners
@@ -945,6 +1171,10 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         openaiService.on('complete', (answer) => {
           mainWindow?.webContents.send('answer-complete', answer)
         })
+
+        openaiService.on('truncated', () => {
+          mainWindow?.webContents.send('answer-truncated')
+        })
       } else {
         openaiService.updateConfig({
           apiKey: providerConfig.apiKey,
@@ -953,11 +1183,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           chatgptAccountId: settings.llmOauthAccountId,
           useResponsesApi: shouldUseResponsesApi(settings),
           model: settings.llmModel,
-          cvSummary: settings.cvSummary,
-          jobTitle: settings.jobTitle,
-          companyName: settings.companyName,
-          jobDescription: settings.jobDescription,
-          companyContext: settings.companyContext
+          ...getDeepSeekOverrides(settings)
         })
       }
 
@@ -977,6 +1203,8 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       if (analysis.isQuestion) {
         // If we have question text, use it. Otherwise, we'll extract from image directly
         const questionText = analysis.questionText?.trim() || 'Interview question from screenshot'
+        const profile = avatarProfileManager?.getProfile()
+        const avatarContext = await avatarKnowledgeService?.buildContextPack(questionText)
 
         console.log('Question detected:', questionText.substring(0, 100))
         console.log('Question type:', analysis.questionType)
@@ -995,7 +1223,12 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
             analysis.questionText && analysis.questionText.trim().length > 10
               ? questionText
               : undefined,
-            analysis.questionType
+            analysis.questionType,
+            {
+              identityBase: profile ? buildIdentityBase(profile) : '',
+              interviewContext: profile ? buildInterviewContext(profile) : '',
+              avatarContext: avatarContext?.promptContext
+            }
           )
         } catch (error) {
           console.error('Solution generation error:', error)
@@ -1017,6 +1250,8 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         if (analysis.confidence && analysis.confidence >= 0.3) {
           console.log('Low confidence but attempting solution generation anyway...')
           const questionText = analysis.questionText?.trim() || 'Technical problem from screenshot'
+          const profile = avatarProfileManager?.getProfile()
+          const avatarContext = await avatarKnowledgeService?.buildContextPack(questionText)
 
           mainWindow?.webContents.send('question-detected-from-image', {
             text: questionText,
@@ -1030,7 +1265,12 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
               analysis.questionText && analysis.questionText.trim().length > 10
                 ? questionText
                 : undefined,
-              analysis.questionType || 'other'
+              analysis.questionType || 'other',
+              {
+                identityBase: profile ? buildIdentityBase(profile) : '',
+                interviewContext: profile ? buildInterviewContext(profile) : '',
+                avatarContext: avatarContext?.promptContext
+              }
             )
 
             return {
@@ -1075,6 +1315,9 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 }
 
 export async function cleanupIpcHandlers(): Promise<void> {
+  avatarKnowledgeService?.dispose()
+  avatarKnowledgeService = null
+  avatarProfileManager = null
   isGeneratingAnswer = false
   if (whisperService) {
     await whisperService.stop()
