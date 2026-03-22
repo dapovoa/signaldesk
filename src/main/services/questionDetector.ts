@@ -40,7 +40,6 @@ export class QuestionDetector extends EventEmitter {
     'suppose',
     'walk me through',
     'how would you',
-    'think about',
     'baseado na sua',
     'baseado na tua',
     'imagine que',
@@ -55,6 +54,23 @@ export class QuestionDetector extends EventEmitter {
     'makes sense',
     'moving on',
     'next question',
+    'no worries',
+    'take it easy',
+    'let\'s keep the conversation going',
+    'if you\'d like to',
+    'would you like to focus on first',
+    'what part of the',
+    'maybe automation',
+    'maybe cloud',
+    'maybe troubleshooting',
+    'welcome to your',
+    'let\'s get started',
+    'great, let\'s dive in',
+    'great tracking',
+    'remember to',
+    'nice start',
+    'to deepen your approach',
+    'consider ',
     'entendi',
     'desculpe',
     'desculpa',
@@ -135,6 +151,15 @@ export class QuestionDetector extends EventEmitter {
       }
     }
 
+    if (
+      /^what part of .* would you like to focus on first\b/i.test(lower) ||
+      /^if you'd like to\b/i.test(lower) ||
+      /^no worries\b/i.test(lower) ||
+      /^maybe (automation|cloud|troubleshooting)\b/i.test(lower)
+    ) {
+      return true
+    }
+
     if (/^(eu|i|we|nós|my|o meu|a minha)\b/i.test(lower) && !lower.includes('?')) {
       return true
     }
@@ -146,21 +171,27 @@ export class QuestionDetector extends EventEmitter {
     const lower = text.toLowerCase()
     const words = lower.split(/\s+/)
     const firstWord = words[0] || ''
+    const hasQuestionMark = text.trim().endsWith('?')
+    const hasDirectStarter =
+      this.strongStarters.has(firstWord) || this.startsWithMultiWordStarter(lower, this.strongStarters)
+    const hasInterviewStarter = this.startsWithMultiWordStarter(lower, this.interviewPromptStarters)
     let confidence = 0.4
 
-    if (text.trim().endsWith('?')) {
+    if (hasQuestionMark) {
       confidence += 0.35
     }
 
-    if (this.strongStarters.has(firstWord) || this.startsWithMultiWordStarter(lower, this.strongStarters)) {
+    if (hasDirectStarter) {
       confidence += 0.3
     }
 
-    for (const starter of this.interviewPromptStarters) {
-      if (lower.includes(starter)) {
-        confidence += 0.25
-        break
-      }
+    if (hasInterviewStarter) {
+      confidence += 0.25
+    }
+
+    // Avoid answering mentor/coaching follow-up fragments unless they are explicit questions.
+    if (!hasQuestionMark && !hasDirectStarter && !hasInterviewStarter) {
+      return null
     }
 
     if (text.length > 45) {

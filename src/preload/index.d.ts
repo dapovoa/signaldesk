@@ -37,16 +37,45 @@ export interface AppSettings {
   llmBaseUrl: string
   llmCustomHeaders: string
   llmModel: string
+  deepseekTemperature: number
+  deepseekTopP: number
+  deepseekMaxTokens: number
   transcriptionLanguage: 'auto' | 'en' | 'pt'
   alwaysOnTop: boolean
   windowOpacity: number
   pauseThreshold: number
   autoStart: boolean
+}
+
+export interface AvatarProfile {
+  identityBase: string
   cvSummary: string
   jobTitle: string
   companyName: string
   jobDescription: string
   companyContext: string
+  sourceDirectory: string
+  embeddingModel: string
+  updatedAt: number
+}
+
+export interface AvatarIndexStatus {
+  available: boolean
+  sourceDirectory: string
+  embeddingModel: string
+  documentCount: number
+  chunkCount: number
+  lastIndexedAt: number | null
+  databasePath: string
+  lastError: string | null
+}
+
+export interface AvatarReindexProgress {
+  totalDocuments: number
+  processedDocuments: number
+  embeddedChunks: number
+  embeddingModel: string
+  currentFile: string | null
 }
 
 export interface AudioSource {
@@ -61,6 +90,7 @@ export interface AnswerEntry {
   answer: string
   timestamp: number
   isStreaming: boolean
+  truncated?: boolean
 }
 
 export interface WindowCapabilities {
@@ -86,6 +116,9 @@ export interface Api {
       customHeaders?: string
     }
   ) => Promise<{ success: boolean; models: Array<{ id: string; name: string }>; error?: string }>
+  fetchOllamaEmbeddingModels: (payload?: {
+    baseURL?: string
+  }) => Promise<{ success: boolean; models: Array<{ id: string; name: string }>; error?: string }>
   testProviderConnection: (payload: {
     apiKey?: string
     oauthToken?: string
@@ -109,6 +142,13 @@ export interface Api {
   connectOpenAIOAuth: () => Promise<{ success: boolean; settings?: AppSettings; error?: string }>
   disconnectOpenAIOAuth: () => Promise<{ success: boolean; settings?: AppSettings; error?: string }>
 
+  // Avatar
+  getAvatarProfile: () => Promise<AvatarProfile>
+  updateAvatarProfile: (updates: Partial<AvatarProfile>) => Promise<AvatarProfile>
+  openAvatarMemoryFolder: () => Promise<{ success: boolean; path: string; error?: string }>
+  getAvatarIndexStatus: () => Promise<AvatarIndexStatus>
+  reindexAvatarSources: () => Promise<AvatarIndexStatus>
+
   // Audio capture
   startCapture: () => Promise<{ success: boolean }>
   stopCapture: () => Promise<{ success: boolean }>
@@ -124,6 +164,7 @@ export interface Api {
 
   // Conversation
   clearHistory: () => Promise<{ success: boolean }>
+  generateAnswerManually: (questionText: string) => Promise<{ success: boolean }>
 
   // History
   getHistory: () => Promise<AnswerEntry[]>
@@ -160,6 +201,7 @@ export interface Api {
   onQuestionDetected: (callback: (question: DetectedQuestion) => void) => () => void
   onAnswerStream: (callback: (chunk: string) => void) => () => void
   onAnswerComplete: (callback: (answer: string) => void) => () => void
+  onAnswerTruncated: (callback: () => void) => () => void
   onCaptureError: (callback: (error: string) => void) => () => void
   onAnswerError: (callback: (error: string) => void) => () => void
   onScreenshotCaptured: (callback: (data: { imageData: string }) => void) => () => void
@@ -167,6 +209,7 @@ export interface Api {
     callback: (question: DetectedQuestionFromImage) => void
   ) => () => void
   onScreenshotNoQuestion: (callback: (data: { message: string }) => void) => () => void
+  onAvatarReindexProgress: (callback: (progress: AvatarReindexProgress) => void) => () => void
 }
 
 declare global {

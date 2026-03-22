@@ -39,16 +39,45 @@ export interface AppSettings {
   llmBaseUrl: string
   llmCustomHeaders: string
   llmModel: string
+  deepseekTemperature: number
+  deepseekTopP: number
+  deepseekMaxTokens: number
   transcriptionLanguage: 'auto' | 'en' | 'pt'
   alwaysOnTop: boolean
   windowOpacity: number
   pauseThreshold: number
   autoStart: boolean
+}
+
+export interface AvatarProfile {
+  identityBase: string
   cvSummary: string
   jobTitle: string
   companyName: string
   jobDescription: string
   companyContext: string
+  sourceDirectory: string
+  embeddingModel: string
+  updatedAt: number
+}
+
+export interface AvatarIndexStatus {
+  available: boolean
+  sourceDirectory: string
+  embeddingModel: string
+  documentCount: number
+  chunkCount: number
+  lastIndexedAt: number | null
+  databasePath: string
+  lastError: string | null
+}
+
+export interface AvatarReindexProgress {
+  totalDocuments: number
+  processedDocuments: number
+  embeddedChunks: number
+  embeddingModel: string
+  currentFile: string | null
 }
 
 export interface AudioSource {
@@ -63,6 +92,7 @@ export interface AnswerEntry {
   answer: string
   timestamp: number
   isStreaming: boolean
+  truncated?: boolean
 }
 
 export interface WindowCapabilities {
@@ -92,6 +122,10 @@ const api = {
     }
   ): Promise<{ success: boolean; models: Array<{ id: string; name: string }>; error?: string }> =>
     ipcRenderer.invoke('fetch-openai-models', payload),
+  fetchOllamaEmbeddingModels: (payload?: {
+    baseURL?: string
+  }): Promise<{ success: boolean; models: Array<{ id: string; name: string }>; error?: string }> =>
+    ipcRenderer.invoke('fetch-ollama-embedding-models', payload),
   testProviderConnection: (
     payload: {
       apiKey?: string
@@ -121,6 +155,16 @@ const api = {
   disconnectOpenAIOAuth: (): Promise<{ success: boolean; settings?: AppSettings; error?: string }> =>
     ipcRenderer.invoke('disconnect-openai-oauth'),
 
+  // Avatar
+  getAvatarProfile: (): Promise<AvatarProfile> => ipcRenderer.invoke('get-avatar-profile'),
+  updateAvatarProfile: (updates: Partial<AvatarProfile>): Promise<AvatarProfile> =>
+    ipcRenderer.invoke('update-avatar-profile', updates),
+  openAvatarMemoryFolder: (): Promise<{ success: boolean; path: string; error?: string }> =>
+    ipcRenderer.invoke('open-avatar-memory-folder'),
+  getAvatarIndexStatus: (): Promise<AvatarIndexStatus> =>
+    ipcRenderer.invoke('get-avatar-index-status'),
+  reindexAvatarSources: (): Promise<AvatarIndexStatus> => ipcRenderer.invoke('reindex-avatar-sources'),
+
   // Audio capture
   startCapture: (): Promise<{ success: boolean }> => ipcRenderer.invoke('start-capture'),
   stopCapture: (): Promise<{ success: boolean }> => ipcRenderer.invoke('stop-capture'),
@@ -138,6 +182,8 @@ const api = {
 
   // Conversation
   clearHistory: (): Promise<{ success: boolean }> => ipcRenderer.invoke('clear-history'),
+  generateAnswerManually: (questionText: string): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke('generate-answer-manually', questionText),
 
   // History
   getHistory: (): Promise<AnswerEntry[]> => ipcRenderer.invoke('get-history'),
@@ -214,6 +260,12 @@ const api = {
     return () => ipcRenderer.removeListener('answer-complete', handler)
   },
 
+  onAnswerTruncated: (callback: () => void): (() => void) => {
+    const handler = (): void => callback()
+    ipcRenderer.on('answer-truncated', handler)
+    return () => ipcRenderer.removeListener('answer-truncated', handler)
+  },
+
   onCaptureError: (callback: (error: string) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, error: string): void => callback(error)
     ipcRenderer.on('capture-error', handler)
@@ -249,6 +301,13 @@ const api = {
       callback(data)
     ipcRenderer.on('screenshot-no-question', handler)
     return () => ipcRenderer.removeListener('screenshot-no-question', handler)
+  },
+
+  onAvatarReindexProgress: (callback: (progress: AvatarReindexProgress) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, progress: AvatarReindexProgress): void =>
+      callback(progress)
+    ipcRenderer.on('avatar-reindex-progress', handler)
+    return () => ipcRenderer.removeListener('avatar-reindex-progress', handler)
   }
 }
 
