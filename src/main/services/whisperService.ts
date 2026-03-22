@@ -38,9 +38,9 @@ export class WhisperService extends EventEmitter {
   private lastAudioTime = 0
   private readonly SAMPLE_RATE = 16000
   private readonly BYTES_PER_SAMPLE = 2 // 16-bit audio
-  private readonly MIN_AUDIO_DURATION_MS = 1000 // Minimum 1.5 seconds of audio
-  private readonly SILENCE_THRESHOLD_MS = 1000 // 1.5 seconds of silence before processing
-  private readonly MAX_BUFFER_DURATION_MS = 20000 // Max 30 seconds before forced processing
+  private readonly MIN_AUDIO_DURATION_MS = 1000
+  private readonly SILENCE_THRESHOLD_MS = 1000
+  private readonly MAX_BUFFER_DURATION_MS = 20000
   private readonly MAX_TRANSCRIPTION_RETRIES = 2
 
   constructor(config: WhisperConfig) {
@@ -433,9 +433,5 @@ export class WhisperService extends EventEmitter {
     header.writeUInt32LE(dataSize, 40)
 
     return Buffer.concat([header, pcmData])
-  }
-
-  getIsRunning(): boolean {
-    return this.isRunning
   }
 }

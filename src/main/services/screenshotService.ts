@@ -115,44 +115,4 @@ export class ScreenshotService {
     }
   }
 
-  /**
-   * Captures a specific window by name
-   * @param windowName Name or partial name of the window to capture
-   * @returns Base64 encoded image data URL
-   */
-  async captureWindowByName(windowName: string): Promise<ScreenshotResult> {
-    try {
-      const sources = await desktopCapturer.getSources({
-        types: ['window'],
-        thumbnailSize: { width: 1920, height: 1080 },
-        fetchWindowIcons: false
-      })
-
-      const matchingSource = sources.find((source) =>
-        source.name.toLowerCase().includes(windowName.toLowerCase())
-      )
-
-      if (!matchingSource || !matchingSource.thumbnail) {
-        return {
-          success: false,
-          error: `Window "${windowName}" not found`
-        }
-      }
-
-      const image = matchingSource.thumbnail
-      const imageDataUrl = image.toDataURL()
-
-      return {
-        success: true,
-        imageData: imageDataUrl
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
-      console.error('Screenshot capture error:', errorMessage)
-      return {
-        success: false,
-        error: errorMessage
-      }
-    }
-  }
 }

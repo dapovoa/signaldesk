@@ -364,10 +364,6 @@ export class OpenAIService extends EventEmitter {
     }
   }
 
-  clearHistory(): void {
-    // No-op: answers are generated from the current question only.
-  }
-
   /**
    * Generates a detailed solution for an interview question from a screenshot
    * @param imageBase64 Base64 encoded image data URL
