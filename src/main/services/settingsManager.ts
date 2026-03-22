@@ -2,6 +2,7 @@ import { config } from 'dotenv'
 import { app, safeStorage } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
+import { getDefaultOutputTokens, isDeepSeekModelConfig } from './llmDefaults'
 
 // Load environment variables from .env file
 config()
@@ -25,16 +26,14 @@ export interface AppSettings {
   llmBaseUrl: string
   llmCustomHeaders: string
   llmModel: string
+  deepseekTemperature: number
+  deepseekTopP: number
+  deepseekMaxTokens: number
   transcriptionLanguage: 'auto' | 'en' | 'pt'
   alwaysOnTop: boolean
   windowOpacity: number
   pauseThreshold: number
   autoStart: boolean
-  cvSummary: string
-  jobTitle: string
-  companyName: string
-  jobDescription: string
-  companyContext: string
 }
 
 const OPENAI_OAUTH_MODEL_OPTIONS = [
@@ -47,19 +46,10 @@ const OPENAI_OAUTH_MODEL_OPTIONS = [
   'gpt-5.1-codex-mini'
 ]
 
-const AWARENESS_LIMITS = {
-  cvSummary: 700,
-  jobTitle: 60,
-  companyName: 30,
-  jobDescription: 1600,
-  companyContext: 250
-} as const
+const getDeepSeekMaxTokenLimit = (): number => 8192
 
-const normalizeAwarenessText = (value: string | undefined): string =>
-  typeof value === 'string' ? value.replace(/\r\n/g, '\n').replace(/\r/g, '\n') : ''
-
-const clampText = (value: string | undefined, maxLength: number): string =>
-  normalizeAwarenessText(value).slice(0, maxLength)
+const clampNumber = (value: number | undefined, min: number, max: number, fallback: number): number =>
+  typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
 
 const getSuggestedModels = (settings: Pick<AppSettings, 'llmProvider' | 'llmBaseUrl'>): string[] => {
   if (settings.llmProvider === 'openai-oauth') {
@@ -99,19 +89,32 @@ const getDefaultModelForSettings = (settings: Pick<AppSettings, 'llmProvider' | 
   return ''
 }
 
+const hydrateStoredSettings = (savedSettings: Record<string, unknown>): AppSettings => {
+  const hydratedSettings = { ...DEFAULT_SETTINGS }
+
+  for (const key of Object.keys(DEFAULT_SETTINGS) as Array<keyof AppSettings>) {
+    if (key in savedSettings) {
+      ;(hydratedSettings as Record<string, unknown>)[key] = savedSettings[key]
+    }
+  }
+
+  return hydratedSettings
+}
+
 const normalizeSettings = (settings: AppSettings): AppSettings => {
   let llmModel = settings.llmModel
+  let llmAuthMode = settings.llmAuthMode
 
   if (settings.llmProvider === 'openai-oauth') {
+    llmAuthMode = 'oauth-token'
     if (!OPENAI_OAUTH_MODEL_OPTIONS.includes(llmModel)) {
       llmModel = OPENAI_OAUTH_MODEL_OPTIONS[0]
     }
-  } else if (
-    settings.llmProvider === 'openai-compatible' &&
-    llmModel &&
-    OPENAI_OAUTH_MODEL_OPTIONS.includes(llmModel)
-  ) {
-    llmModel = getDefaultModelForSettings(settings)
+  } else if (settings.llmProvider === 'openai-compatible') {
+    llmAuthMode = 'api-key'
+    if (llmModel && OPENAI_OAUTH_MODEL_OPTIONS.includes(llmModel)) {
+      llmModel = getDefaultModelForSettings(settings)
+    }
   } else if (
     settings.llmProvider === 'openai' &&
     (!llmModel ||
@@ -123,13 +126,27 @@ const normalizeSettings = (settings: AppSettings): AppSettings => {
     llmModel = getDefaultModelForSettings(settings)
   }
 
+  const isDeepSeek =
+    settings.llmProvider === 'openai-compatible' &&
+    isDeepSeekModelConfig({ ...settings, model: llmModel })
+  const deepseekFallback = getDefaultOutputTokens({ ...settings, model: llmModel })
+  const requestedDeepSeekMaxTokens = isDeepSeek ? settings.deepseekMaxTokens : deepseekFallback
+  const isLegacyDeepSeekTokenDefault = isDeepSeek && requestedDeepSeekMaxTokens === 120
+  const deepseekMaxTokens = Math.round(
+    clampNumber(
+      isLegacyDeepSeekTokenDefault ? undefined : requestedDeepSeekMaxTokens,
+      32,
+      getDeepSeekMaxTokenLimit(),
+      deepseekFallback
+    )
+  )
+
   return {
     ...settings,
-    cvSummary: clampText(settings.cvSummary, AWARENESS_LIMITS.cvSummary),
-    jobTitle: clampText(settings.jobTitle, AWARENESS_LIMITS.jobTitle),
-    companyName: clampText(settings.companyName, AWARENESS_LIMITS.companyName),
-    jobDescription: clampText(settings.jobDescription, AWARENESS_LIMITS.jobDescription),
-    companyContext: clampText(settings.companyContext, AWARENESS_LIMITS.companyContext),
+    deepseekTemperature: clampNumber(settings.deepseekTemperature, 0, 2, 0.3),
+    deepseekTopP: clampNumber(settings.deepseekTopP, 0, 1, 0.9),
+    deepseekMaxTokens,
+    llmAuthMode,
     llmModel
   }
 }
@@ -202,6 +219,11 @@ const DEFAULT_SETTINGS: AppSettings = {
     process.env.OPENAI_MODEL ||
     process.env.VITE_OPENAI_MODEL ||
     'gpt-4o-mini',
+  deepseekTemperature: Number(process.env.DEEPSEEK_TEMPERATURE || 0.3),
+  deepseekTopP: Number(process.env.DEEPSEEK_TOP_P || 0.9),
+  deepseekMaxTokens: Number(
+    process.env.DEEPSEEK_MAX_TOKENS || getDefaultOutputTokens({ model: 'deepseek-chat' })
+  ),
   transcriptionLanguage:
     process.env.TRANSCRIPTION_LANGUAGE === 'pt' || process.env.VITE_TRANSCRIPTION_LANGUAGE === 'pt'
       ? 'pt'
@@ -212,71 +234,91 @@ const DEFAULT_SETTINGS: AppSettings = {
   alwaysOnTop: true,
   windowOpacity: 1.0,
   pauseThreshold: 1500,
-  autoStart: false,
-  cvSummary: '',
-  jobTitle: '',
-  companyName: '',
-  jobDescription: '',
-  companyContext: ''
+  autoStart: false
 }
 
 export class SettingsManager {
   private settingsPath: string
   private settings: AppSettings
+  private pendingMigrationSave: boolean
 
   constructor() {
     const userDataPath = app.getPath('userData')
     this.settingsPath = path.join(userDataPath, 'settings.json')
-    this.settings = this.loadSettings()
+    const loaded = this.loadSettings()
+    this.settings = loaded.settings
+    this.pendingMigrationSave = loaded.needsSave
   }
 
-  private loadSettings(): AppSettings {
+  private loadSettings(): { settings: AppSettings; needsSave: boolean } {
     try {
       if (fs.existsSync(this.settingsPath)) {
         const data = fs.readFileSync(this.settingsPath, 'utf-8')
         const savedSettings = JSON.parse(data)
+        let needsSave = false
 
         // Backward compatibility with older OpenAI-specific setting keys.
         if (!savedSettings.llmApiKey && savedSettings.openaiApiKey) {
           savedSettings.llmApiKey = savedSettings.openaiApiKey
+          needsSave = true
         }
         if (!savedSettings.llmOauthToken && savedSettings.openaiOauthToken) {
           savedSettings.llmOauthToken = savedSettings.openaiOauthToken
+          needsSave = true
         }
         if (!savedSettings.llmOauthRefreshToken && savedSettings.openaiOauthRefreshToken) {
           savedSettings.llmOauthRefreshToken = savedSettings.openaiOauthRefreshToken
+          needsSave = true
         }
         if (!savedSettings.llmBaseUrl && savedSettings.openaiBaseUrl) {
           savedSettings.llmBaseUrl = savedSettings.openaiBaseUrl
+          needsSave = true
         }
         if (!savedSettings.llmCustomHeaders && savedSettings.openaiCustomHeaders) {
           savedSettings.llmCustomHeaders = savedSettings.openaiCustomHeaders
+          needsSave = true
         }
         if (!savedSettings.llmModel && savedSettings.openaiModel) {
           savedSettings.llmModel = savedSettings.openaiModel
+          needsSave = true
+        }
+        if ('llmDisableThinking' in savedSettings) {
+          delete savedSettings.llmDisableThinking
+          needsSave = true
+        }
+        if ('llmReasoningMode' in savedSettings) {
+          delete savedSettings.llmReasoningMode
+          needsSave = true
         }
         if (!savedSettings.transcriptionProvider) {
           savedSettings.transcriptionProvider = 'assemblyai'
+          needsSave = true
         }
         if (!savedSettings.assemblyAiSpeechModel) {
           savedSettings.assemblyAiSpeechModel = 'universal-streaming-multilingual'
+          needsSave = true
         }
         if (savedSettings.assemblyAiLanguageDetection === undefined) {
           savedSettings.assemblyAiLanguageDetection = true
+          needsSave = true
         }
         if (!savedSettings.assemblyAiMinTurnSilence) {
           savedSettings.assemblyAiMinTurnSilence = 160
+          needsSave = true
         }
         if (!savedSettings.assemblyAiMaxTurnSilence) {
           savedSettings.assemblyAiMaxTurnSilence = 1280
+          needsSave = true
         }
         // Decrypt API keys if encryption is available
         if (safeStorage.isEncryptionAvailable()) {
           if (!savedSettings.llmApiKeyEncrypted && savedSettings.openaiApiKeyEncrypted) {
             savedSettings.llmApiKeyEncrypted = savedSettings.openaiApiKeyEncrypted
+            needsSave = true
           }
           if (!savedSettings.llmOauthTokenEncrypted && savedSettings.openaiOauthTokenEncrypted) {
             savedSettings.llmOauthTokenEncrypted = savedSettings.openaiOauthTokenEncrypted
+            needsSave = true
           }
           if (
             !savedSettings.llmOauthRefreshTokenEncrypted &&
@@ -284,6 +326,7 @@ export class SettingsManager {
           ) {
             savedSettings.llmOauthRefreshTokenEncrypted =
               savedSettings.openaiOauthRefreshTokenEncrypted
+            needsSave = true
           }
           if (savedSettings.llmApiKeyEncrypted) {
             try {
@@ -291,6 +334,7 @@ export class SettingsManager {
                 Buffer.from(savedSettings.llmApiKeyEncrypted, 'base64')
               )
               delete savedSettings.llmApiKeyEncrypted
+              needsSave = true
             } catch {
               savedSettings.llmApiKey = ''
             }
@@ -301,6 +345,7 @@ export class SettingsManager {
                 Buffer.from(savedSettings.llmOauthTokenEncrypted, 'base64')
               )
               delete savedSettings.llmOauthTokenEncrypted
+              needsSave = true
             } catch {
               savedSettings.llmOauthToken = ''
             }
@@ -311,6 +356,7 @@ export class SettingsManager {
                 Buffer.from(savedSettings.llmOauthRefreshTokenEncrypted, 'base64')
               )
               delete savedSettings.llmOauthRefreshTokenEncrypted
+              needsSave = true
             } catch {
               savedSettings.llmOauthRefreshToken = ''
             }
@@ -321,18 +367,26 @@ export class SettingsManager {
                 Buffer.from(savedSettings.transcriptionApiKeyEncrypted, 'base64')
               )
               delete savedSettings.transcriptionApiKeyEncrypted
+              needsSave = true
             } catch {
               savedSettings.transcriptionApiKey = ''
             }
           }
         }
 
-        return normalizeSettings({ ...DEFAULT_SETTINGS, ...savedSettings })
+        const hydratedSettings = hydrateStoredSettings(savedSettings)
+        const normalizedSettings = normalizeSettings(hydratedSettings)
+
+        if (JSON.stringify(hydratedSettings) !== JSON.stringify(normalizedSettings)) {
+          needsSave = true
+        }
+
+        return { settings: normalizedSettings, needsSave }
       }
     } catch (error) {
       console.error('Failed to load settings:', error)
     }
-    return normalizeSettings({ ...DEFAULT_SETTINGS })
+    return { settings: normalizeSettings({ ...DEFAULT_SETTINGS }), needsSave: false }
   }
 
   private saveSettings(): void {
@@ -368,9 +422,18 @@ export class SettingsManager {
       }
 
       fs.writeFileSync(this.settingsPath, JSON.stringify(settingsToSave, null, 2))
+      this.pendingMigrationSave = false
     } catch (error) {
       console.error('Failed to save settings:', error)
     }
+  }
+
+  flushPendingMigrations(): void {
+    if (!this.pendingMigrationSave) {
+      return
+    }
+
+    this.saveSettings()
   }
 
   getSettings(): AppSettings {
@@ -384,17 +447,20 @@ export class SettingsManager {
 
   updateSettings(updates: Partial<AppSettings>): void {
     this.settings = normalizeSettings({ ...this.settings, ...updates })
+    this.pendingMigrationSave = false
     this.saveSettings()
   }
 
   setSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]): void {
     this.settings[key] = value
     this.settings = normalizeSettings(this.settings)
+    this.pendingMigrationSave = false
     this.saveSettings()
   }
 
   resetToDefaults(): void {
     this.settings = normalizeSettings({ ...DEFAULT_SETTINGS })
+    this.pendingMigrationSave = false
     this.saveSettings()
   }
 
