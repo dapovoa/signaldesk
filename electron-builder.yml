@@ -11,6 +11,8 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
+  - node_modules/sqlite-vec/**
+  - node_modules/sqlite-vec-*/**
 win:
   executableName: SignalDesk
   icon: icon.ico
