@@ -205,8 +205,4 @@ export class AudioCaptureService {
 
     this.isCapturing = false
   }
-
-  getIsCapturing(): boolean {
-    return this.isCapturing
-  }
 }

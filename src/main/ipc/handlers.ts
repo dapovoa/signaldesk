@@ -1019,7 +1019,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
   // Clear conversation history
   ipcMain.handle('clear-history', () => {
-    openaiService?.clearHistory()
     return { success: true }
   })
 
