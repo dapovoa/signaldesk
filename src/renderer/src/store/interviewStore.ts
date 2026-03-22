@@ -13,6 +13,7 @@ export interface AnswerEntry {
   answer: string
   timestamp: number
   isStreaming: boolean
+  truncated?: boolean
 }
 
 export interface AppSettings {
@@ -34,16 +35,45 @@ export interface AppSettings {
   llmBaseUrl: string
   llmCustomHeaders: string
   llmModel: string
+  deepseekTemperature: number
+  deepseekTopP: number
+  deepseekMaxTokens: number
   transcriptionLanguage: 'auto' | 'en' | 'pt'
   alwaysOnTop: boolean
   windowOpacity: number
   pauseThreshold: number
   autoStart: boolean
+}
+
+export interface AvatarProfile {
+  identityBase: string
   cvSummary: string
   jobTitle: string
   companyName: string
   jobDescription: string
   companyContext: string
+  sourceDirectory: string
+  embeddingModel: string
+  updatedAt: number
+}
+
+export interface AvatarIndexStatus {
+  available: boolean
+  sourceDirectory: string
+  embeddingModel: string
+  documentCount: number
+  chunkCount: number
+  lastIndexedAt: number | null
+  databasePath: string
+  lastError: string | null
+}
+
+export interface AvatarReindexProgress {
+  totalDocuments: number
+  processedDocuments: number
+  embeddedChunks: number
+  embeddingModel: string
+  currentFile: string | null
 }
 
 interface InterviewState {
@@ -62,10 +92,15 @@ interface InterviewState {
   answers: AnswerEntry[]
   currentAnswer: string
   currentQuestion: string
+  currentAnswerTruncated: boolean
 
   // Settings
   settings: AppSettings
   showSettings: boolean
+  avatarProfile: AvatarProfile
+  avatarIndexStatus: AvatarIndexStatus | null
+  avatarReindexProgress: AvatarReindexProgress | null
+  showAvatar: boolean
 
   // History view
   showHistory: boolean
@@ -91,6 +126,7 @@ interface InterviewState {
 
   addAnswer: (entry: AnswerEntry) => void
   updateCurrentAnswer: (chunk: string) => void
+  markCurrentAnswerTruncated: () => void
   setCurrentQuestion: (question: string) => void
   finalizeAnswer: (finalAnswer?: string) => void | Promise<void>
   clearAnswers: () => void
@@ -98,6 +134,11 @@ interface InterviewState {
   setSettings: (settings: AppSettings) => void
   updateSettings: (updates: Partial<AppSettings>) => void
   setShowSettings: (show: boolean) => void
+  setAvatarProfile: (profile: AvatarProfile) => void
+  updateAvatarProfile: (updates: Partial<AvatarProfile>) => void
+  setAvatarIndexStatus: (status: AvatarIndexStatus | null) => void
+  setAvatarReindexProgress: (progress: AvatarReindexProgress | null) => void
+  setShowAvatar: (show: boolean) => void
 
   setShowHistory: (show: boolean) => void
 
@@ -129,16 +170,32 @@ const DEFAULT_SETTINGS: AppSettings = {
   llmBaseUrl: '',
   llmCustomHeaders: '',
   llmModel: 'gpt-4o-mini',
+  deepseekTemperature: 0.3,
+  deepseekTopP: 0.9,
+  deepseekMaxTokens: 1024,
   transcriptionLanguage: 'auto',
   alwaysOnTop: true,
   windowOpacity: 1.0,
   pauseThreshold: 1500,
-  autoStart: false,
+  autoStart: false
+}
+
+const DEFAULT_IDENTITY_BASE = `Sou um engenheiro direto, calmo e pragmático. Normalmente começo pelo ponto mais concreto do problema e sigo por análise, validação e exclusão até perceber o que interessa. Prefiro respostas curtas, factuais e simples, sem buzzwords, sem tom professoral e sem linguagem corporativa.
+
+Em termos técnicos, valorizo simplicidade, legibilidade, automação, boa formatação de código e logs claros. Quando estou a implementar, começo pelo caminho mais simples que me dê sinal rápido, depois ajusto até ficar estável e robusto. Dou muita importância a prioridade, observabilidade e controlo de complexidade.
+
+Se não souber algo ao certo, digo isso de forma simples e analiso primeiro. Não invento experiência nem ferramentas que não usei. Quando discordo, apresento factos. Quando respondo bem, sou simples, direto e orientado ao primeiro passo útil.`
+
+const DEFAULT_AVATAR_PROFILE: AvatarProfile = {
+  identityBase: DEFAULT_IDENTITY_BASE,
   cvSummary: '',
   jobTitle: '',
   companyName: '',
   jobDescription: '',
-  companyContext: ''
+  companyContext: '',
+  sourceDirectory: '',
+  embeddingModel: 'mxbai-embed-large',
+  updatedAt: 0
 }
 
 export const useInterviewStore = create<InterviewState>((set, get) => ({
@@ -155,9 +212,14 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
   answers: [],
   currentAnswer: '',
   currentQuestion: '',
+  currentAnswerTruncated: false,
 
   settings: DEFAULT_SETTINGS,
   showSettings: false,
+  avatarProfile: DEFAULT_AVATAR_PROFILE,
+  avatarIndexStatus: null,
+  avatarReindexProgress: null,
+  showAvatar: false,
   showHistory: false,
 
   isSessionActive: false,
@@ -186,7 +248,8 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
     set((state) => ({
       answers: [...state.answers, entry],
       currentAnswer: '',
-      currentQuestion: entry.question
+      currentQuestion: entry.question,
+      currentAnswerTruncated: Boolean(entry.truncated)
     })),
 
   updateCurrentAnswer: (chunk) =>
@@ -195,7 +258,9 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
       isGenerating: true
     })),
 
-  setCurrentQuestion: (question) => set({ currentQuestion: question }),
+  markCurrentAnswerTruncated: () => set({ currentAnswerTruncated: true }),
+
+  setCurrentQuestion: (question) => set({ currentQuestion: question, currentAnswerTruncated: false }),
 
   finalizeAnswer: async (finalAnswer) => {
     const state = get()
@@ -207,12 +272,14 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
         question: state.currentQuestion,
         answer: answerText,
         timestamp: Date.now(),
-        isStreaming: false
+        isStreaming: false,
+        truncated: state.currentAnswerTruncated
       }
       set((state) => ({
         answers: [...state.answers.slice(-20), entry], // Keep last 20 answers
         currentAnswer: '',
         currentQuestion: '',
+        currentAnswerTruncated: false,
         isGenerating: false
       }))
       // Save to history
@@ -222,11 +289,12 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
         console.error('Failed to save history entry:', err)
       }
     } else {
-      set({ isGenerating: false })
+      set({ isGenerating: false, currentAnswerTruncated: false })
     }
   },
 
-  clearAnswers: () => set({ answers: [], currentAnswer: '', currentQuestion: '' }),
+  clearAnswers: () =>
+    set({ answers: [], currentAnswer: '', currentQuestion: '', currentAnswerTruncated: false }),
 
   setSettings: (settings) => set({ settings }),
 
@@ -236,6 +304,14 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
     })),
 
   setShowSettings: (show) => set({ showSettings: show }),
+  setAvatarProfile: (avatarProfile) => set({ avatarProfile }),
+  updateAvatarProfile: (updates) =>
+    set((state) => ({
+      avatarProfile: { ...state.avatarProfile, ...updates }
+    })),
+  setAvatarIndexStatus: (avatarIndexStatus) => set({ avatarIndexStatus }),
+  setAvatarReindexProgress: (avatarReindexProgress) => set({ avatarReindexProgress }),
+  setShowAvatar: (show) => set({ showAvatar: show }),
 
   setShowHistory: (show) => set({ showHistory: show }),
 
@@ -271,6 +347,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
       answers: [],
       currentAnswer: '',
       currentQuestion: '',
+      currentAnswerTruncated: false,
       error: null
     })
 }))

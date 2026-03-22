@@ -20,7 +20,7 @@ export function TranscriptPanel(): React.JSX.Element {
         <div className="flex items-center gap-2">
           <MessageSquare className="h-4 w-4 text-cyan-300" />
           <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-dark-300">
-            Live Transcript
+            Transcript
           </span>
           {transcripts.length > 0 && (
             <span className="rounded-full border border-white/5 bg-white/[0.04] px-2 py-0.5 text-[11px] text-dark-500">
@@ -47,11 +47,8 @@ export function TranscriptPanel(): React.JSX.Element {
         ) : hasContent ? (
           <>
             {transcripts.map((transcript, index) => (
-              <div
-                key={transcript.id}
-                className="flex gap-3 rounded-2xl border border-white/5 bg-white/[0.03] px-3 py-2 text-sm"
-              >
-                <span className="min-w-[28px] pt-0.5 font-mono text-[11px] text-dark-500">
+              <div key={transcript.id} className="flex gap-2 py-1 text-sm">
+                <span className="min-w-[22px] pt-0.5 font-mono text-[11px] text-dark-500">
                   {index + 1}.
                 </span>
                 <p className="flex-1 leading-relaxed text-dark-200">{transcript.text}</p>
@@ -59,8 +56,8 @@ export function TranscriptPanel(): React.JSX.Element {
             ))}
 
             {currentTranscript && (
-              <div className="flex gap-3 rounded-2xl border border-cyan-400/20 bg-cyan-400/8 px-3 py-2 text-sm">
-                <span className="min-w-[28px] pt-0.5 font-mono text-[11px] text-cyan-300">
+              <div className="flex gap-2 py-1 text-sm">
+                <span className="min-w-[22px] pt-0.5 font-mono text-[11px] text-cyan-300">
                   {transcripts.length + 1}.
                 </span>
                 <p className="flex-1 leading-relaxed text-dark-200">

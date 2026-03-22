@@ -227,16 +227,19 @@ export function HistoryPanel({ onClose }: HistoryPanelProps): React.JSX.Element 
           filteredHistory.map((entry) => (
             <div
               key={entry.id}
-              className="animate-fade-in overflow-hidden rounded-[22px] border border-white/6 bg-white/[0.035]"
+              className="animate-fade-in overflow-hidden rounded-[22px] bg-white/[0.035]"
             >
-              <div className="border-b border-white/5 bg-white/[0.03] px-4 py-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1">
-                    <p className="mb-1 text-xs font-medium text-dark-300">Q: {entry.question}</p>
-                    <div className="flex items-center gap-1 text-xs text-dark-500">
-                      <Clock className="w-3 h-3" />
-                      <span>{formatDate(entry.timestamp)}</span>
-                    </div>
+              <div className="bg-white/[0.03] px-4 py-3">
+                <p className="text-sm font-medium leading-6 text-dark-300">
+                  <span className="mr-2 text-[11px] uppercase tracking-[0.24em] text-dark-500">
+                    Q:
+                  </span>
+                  {entry.question}
+                </p>
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-1 text-xs text-dark-500">
+                    <Clock className="w-3 h-3" />
+                    <span>{formatDate(entry.timestamp)}</span>
                   </div>
                   <button
                     onClick={() => deleteEntry(entry.id)}
@@ -248,6 +251,11 @@ export function HistoryPanel({ onClose }: HistoryPanelProps): React.JSX.Element 
                 </div>
               </div>
               <div className="p-4">
+                {entry.truncated && (
+                  <p className="mb-3 rounded-lg border border-amber-400/15 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                    Output cut short by the model token limit.
+                  </p>
+                )}
                 <MarkdownRenderer content={entry.answer} />
                 <div className="mt-3 flex justify-end">
                   <button

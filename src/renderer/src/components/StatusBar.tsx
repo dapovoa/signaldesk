@@ -131,13 +131,6 @@ export function StatusBar(): React.JSX.Element {
           </button>
         </div>
       </div>
-
-      {!isCapturing && (
-        <p className="mt-3 text-center text-xs text-dark-500">
-          Speakers mode captures the interviewer's voice from system output or loopback
-        </p>
-      )}
-
       {error && (
         <div className="mt-3 flex items-center gap-2 rounded-xl border border-red-400/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">
           <AlertCircle className="w-4 h-4 flex-shrink-0" />

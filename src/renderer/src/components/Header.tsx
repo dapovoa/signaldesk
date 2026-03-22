@@ -1,4 +1,4 @@
-import { History, Minus, Pin, PinOff, Play, Settings, Square, X } from 'lucide-react'
+import { History, Minus, Pin, PinOff, Play, Settings, Square, UserCircle2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useSessionTimer } from '../hooks/useSessionTimer'
 import { useInterviewStore } from '../store/interviewStore'
@@ -7,6 +7,7 @@ export function Header(): React.JSX.Element {
   const {
     settings,
     setShowSettings,
+    setShowAvatar,
     showHistory,
     setShowHistory,
     isSessionActive,
@@ -121,6 +122,14 @@ export function Header(): React.JSX.Element {
           }
         >
           {isAlwaysOnTop ? <Pin size={14} /> : <PinOff size={14} />}
+        </button>
+
+        <button
+          onClick={() => setShowAvatar(true)}
+          className="rounded-xl border border-white/5 bg-white/[0.04] p-2 text-dark-400 transition-colors hover:border-white/10 hover:bg-white/[0.08] hover:text-dark-200"
+          title="Avatar"
+        >
+          <UserCircle2 size={14} />
         </button>
 
         <button

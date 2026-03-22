@@ -252,11 +252,24 @@ select {
 
 .settings-modal input[type='text']:focus,
 .settings-modal input[type='password']:focus,
+.settings-modal input[type='number']:focus,
 .settings-modal select:focus,
 .settings-modal textarea:focus {
   border-color: rgba(103, 232, 249, 0.22) !important;
   background: rgba(255, 255, 255, 0.05) !important;
   outline: none;
+}
+
+.settings-modal .hide-number-spin[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+  background: var(--dark-800);
+}
+
+.settings-modal .hide-number-spin[type='number']::-webkit-outer-spin-button,
+.settings-modal .hide-number-spin[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .settings-modal .settings-soft-block {
@@ -329,4 +342,19 @@ select {
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--dark-400);
+}
+
+.settings-modal .settings-field-label {
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dark-400);
+  line-height: 1.4;
+}
+
+.settings-modal .settings-modal-title {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--dark-100);
+  line-height: 1.35;
 }
