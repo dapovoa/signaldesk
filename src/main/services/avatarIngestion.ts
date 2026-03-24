@@ -6,6 +6,7 @@ import { EmbeddingProvider, IngestedChunk } from './avatarTypes'
 
 const SUPPORTED_EXTENSIONS = new Set(['.md', '.txt', '.json'])
 const DEFAULT_PROFILE_ID = 'default'
+const AVATAR_VERBOSE_LOGS = process.env.SIGNALDESK_AVATAR_VERBOSE === '1'
 
 const normalizeWhitespace = (value: string): string =>
   value.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/[ \t]+\n/g, '\n').trim()
@@ -406,6 +407,7 @@ export class AvatarIngestionService {
       currentFile: string | null
     }) => void
   ): Promise<void> {
+    const startedAt = Date.now()
     this.ensureSourceDirectory()
     const files = collectFiles(this.sourceDirectory)
     const storedEmbeddingModel = this.store.getMetadata('embedding_model') || ''
@@ -446,10 +448,12 @@ export class AvatarIngestionService {
       })
 
       if (!result.changed && !forceFullReembed) {
-        console.log('[AvatarIngestion] skipping unchanged document:', {
-          filePath,
-          documentId: result.documentId
-        })
+        if (AVATAR_VERBOSE_LOGS) {
+          console.log('[AvatarIngestion] skipping unchanged document:', {
+            filePath,
+            documentId: result.documentId
+          })
+        }
         continue
       }
 
@@ -457,8 +461,9 @@ export class AvatarIngestionService {
       if (chunks.length === 0) continue
 
       console.log('[AvatarIngestion] processing document:', {
-        filePath,
+        filePath: path.basename(filePath),
         documentId: result.documentId,
+        progress: `${processedDocuments + 1}/${files.length}`,
         changed: result.changed,
         forced: forceFullReembed,
         chunkCount: chunks.length
@@ -494,7 +499,8 @@ export class AvatarIngestionService {
       processedDocuments,
       embeddedChunks,
       embeddingModel: this.embeddingProvider.model,
-      forceFullReembed
+      forceFullReembed,
+      durationMs: Date.now() - startedAt
     })
   }
 }

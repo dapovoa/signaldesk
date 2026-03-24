@@ -5,6 +5,7 @@ import { MarkdownRenderer } from './MarkdownRenderer'
 
 export function AnswerPanel(): React.JSX.Element {
   const {
+    isCapturing,
     answers,
     currentAnswer,
     currentQuestion,
@@ -53,6 +54,8 @@ export function AnswerPanel(): React.JSX.Element {
   }
 
   const hasContent = answers.length > 0 || currentAnswer
+  const shouldPulseManualGenerate =
+    isCapturing && !isGenerating && !currentQuestion.trim() && !currentAnswer
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-transparent">
@@ -67,10 +70,30 @@ export function AnswerPanel(): React.JSX.Element {
           <button
             onClick={generateAnswerManually}
             disabled={isGenerating}
-            className="flex items-center justify-center rounded-xl border border-cyan-400/15 bg-cyan-400/8 px-2.5 py-1.5 text-cyan-200 transition-colors hover:border-cyan-300/25 hover:bg-cyan-400/12 hover:text-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
-            title="Generate answer from the current transcript"
+            className={`group relative flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-cyan-200 transition-colors hover:border-cyan-300/25 hover:bg-cyan-400/12 hover:text-cyan-100 disabled:cursor-not-allowed disabled:opacity-60 ${
+              shouldPulseManualGenerate
+                ? 'animate-pulse border-cyan-300/35 bg-cyan-400/18 shadow-[0_0_0_4px_rgba(34,211,238,0.14)]'
+                : 'border-cyan-400/15 bg-cyan-400/8'
+            }`}
+            title={
+              shouldPulseManualGenerate
+                ? 'No question detected yet. Generate from current transcript.'
+                : 'Generate answer from the current transcript'
+            }
           >
-            <Wand2 className="w-4 h-4" />
+            <span
+              className={`relative inline-flex h-5 w-5 items-center justify-center rounded-full ${
+                shouldPulseManualGenerate ? 'bg-cyan-300/20' : 'bg-transparent'
+              }`}
+            >
+              {shouldPulseManualGenerate && (
+                <span className="absolute inset-0 rounded-full border border-cyan-300/40 animate-ping" />
+              )}
+              <Wand2 className="relative z-10 w-4 h-4" />
+            </span>
+            <span className="text-[11px] font-semibold uppercase tracking-[0.16em]">
+              {shouldPulseManualGenerate ? 'Generate Now' : 'Assist'}
+            </span>
           </button>
           {hasContent && (
             <button
@@ -110,7 +133,7 @@ export function AnswerPanel(): React.JSX.Element {
               >
                 <div className="bg-white/[0.03] px-4 py-3">
                   <p className="flex items-center gap-2 text-sm font-medium leading-6 text-dark-300">
-                    <span className="mr-2 text-[11px] uppercase tracking-[0.24em] text-dark-500">
+                    <span className="text-[11px] uppercase tracking-[0.12em] text-dark-500">
                       Q:
                     </span>
                     <span className="min-w-0 flex-1 truncate">{answer.question}</span>
@@ -151,7 +174,7 @@ export function AnswerPanel(): React.JSX.Element {
                 {currentQuestion && (
                   <div className="bg-cyan-400/6 px-4 py-3">
                     <p className="flex items-center gap-2 text-sm font-medium leading-6 text-cyan-50">
-                      <span className="mr-2 text-[11px] uppercase tracking-[0.24em] text-cyan-300/80">
+                      <span className="text-[11px] uppercase tracking-[0.12em] text-cyan-300/80">
                         Q:
                       </span>
                       <span className="min-w-0 flex-1 truncate">{currentQuestion}</span>

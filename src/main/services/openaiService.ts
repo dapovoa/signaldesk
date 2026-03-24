@@ -3,6 +3,7 @@ import OpenAI from 'openai'
 import { streamChatGPTCodexResponse } from './chatgptCodexClient'
 import { getDefaultOutputTokens, isDeepSeekModelConfig } from './llmDefaults'
 import { createOpenAIClient } from './openaiClient'
+import { appendWithinApproxTokenCap } from './streamTruncation'
 
 export interface Message {
   role: 'system' | 'user' | 'assistant'
@@ -44,6 +45,19 @@ const getConfiguredMaxTokens = (config: OpenAIConfig): number =>
 
 const MAX_INTERVIEW_ANSWER_TOKENS = 160
 
+const getEffectiveMaxTokens = (
+  config: OpenAIConfig,
+  options?: { maxTokensCap?: number }
+): number => {
+  const configuredMaxTokens = getConfiguredMaxTokens(config)
+  const cappedMaxTokens =
+    typeof options?.maxTokensCap === 'number'
+      ? Math.min(configuredMaxTokens, options.maxTokensCap)
+      : configuredMaxTokens
+
+  return Math.max(1, cappedMaxTokens)
+}
+
 const simplifyInterviewAnswer = (raw: string): string => {
   let text = raw
     .replace(/\r\n/g, '\n')
@@ -68,6 +82,19 @@ const simplifyInterviewAnswer = (raw: string): string => {
   if (!text) return ''
   if (!/[.!?]$/.test(text)) text += '.'
   return text
+}
+
+type TruncationReason = 'provider_length' | 'upper_cap'
+type TruncationProvider =
+  | 'chat_completions'
+  | 'chat_completions_vision'
+  | 'responses'
+  | 'responses_codex'
+
+interface TruncationEvent {
+  reason: TruncationReason
+  maxTokens: number
+  provider: TruncationProvider
 }
 
 const getErrorMessage = (error: unknown): string => {
@@ -428,7 +455,7 @@ First, identify what the question is asking, then provide:
 
     try {
       let fullResponse = ''
-      let truncated = false
+      let truncationReason: TruncationReason | null = null
 
       // Use vision-capable model
       const model = this.config.model || 'gpt-4o-mini'
@@ -441,7 +468,7 @@ First, identify what the question is asking, then provide:
         stream: true
       }
 
-      const maxTokens = getConfiguredMaxTokens(this.config)
+      const maxTokens = getEffectiveMaxTokens(this.config)
       if (isDeepSeekConfig(this.config)) {
         request.max_tokens = maxTokens
       } else {
@@ -465,19 +492,31 @@ First, identify what the question is asking, then provide:
 
       for await (const chunk of stream) {
         if (chunk.choices[0]?.finish_reason === 'length') {
-          truncated = true
+          truncationReason = truncationReason ?? 'provider_length'
         }
         const content = chunk.choices[0]?.delta?.content || ''
-        if (content) {
-          fullResponse += content
-          this.emit('stream', content)
+        if (!content) {
+          continue
+        }
+
+        const appendResult = appendWithinApproxTokenCap(fullResponse, content, maxTokens)
+        fullResponse = appendResult.nextResponse
+
+        if (appendResult.emittedChunk) {
+          this.emit('stream', appendResult.emittedChunk)
+        }
+
+        if (appendResult.reachedCap) {
+          truncationReason = 'upper_cap'
+          break
         }
       }
 
-      if (truncated) {
-        this.emit('truncated', {
-          reason: 'length',
-          maxTokens
+      if (truncationReason) {
+        this.emitTruncated({
+          reason: truncationReason,
+          maxTokens,
+          provider: 'chat_completions_vision'
         })
       }
 
@@ -545,7 +584,7 @@ First, identify what the question is asking, then provide:
     options?: { maxTokensCap?: number }
   ): Promise<string> {
     let fullResponse = ''
-    let truncated = false
+    let truncationReason: TruncationReason | null = null
     const request: StreamingChatCompletionRequest = {
       model: this.config.model || 'gpt-4o-mini',
       messages: messages,
@@ -554,11 +593,7 @@ First, identify what the question is asking, then provide:
       stream: true
     }
 
-    const configuredMaxTokens = getConfiguredMaxTokens(this.config)
-    const maxTokens =
-      typeof options?.maxTokensCap === 'number'
-        ? Math.min(configuredMaxTokens, options.maxTokensCap)
-        : configuredMaxTokens
+    const maxTokens = getEffectiveMaxTokens(this.config, options)
     if (isDeepSeekConfig(this.config)) {
       request.max_tokens = maxTokens
     } else {
@@ -583,23 +618,34 @@ First, identify what the question is asking, then provide:
 
     for await (const chunk of stream) {
       if (chunk.choices[0]?.finish_reason === 'length') {
-        truncated = true
+        truncationReason = truncationReason ?? 'provider_length'
       }
       const content = chunk.choices[0]?.delta?.content || ''
-      if (content) {
-        fullResponse += content
-        if (fullResponse.length === content.length) {
+      if (!content) {
+        continue
+      }
+
+      const appendResult = appendWithinApproxTokenCap(fullResponse, content, maxTokens)
+      fullResponse = appendResult.nextResponse
+
+      if (appendResult.emittedChunk) {
+        if (fullResponse.length === appendResult.emittedChunk.length) {
           console.log('[OpenAIService] first stream chunk received')
         }
-        this.emit('stream', content)
+        this.emit('stream', appendResult.emittedChunk)
+      }
+
+      if (appendResult.reachedCap) {
+        truncationReason = 'upper_cap'
+        break
       }
     }
 
-    if (truncated) {
-      console.warn('[OpenAIService] response truncated by max token limit')
-      this.emit('truncated', {
-        reason: 'length',
-        maxTokens
+    if (truncationReason) {
+      this.emitTruncated({
+        reason: truncationReason,
+        maxTokens,
+        provider: 'chat_completions'
       })
     }
 
@@ -611,6 +657,10 @@ First, identify what the question is asking, then provide:
     options?: { maxTokensCap?: number }
   ): Promise<string> {
     let fullResponse = ''
+    let truncationReason: TruncationReason | null = null
+    const provider: TruncationProvider = isChatGPTCodexBackend(this.config)
+      ? 'responses_codex'
+      : 'responses'
     const input = messages
       .filter((message) => message.role !== 'system')
       .map((message) => ({
@@ -623,16 +673,13 @@ First, identify what the question is asking, then provide:
         ]
       }))
 
-    const configuredMaxTokens = getConfiguredMaxTokens(this.config)
-    const maxTokens =
-      typeof options?.maxTokensCap === 'number'
-        ? Math.min(configuredMaxTokens, options.maxTokensCap)
-        : configuredMaxTokens
+    const maxTokens = getEffectiveMaxTokens(this.config, options)
 
     const request = {
       model: this.config.model || 'gpt-4o-mini',
       instructions: this.systemPrompt,
       input,
+      max_output_tokens: maxTokens,
       ...(isChatGPTCodexBackend(this.config)
         ? {
             tools: [],
@@ -642,14 +689,13 @@ First, identify what the question is asking, then provide:
             stream: true
           }
         : {
-            max_output_tokens: maxTokens,
             temperature: this.config.temperature ?? 0.3,
             top_p: this.config.topP,
             stream: true
           })
     }
 
-    const responseStream = isChatGPTCodexBackend(this.config)
+    const responseStream = provider === 'responses_codex'
       ? streamChatGPTCodexResponse({
           accessToken: this.config.apiKey,
           accountId: this.config.chatgptAccountId || '',
@@ -663,14 +709,35 @@ First, identify what the question is asking, then provide:
 
     for await (const event of responseStream) {
       if (event.type === 'response.output_text.delta' && event.delta) {
-        fullResponse += event.delta
-        if (fullResponse.length === event.delta.length) {
+        const appendResult = appendWithinApproxTokenCap(fullResponse, event.delta, maxTokens)
+        fullResponse = appendResult.nextResponse
+
+        if (appendResult.emittedChunk && fullResponse.length === appendResult.emittedChunk.length) {
           console.log('[OpenAIService] first stream chunk received')
         }
-        this.emit('stream', event.delta)
+        if (appendResult.emittedChunk) {
+          this.emit('stream', appendResult.emittedChunk)
+        }
+        if (appendResult.reachedCap) {
+          truncationReason = 'upper_cap'
+          break
+        }
       }
     }
 
+    if (truncationReason) {
+      this.emitTruncated({
+        reason: truncationReason,
+        maxTokens,
+        provider
+      })
+    }
+
     return fullResponse
+  }
+
+  private emitTruncated(event: TruncationEvent): void {
+    console.warn('[OpenAIService] response truncated:', event)
+    this.emit('truncated', event)
   }
 }

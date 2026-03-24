@@ -12,6 +12,7 @@
     "format": "prettier --write .",
     "lint": "eslint --cache .",
     "test:provider": "node scripts/test-provider.mjs",
+    "test:unit": "tsc --module commonjs --target es2022 --moduleResolution node --types node --outDir /tmp/signaldesk-unit-tests src/main/services/streamTruncation.ts src/main/services/streamTruncation.test.ts && node --test /tmp/signaldesk-unit-tests/streamTruncation.test.js",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",

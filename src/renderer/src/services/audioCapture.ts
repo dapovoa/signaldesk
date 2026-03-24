@@ -120,8 +120,18 @@ export class AudioCaptureService {
         }
       })
 
-      // Remove video track, we only need audio
-      stream.getVideoTracks().forEach((track) => track.stop())
+      const hasAudioTrack = stream.getAudioTracks().length > 0
+      if (!hasAudioTrack) {
+        stream.getTracks().forEach((track) => track.stop())
+        throw new Error('Desktop capture started without an audio track.')
+      }
+
+      // Keep the video track alive but disabled. Stopping it immediately can trigger
+      // PipeWire remote-connection warnings on some Wayland sessions even when audio works.
+      stream.getVideoTracks().forEach((track) => {
+        track.enabled = false
+      })
+
       await this.setupStreamCapture(stream)
     } catch (error) {
       console.error('Failed to start system audio capture:', error)
