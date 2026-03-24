@@ -6,6 +6,23 @@ export interface StreamAppendResult {
   reachedCap: boolean
 }
 
+const trimChunkToBoundary = (chunk: string): string => {
+  const boundaryRegex = /[\s,.!?;:)\]}]/
+  let lastBoundaryIndex = -1
+
+  for (let index = 0; index < chunk.length; index += 1) {
+    if (boundaryRegex.test(chunk[index])) {
+      lastBoundaryIndex = index
+    }
+  }
+
+  if (lastBoundaryIndex <= 0) {
+    return chunk
+  }
+
+  return chunk.slice(0, lastBoundaryIndex).trimEnd()
+}
+
 export const appendWithinApproxTokenCap = (
   currentResponse: string,
   incomingChunk: string,
@@ -39,9 +56,12 @@ export const appendWithinApproxTokenCap = (
   }
 
   const cappedChunk = incomingChunk.slice(0, remainingChars)
+  const safeChunk = trimChunkToBoundary(cappedChunk)
+  const emittedChunk = safeChunk || cappedChunk
+
   return {
-    nextResponse: currentResponse + cappedChunk,
-    emittedChunk: cappedChunk,
+    nextResponse: currentResponse + emittedChunk,
+    emittedChunk,
     reachedCap: true
   }
 }

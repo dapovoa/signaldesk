@@ -34,6 +34,14 @@ test('cuts chunk when it exceeds remaining capacity', () => {
   assert.equal(result.reachedCap, true)
 })
 
+test('prefers word boundary when truncating capped chunk', () => {
+  const result = appendWithinApproxTokenCap('', 'hello world there', 2)
+
+  assert.equal(result.nextResponse, 'hello')
+  assert.equal(result.emittedChunk, 'hello')
+  assert.equal(result.reachedCap, true)
+})
+
 test('multi-chunk accumulation reaches cap on later chunk', () => {
   const first = appendWithinApproxTokenCap('', 'ab', 1)
   const second = appendWithinApproxTokenCap(first.nextResponse, 'cdef', 1)
