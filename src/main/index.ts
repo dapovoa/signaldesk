@@ -1,7 +1,7 @@
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
-import { app, BrowserWindow, session, shell } from 'electron'
+import { app, BrowserWindow, nativeImage, session, shell } from 'electron'
+import { existsSync } from 'fs'
 import { join } from 'path'
-import icon from '../../resources/icon.png?asset'
 import { cleanupIpcHandlers, initializeIpcHandlers } from './ipc/handlers'
 import { SettingsManager } from './services/settingsManager'
 
@@ -15,9 +15,35 @@ if (process.platform === 'linux' && process.env.ELECTRON_DISABLE_SANDBOX === '1'
   app.commandLine.appendSwitch('disable-setuid-sandbox')
 }
 
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('class', 'signaldesk')
+  ;(app as Electron.App & { setDesktopName?: (name: string) => void }).setDesktopName?.(
+    'signaldesk.desktop'
+  )
+}
+
+const resolveLinuxWindowIcon = (): string | undefined => {
+  if (process.platform !== 'linux') return undefined
+
+  const candidates = [
+    join(process.cwd(), 'resources', 'icon.png'),
+    join(process.cwd(), 'build', 'icon.png'),
+    join(__dirname, '../../resources/icon.png'),
+    join(process.resourcesPath, 'icon.png')
+  ]
+
+  return candidates.find((candidate) => existsSync(candidate))
+}
+
 function createWindow(): void {
   const settingsManager = new SettingsManager()
   const settings = settingsManager.getSettings()
+  const linuxIconPath = resolveLinuxWindowIcon()
+  const linuxIconImage =
+    process.platform === 'linux' && linuxIconPath
+      ? nativeImage.createFromPath(linuxIconPath)
+      : undefined
+  const hasLinuxIcon = Boolean(linuxIconImage && !linuxIconImage.isEmpty())
 
   // Create the browser window with screen share protection
   mainWindow = new BrowserWindow({
@@ -29,10 +55,11 @@ function createWindow(): void {
     autoHideMenuBar: true,
     frame: false, // Frameless for custom title bar
     transparent: false,
+    backgroundColor: '#050c13',
     alwaysOnTop: !isWaylandSession && settings.alwaysOnTop,
     skipTaskbar: false,
     resizable: true,
-    ...(process.platform === 'linux' ? { icon } : {}),
+    ...(process.platform === 'linux' && hasLinuxIcon ? { icon: linuxIconImage } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -43,6 +70,9 @@ function createWindow(): void {
 
   // Enable screen share protection - hides window from screen capture
   mainWindow.setContentProtection(true)
+  if (process.platform === 'linux' && hasLinuxIcon && linuxIconImage) {
+    mainWindow.setIcon(linuxIconImage)
+  }
 
   // Set window to be excluded from screen capture on Windows
   if (process.platform === 'win32') {

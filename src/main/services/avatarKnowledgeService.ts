@@ -72,11 +72,13 @@ export class AvatarKnowledgeService {
     return this.initPromise
   }
 
-  updateProfile(profile: AvatarProfile): void {
-    console.log('[AvatarKnowledge] updating profile for RAG:', {
-      embeddingModel: profile.embeddingModel,
-      sourceDirectory: profile.sourceDirectory
-    })
+  updateProfile(profile: AvatarProfile, options?: { silentLog?: boolean }): void {
+    if (!options?.silentLog) {
+      console.log('[AvatarKnowledge] updating profile for RAG:', {
+        embeddingModel: profile.embeddingModel,
+        sourceDirectory: profile.sourceDirectory
+      })
+    }
     this.dispose()
     this.configureServices(profile)
     this.lastRefreshAt = 0
@@ -93,11 +95,12 @@ export class AvatarKnowledgeService {
       currentFile: string | null
     }) => void
   ): Promise<AvatarIndexStatus> {
+    const startedAt = Date.now()
     console.log('[AvatarKnowledge] reindex requested:', {
       embeddingModel: profile.embeddingModel,
       sourceDirectory: profile.sourceDirectory
     })
-    this.updateProfile(profile)
+    this.updateProfile(profile, { silentLog: true })
 
     if (this.ingestion) {
       this.store?.resetIndex()
@@ -111,9 +114,18 @@ export class AvatarKnowledgeService {
       await this.ingestion.syncSourceDirectory(onProgress)
       this.lastRefreshAt = Date.now()
       this.lastError = null
+      const status = this.getStatus(profile)
+      const durationMs = Date.now() - startedAt
       console.log('[AvatarKnowledge] reindex completed:', {
-        embeddingModel: profile.embeddingModel
+        embeddingModel: profile.embeddingModel,
+        documentCount: status.documentCount,
+        chunkCount: status.chunkCount,
+        durationMs
       })
+      console.log(
+        `[AvatarKnowledge] summary: reindex finished in ${durationMs}ms, documents=${status.documentCount}, chunks=${status.chunkCount}, model=${profile.embeddingModel}`
+      )
+      return status
     }
 
     return this.getStatus(profile)

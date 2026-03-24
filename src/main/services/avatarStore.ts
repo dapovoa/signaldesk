@@ -9,6 +9,7 @@ interface DocumentUpsertResult {
 }
 
 const VECTOR_TABLE = 'chunk_embeddings_vec'
+const AVATAR_VERBOSE_LOGS = process.env.SIGNALDESK_AVATAR_VERBOSE === '1'
 
 const toJson = (value: unknown): string => JSON.stringify(value)
 const resolveLoadableExtensionPath = (loadablePath: string): string => {
@@ -183,10 +184,12 @@ export class AvatarStore {
     const tableExists = this.hasVectorTable()
 
     if (tableExists && currentModel === model && currentDimensions === dimensions) {
-      console.log('[AvatarStore] keeping existing vector table:', {
-        model,
-        dimensions
-      })
+      if (AVATAR_VERBOSE_LOGS) {
+        console.log('[AvatarStore] keeping existing vector table:', {
+          model,
+          dimensions
+        })
+      }
       return
     }
 
@@ -212,16 +215,20 @@ export class AvatarStore {
 
   replaceEmbeddings(chunkEmbeddings: Array<{ chunkId: number; embedding: number[] }>): void {
     if (!this.hasVectorTable() || chunkEmbeddings.length === 0) {
-      console.log('[AvatarStore] skipping embedding write:', {
-        hasVectorTable: this.hasVectorTable(),
-        embeddingCount: chunkEmbeddings.length
-      })
+      if (AVATAR_VERBOSE_LOGS) {
+        console.log('[AvatarStore] skipping embedding write:', {
+          hasVectorTable: this.hasVectorTable(),
+          embeddingCount: chunkEmbeddings.length
+        })
+      }
       return
     }
 
-    console.log('[AvatarStore] writing embeddings:', {
-      embeddingCount: chunkEmbeddings.length
-    })
+    if (AVATAR_VERBOSE_LOGS) {
+      console.log('[AvatarStore] writing embeddings:', {
+        embeddingCount: chunkEmbeddings.length
+      })
+    }
 
     const remove = this.db.prepare(`DELETE FROM ${VECTOR_TABLE} WHERE chunk_id = ?`)
     const insert = this.db.prepare(
