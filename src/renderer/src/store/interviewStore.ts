@@ -35,9 +35,6 @@ export interface AppSettings {
   llmBaseUrl: string
   llmCustomHeaders: string
   llmModel: string
-  deepseekTemperature: number
-  deepseekTopP: number
-  deepseekMaxTokens: number
   transcriptionLanguage: 'auto' | 'en' | 'pt'
   alwaysOnTop: boolean
   windowOpacity: number
@@ -93,6 +90,7 @@ interface InterviewState {
   currentAnswer: string
   currentQuestion: string
   currentAnswerTruncated: boolean
+  manualAssistSuggested: boolean
 
   // Settings
   settings: AppSettings
@@ -128,6 +126,7 @@ interface InterviewState {
   updateCurrentAnswer: (chunk: string) => void
   markCurrentAnswerTruncated: () => void
   setCurrentQuestion: (question: string) => void
+  setManualAssistSuggested: (value: boolean) => void
   finalizeAnswer: (finalAnswer?: string) => void | Promise<void>
   clearAnswers: () => void
 
@@ -170,9 +169,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   llmBaseUrl: '',
   llmCustomHeaders: '',
   llmModel: 'gpt-4o-mini',
-  deepseekTemperature: 0.3,
-  deepseekTopP: 0.9,
-  deepseekMaxTokens: 1024,
   transcriptionLanguage: 'auto',
   alwaysOnTop: true,
   windowOpacity: 1.0,
@@ -209,6 +205,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
   currentAnswer: '',
   currentQuestion: '',
   currentAnswerTruncated: false,
+  manualAssistSuggested: false,
 
   settings: DEFAULT_SETTINGS,
   showSettings: false,
@@ -245,18 +242,23 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
       answers: [...state.answers, entry],
       currentAnswer: '',
       currentQuestion: entry.question,
-      currentAnswerTruncated: Boolean(entry.truncated)
+      currentAnswerTruncated: Boolean(entry.truncated),
+      manualAssistSuggested: false
     })),
 
   updateCurrentAnswer: (chunk) =>
     set((state) => ({
       currentAnswer: state.currentAnswer + chunk,
-      isGenerating: true
+      isGenerating: true,
+      manualAssistSuggested: false
     })),
 
   markCurrentAnswerTruncated: () => set({ currentAnswerTruncated: true }),
 
-  setCurrentQuestion: (question) => set({ currentQuestion: question, currentAnswerTruncated: false }),
+  setCurrentQuestion: (question) =>
+    set({ currentQuestion: question, currentAnswerTruncated: false, manualAssistSuggested: false }),
+
+  setManualAssistSuggested: (value) => set({ manualAssistSuggested: value }),
 
   finalizeAnswer: async (finalAnswer) => {
     const state = get()
@@ -276,6 +278,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
         currentAnswer: '',
         currentQuestion: '',
         currentAnswerTruncated: false,
+        manualAssistSuggested: false,
         isGenerating: false
       }))
       // Save to history
@@ -290,7 +293,13 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
   },
 
   clearAnswers: () =>
-    set({ answers: [], currentAnswer: '', currentQuestion: '', currentAnswerTruncated: false }),
+    set({
+      answers: [],
+      currentAnswer: '',
+      currentQuestion: '',
+      currentAnswerTruncated: false,
+      manualAssistSuggested: false
+    }),
 
   setSettings: (settings) => set({ settings }),
 
@@ -344,6 +353,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
       currentAnswer: '',
       currentQuestion: '',
       currentAnswerTruncated: false,
+      manualAssistSuggested: false,
       error: null
     })
 }))

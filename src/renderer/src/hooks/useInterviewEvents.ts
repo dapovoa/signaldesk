@@ -13,6 +13,7 @@ export function useInterviewEvents() {
     setCurrentQuestion,
     updateCurrentAnswer,
     markCurrentAnswerTruncated,
+    setManualAssistSuggested,
     finalizeAnswer,
     setError,
     setCapturing,
@@ -70,6 +71,7 @@ export function useInterviewEvents() {
 
     const unsubSpeechStarted = window.api.onSpeechStarted(() => {
       setSpeaking(true)
+      setManualAssistSuggested(false)
     })
 
     const unsubUtteranceEnd = window.api.onUtteranceEnd(() => {
@@ -77,14 +79,29 @@ export function useInterviewEvents() {
     })
 
     const unsubQuestionDetected = window.api.onQuestionDetected((question) => {
+      setManualAssistSuggested(false)
       setCurrentQuestion(question.text)
     })
 
+    const unsubQuestionNotDetectedByModel = window.api.onQuestionNotDetectedByModel(() => {
+      const state = useInterviewStore.getState()
+      if (
+        state.isCapturing &&
+        !state.isGenerating &&
+        !state.currentQuestion.trim() &&
+        !state.currentAnswer.trim()
+      ) {
+        setManualAssistSuggested(true)
+      }
+    })
+
     const unsubAnswerStream = window.api.onAnswerStream((chunk) => {
+      setManualAssistSuggested(false)
       updateCurrentAnswer(chunk)
     })
 
     const unsubAnswerComplete = window.api.onAnswerComplete((answer) => {
+      setManualAssistSuggested(false)
       finalizeAnswer(answer)
     })
 
@@ -93,6 +110,7 @@ export function useInterviewEvents() {
     })
 
     const unsubCaptureError = window.api.onCaptureError((errorMsg) => {
+      setManualAssistSuggested(false)
       setError(errorMsg)
       setCapturing(false)
     })
@@ -122,6 +140,7 @@ export function useInterviewEvents() {
       unsubSpeechStarted()
       unsubUtteranceEnd()
       unsubQuestionDetected()
+      unsubQuestionNotDetectedByModel()
       unsubAnswerStream()
       unsubAnswerComplete()
       unsubAnswerTruncated()
@@ -139,6 +158,7 @@ export function useInterviewEvents() {
     setCurrentQuestion,
     updateCurrentAnswer,
     markCurrentAnswerTruncated,
+    setManualAssistSuggested,
     finalizeAnswer,
     setError,
     setCapturing,

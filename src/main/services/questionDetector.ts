@@ -89,21 +89,21 @@ export class QuestionDetector extends EventEmitter {
     return null
   }
 
-  onUtteranceEnd(): void {
+  onUtteranceEnd(): boolean {
     const fullText = this.getCurrentBuffer()
     this.transcriptBuffer = []
 
-    if (!fullText) return
+    if (!fullText) return false
 
     if (this.shouldIgnore(fullText)) {
       console.log(`[QuestionDetector] Ignored short/noise turn: "${fullText}"`)
-      return
+      return false
     }
 
     const detection = this.analyzeTurn(fullText)
     if (!detection || detection.confidence < this.confidenceThreshold) {
       console.log(`[QuestionDetector] Ignored low-confidence turn: "${fullText}"`)
-      return
+      return false
     }
 
     console.log(
@@ -112,6 +112,7 @@ export class QuestionDetector extends EventEmitter {
 
     console.log(`[QuestionDetector] RESPONSE NEEDED: "${fullText}"`)
     this.emit('questionDetected', detection)
+    return true
   }
 
   isQuestion(text: string): boolean {
