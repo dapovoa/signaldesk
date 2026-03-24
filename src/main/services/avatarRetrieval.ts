@@ -7,9 +7,8 @@ const inferQuestionKinds = (question: string): string[] => {
   const lower = question.toLowerCase()
   const kinds = new Set<string>()
 
-  if (/(project|built|implemented|experience|worked|trabalhaste|experi[êe]ncia)/.test(lower)) {
+  if (/(project|projects|personal project|practice project|built|implemented|arquitetaste|projeto|projetos)/.test(lower)) {
     kinds.add('project')
-    kinds.add('experience')
   }
 
   if (/(behavior|conflict|challenge|situation|team|stakeholder|hist[óo]ria|conflito)/.test(lower)) {
@@ -36,12 +35,36 @@ const inferQuestionKinds = (question: string): string[] => {
   return [...kinds]
 }
 
+const isProjectQuestion = (question: string): boolean => {
+  const lower = question.toLowerCase()
+  return /(project|projects|personal project|practice project|portfolio|projeto|projetos)/.test(lower)
+}
+
+const isRealWorkExampleQuestion = (question: string): boolean => {
+  const lower = question.toLowerCase()
+  return /(real work|not theoretical|actually used|something you used|in real work|real-world|trabalho real|não te[oó]ric|na pr[aá]tica)/.test(
+    lower
+  )
+}
+
+const isProductionIncidentQuestion = (question: string): boolean => {
+  const lower = question.toLowerCase()
+  return (
+    /(production|incident|outage|impact|users|business|root cause|step by step|problema|produção|impacto|utilizadores|passo a passo)/.test(
+      lower
+    ) && /(problem|issue|incident|problema|falha|error|erro|handle|handled|approach|resolve|resolved)/.test(lower)
+  )
+}
+
 const rerankSnippets = (
   question: string,
   snippets: AvatarRetrievedSnippet[],
   limit: number
 ): AvatarRetrievedSnippet[] => {
   const preferredKinds = inferQuestionKinds(question)
+  const productionIncidentMode = isProductionIncidentQuestion(question)
+  const projectQuestionMode = isProjectQuestion(question)
+  const realWorkMode = isRealWorkExampleQuestion(question)
   const lowerQuestion = question.toLowerCase()
   const prioritized = preferredKinds.length
     ? [...snippets].sort((left, right) => {
@@ -69,11 +92,60 @@ const rerankSnippets = (
       ? 0.05
       : 0
 
+    const leftProjectPenalty =
+      left.kind === 'project'
+        ? productionIncidentMode
+          ? 0.22
+          : realWorkMode
+            ? 0.26
+            : projectQuestionMode
+              ? 0
+              : 0.1
+        : 0
+    const rightProjectPenalty =
+      right.kind === 'project'
+        ? productionIncidentMode
+          ? 0.22
+          : realWorkMode
+            ? 0.26
+            : projectQuestionMode
+              ? 0
+              : 0.1
+        : 0
+    const leftIncidentBoost = productionIncidentMode && left.kind === 'debugging' ? 0.16 : 0
+    const rightIncidentBoost = productionIncidentMode && right.kind === 'debugging' ? 0.16 : 0
+    const leftRealWorkIncidentBoost = realWorkMode && left.kind === 'debugging' ? 0.18 : 0
+    const rightRealWorkIncidentBoost = realWorkMode && right.kind === 'debugging' ? 0.18 : 0
+    const leftRealWorkExperienceBoost = realWorkMode && left.kind === 'experience' ? 0.12 : 0
+    const rightRealWorkExperienceBoost = realWorkMode && right.kind === 'experience' ? 0.12 : 0
+    const leftRealWorkTechPenalty = realWorkMode && left.kind === 'technology' ? 0.08 : 0
+    const rightRealWorkTechPenalty = realWorkMode && right.kind === 'technology' ? 0.08 : 0
+    const leftPracticeProjectPenalty =
+      realWorkMode &&
+      /(non-production|personal project|practice project|side project)/i.test(
+        `${left.title} ${left.sectionTitle} ${left.headings.join(' ')}`
+      )
+        ? 0.2
+        : 0
+    const rightPracticeProjectPenalty =
+      realWorkMode &&
+      /(non-production|personal project|practice project|side project)/i.test(
+        `${right.title} ${right.sectionTitle} ${right.headings.join(' ')}`
+      )
+        ? 0.2
+        : 0
+
     const leftScore =
       left.distance -
       leftKindBoost -
       leftTagBoost -
       leftHeadingBoost -
+      leftIncidentBoost -
+      leftRealWorkIncidentBoost -
+      leftRealWorkExperienceBoost +
+      leftRealWorkTechPenalty +
+      leftPracticeProjectPenalty +
+      leftProjectPenalty -
       left.structureScore * 0.08 -
       left.importance * 0.05
     const rightScore =
@@ -81,6 +153,12 @@ const rerankSnippets = (
       rightKindBoost -
       rightTagBoost -
       rightHeadingBoost -
+      rightIncidentBoost -
+      rightRealWorkIncidentBoost -
+      rightRealWorkExperienceBoost +
+      rightRealWorkTechPenalty +
+      rightPracticeProjectPenalty +
+      rightProjectPenalty -
       right.structureScore * 0.08 -
       right.importance * 0.05
 

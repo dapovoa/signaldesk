@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events'
 import OpenAI from 'openai'
 import { streamChatGPTCodexResponse } from './chatgptCodexClient'
-import { getDefaultOutputTokens, isDeepSeekModelConfig } from './llmDefaults'
+import { getDefaultOutputTokens } from './llmDefaults'
 import { createOpenAIClient } from './openaiClient'
 import { appendWithinApproxTokenCap } from './streamTruncation'
 
@@ -38,12 +38,10 @@ type StreamingChatCompletionRequest =
 const isChatGPTCodexBackend = (config: OpenAIConfig): boolean =>
   config.baseURL?.includes('chatgpt.com/backend-api/codex') ?? false
 
-const isDeepSeekConfig = (config: OpenAIConfig): boolean => isDeepSeekModelConfig(config)
-
 const getConfiguredMaxTokens = (config: OpenAIConfig): number =>
   config.maxTokens ?? getDefaultOutputTokens(config)
 
-const MAX_INTERVIEW_ANSWER_TOKENS = 160
+const MAX_INTERVIEW_ANSWER_TOKENS = 220
 
 const getEffectiveMaxTokens = (
   config: OpenAIConfig,
@@ -58,7 +56,19 @@ const getEffectiveMaxTokens = (
   return Math.max(1, cappedMaxTokens)
 }
 
-const simplifyInterviewAnswer = (raw: string): string => {
+const splitSentences = (text: string): string[] =>
+  text
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+
+const trimToWordLimit = (text: string, maxWords: number): string => {
+  const words = text.split(/\s+/).filter(Boolean)
+  if (words.length <= maxWords) return text
+  return words.slice(0, maxWords).join(' ')
+}
+
+const normalizeInterviewAnswer = (raw: string): string => {
   let text = raw
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
@@ -66,18 +76,13 @@ const simplifyInterviewAnswer = (raw: string): string => {
     .replace(/^\s*[-*+]\s+/gm, '')
     .replace(/^\s*\d+\.\s+/gm, '')
     .replace(/[`*_]/g, '')
-    .replace(/[;:]/g, ',')
-    .replace(/[—–]/g, ',')
     .replace(/\s+/g, ' ')
     .trim()
 
-  const sentences = text
-    .split(/(?<=[.!?])\s+/)
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .slice(0, 2)
+  const sentences = splitSentences(text).slice(0, 3)
 
   text = sentences.join(' ')
+  text = trimToWordLimit(text || raw, 95).trim()
 
   if (!text) return ''
   if (!/[.!?]$/.test(text)) text += '.'
@@ -258,8 +263,35 @@ Language overlay for this answer:
 - Respond in English.`
 }
 
+const isExperienceStyleQuestion = (question: string): boolean => {
+  const normalized = ` ${question.toLowerCase()} `
+  const signals = [
+    ' tell me about yourself ',
+    ' walk me through your experience ',
+    ' your experience ',
+    ' your background ',
+    ' what have you been doing ',
+    ' what you have been doing ',
+    ' can you walk me through ',
+    ' fala-me de ti ',
+    ' fala me de ti ',
+    ' a tua experiência ',
+    ' seu percurso ',
+    ' teu percurso ',
+    ' teu background '
+  ]
+
+  return signals.some((signal) => normalized.includes(signal))
+}
+
+const isGenericPythonScriptQuestion = (question: string): boolean => {
+  const lower = question.toLowerCase()
+  const asksPythonOrScript = /(python|script|automation script)/.test(lower)
+  const explicitlyDataPipeline = /(data pipeline|data flow|ingestion|warehouse|batch)/.test(lower)
+  return asksPythonOrScript && !explicitlyDataPipeline
+}
+
 const getSystemPrompt = (
-  config: OpenAIConfig,
   question = '',
   identityBase = '',
   interviewContext = '',
@@ -278,14 +310,20 @@ Execution rules:
 - Default to first-person singular ("I"), not "we", unless the interviewer is clearly asking about team coordination.
 - Keep the answer grounded in Identity Base, Interview Context, and Retrieved Candidate Memory.
 - If the provided context does not support a factual claim, do not invent it.
-- Keep the answer short every time, even when the question is broad or asks for a walkthrough.
+- Prefer real work experience and production incidents over personal projects.
+- Mention personal projects only when the interviewer explicitly asks about projects, portfolio, or side work.
+- Keep the answer short, light, and human. This is a real interview answer, not a lecture or script.
 - Output contract (mandatory):
   1) Plain text only. No markdown, no bullets, no numbered lists, no headings.
-  2) Maximum 4 sentences.
-  3) Maximum 90 words.
+  2) Default to 2 sentences. Hard maximum: 3 sentences.
+  3) Keep vocabulary simple and natural.
   4) Focus on one concrete path and stop. Do not expand with optional sections.
   5) No filler, no motivational language, no coaching tone.
-${isDeepSeekConfig(config) ? '- DeepSeek specific: stay brief and strict with the output contract.' : ''}
+  6) Keep sentence flow natural and spoken.
+  7) Avoid heavy jargon and acronyms unless the interviewer explicitly used them.
+  8) Prefer plain wording over specialist labels when both are correct.
+${isExperienceStyleQuestion(question) ? '- For background/experience questions: use past tense by default and keep it plain.' : ''}
+${isGenericPythonScriptQuestion(question) ? '- For generic Python/script questions: do not default to data pipeline examples unless the interviewer asks for that context.' : ''}
 `
 }
 
@@ -339,7 +377,7 @@ export class OpenAIService extends EventEmitter {
     super()
     this.config = config
     this.client = createOpenAIClient(config)
-    this.systemPrompt = getSystemPrompt(config)
+    this.systemPrompt = getSystemPrompt()
   }
 
   async generateAnswer(question: string, options?: GenerateAnswerOptions): Promise<string> {
@@ -353,7 +391,6 @@ export class OpenAIService extends EventEmitter {
     })
 
     const systemPrompt = getSystemPrompt(
-      this.config,
       question,
       options?.identityBase || '',
       options?.interviewContext || '',
@@ -376,7 +413,7 @@ export class OpenAIService extends EventEmitter {
       const fullResponse = await this.streamAnswerWithRetry(messages, {
         maxTokensCap: MAX_INTERVIEW_ANSWER_TOKENS
       })
-      const normalizedResponse = simplifyInterviewAnswer(fullResponse)
+      const normalizedResponse = normalizeInterviewAnswer(fullResponse)
       console.log('[OpenAIService] answer completed:', {
         length: normalizedResponse.length,
         preview: normalizedResponse.slice(0, 160)
@@ -456,23 +493,87 @@ First, identify what the question is asking, then provide:
     try {
       let fullResponse = ''
       let truncationReason: TruncationReason | null = null
-
-      // Use vision-capable model
       const model = this.config.model || 'gpt-4o-mini'
-      const visionModel = model.includes('gpt-4o') ? model : 'gpt-4o-mini'
+      const maxTokens = getEffectiveMaxTokens(this.config)
 
-      const request: StreamingChatCompletionRequest = {
-        model: visionModel,
-        messages: messages,
-        temperature: this.config.temperature ?? 0.7,
-        stream: true
+      if (isChatGPTCodexBackend(this.config)) {
+        const stream = streamChatGPTCodexResponse({
+          accessToken: this.config.apiKey,
+          accountId: this.config.chatgptAccountId || '',
+          baseURL: this.config.baseURL,
+          body: {
+            model,
+            instructions: solutionPrompt,
+            input: [
+              {
+                role: 'user',
+                content: [
+                  {
+                    type: 'input_text',
+                    text: questionText
+                      ? `Here is the interview question: "${questionText}"\n\nProvide a detailed step-by-step solution with code examples:`
+                      : `Analyze this screenshot carefully. Extract the interview question/problem statement from the image, then provide a detailed step-by-step solution with code examples.
+
+First, identify what the question is asking, then provide:
+- Problem understanding
+- Approach explanation
+- Step-by-step solution
+- Code implementation with comments
+- Complexity analysis`
+                  },
+                  {
+                    type: 'input_image',
+                    image_url: `data:image/png;base64,${base64Data}`
+                  }
+                ]
+              }
+            ],
+            tools: [],
+            tool_choice: 'auto',
+            parallel_tool_calls: false,
+            store: false,
+            include: []
+          }
+        })
+
+        for await (const event of stream) {
+          if (event.type === 'response.output_text.delta' && event.delta) {
+            const appendResult = appendWithinApproxTokenCap(fullResponse, event.delta, maxTokens)
+            fullResponse = appendResult.nextResponse
+
+            if (appendResult.emittedChunk) {
+              this.emit('stream', appendResult.emittedChunk)
+            }
+
+            if (appendResult.reachedCap) {
+              truncationReason = 'upper_cap'
+              break
+            }
+          }
+        }
+
+        if (truncationReason) {
+          this.emitTruncated({
+            reason: truncationReason,
+            maxTokens,
+            provider: 'responses_codex'
+          })
+        }
+
+        this.emit('complete', fullResponse)
+        return fullResponse
       }
 
-      const maxTokens = getEffectiveMaxTokens(this.config)
-      if (isDeepSeekConfig(this.config)) {
-        request.max_tokens = maxTokens
-      } else {
-        request.max_completion_tokens = maxTokens
+      const request: StreamingChatCompletionRequest = {
+        model,
+        messages: messages,
+        stream: true
+      }
+      if (typeof this.config.temperature === 'number') {
+        request.temperature = this.config.temperature
+      }
+      if (typeof this.config.topP === 'number') {
+        request.top_p = this.config.topP
       }
 
       if (this.config.extraBody) {
@@ -482,8 +583,7 @@ First, identify what the question is asking, then provide:
       console.log('[OpenAIService] screenshot request params:', {
         model: request.model,
         temperature: request.temperature,
-        max_tokens: request.max_tokens,
-        max_completion_tokens: request.max_completion_tokens
+        top_p: request.top_p
       })
 
       const stream = await this.client.chat.completions.create(
@@ -524,7 +624,7 @@ First, identify what the question is asking, then provide:
       return fullResponse
     } catch (error) {
       this.emit('error', error)
-      throw error
+      throw new Error(this.mapImageGenerationError(error))
     }
   }
 
@@ -537,7 +637,7 @@ First, identify what the question is asking, then provide:
     ) {
       this.client = createOpenAIClient(this.config)
     }
-    this.systemPrompt = getSystemPrompt(this.config)
+    this.systemPrompt = getSystemPrompt()
   }
 
   private async streamAnswerWithRetry(
@@ -588,17 +688,16 @@ First, identify what the question is asking, then provide:
     const request: StreamingChatCompletionRequest = {
       model: this.config.model || 'gpt-4o-mini',
       messages: messages,
-      temperature: this.config.temperature ?? 0.3,
-      top_p: this.config.topP,
       stream: true
+    }
+    if (typeof this.config.temperature === 'number') {
+      request.temperature = this.config.temperature
+    }
+    if (typeof this.config.topP === 'number') {
+      request.top_p = this.config.topP
     }
 
     const maxTokens = getEffectiveMaxTokens(this.config, options)
-    if (isDeepSeekConfig(this.config)) {
-      request.max_tokens = maxTokens
-    } else {
-      request.max_completion_tokens = maxTokens
-    }
 
     if (this.config.extraBody) {
       request.extra_body = this.config.extraBody
@@ -608,8 +707,8 @@ First, identify what the question is asking, then provide:
       model: request.model,
       temperature: request.temperature,
       top_p: request.top_p,
-      max_tokens: request.max_tokens,
-      max_completion_tokens: request.max_completion_tokens
+      max_tokens: undefined,
+      max_completion_tokens: undefined
     })
 
     const stream = await this.client!.chat.completions.create(
@@ -679,7 +778,6 @@ First, identify what the question is asking, then provide:
       model: this.config.model || 'gpt-4o-mini',
       instructions: this.systemPrompt,
       input,
-      max_output_tokens: maxTokens,
       ...(isChatGPTCodexBackend(this.config)
         ? {
             tools: [],
@@ -689,8 +787,10 @@ First, identify what the question is asking, then provide:
             stream: true
           }
         : {
-            temperature: this.config.temperature ?? 0.3,
-            top_p: this.config.topP,
+            ...(typeof this.config.temperature === 'number'
+              ? { temperature: this.config.temperature }
+              : {}),
+            ...(typeof this.config.topP === 'number' ? { top_p: this.config.topP } : {}),
             stream: true
           })
     }
@@ -739,5 +839,20 @@ First, identify what the question is asking, then provide:
   private emitTruncated(event: TruncationEvent): void {
     console.warn('[OpenAIService] response truncated:', event)
     this.emit('truncated', event)
+  }
+
+  private mapImageGenerationError(error: unknown): string {
+    const message = error instanceof Error ? error.message : String(error)
+    const lower = message.toLowerCase()
+
+    if (
+      lower.includes('cloudflare') ||
+      lower.includes('enable javascript and cookies') ||
+      lower.includes('/chat/completions')
+    ) {
+      return 'OAuth image generation failed due to an incompatible endpoint/challenge response. Please retry after reconnecting OAuth.'
+    }
+
+    return message
   }
 }
