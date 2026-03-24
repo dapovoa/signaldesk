@@ -37,9 +37,6 @@ export interface AppSettings {
   llmBaseUrl: string
   llmCustomHeaders: string
   llmModel: string
-  deepseekTemperature: number
-  deepseekTopP: number
-  deepseekMaxTokens: number
   transcriptionLanguage: 'auto' | 'en' | 'pt'
   alwaysOnTop: boolean
   windowOpacity: number
@@ -199,6 +196,7 @@ export interface Api {
   onUtteranceEnd: (callback: () => void) => () => void
   onSpeechStarted: (callback: () => void) => () => void
   onQuestionDetected: (callback: (question: DetectedQuestion) => void) => () => void
+  onQuestionNotDetectedByModel: (callback: (data: { text: string }) => void) => () => void
   onAnswerStream: (callback: (chunk: string) => void) => () => void
   onAnswerComplete: (callback: (answer: string) => void) => () => void
   onAnswerTruncated: (callback: () => void) => () => void

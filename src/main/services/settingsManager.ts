@@ -2,7 +2,6 @@ import { config } from 'dotenv'
 import { app, safeStorage } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
-import { getDefaultOutputTokens, isDeepSeekModelConfig } from './llmDefaults'
 
 // Load environment variables from .env file
 config()
@@ -26,9 +25,6 @@ export interface AppSettings {
   llmBaseUrl: string
   llmCustomHeaders: string
   llmModel: string
-  deepseekTemperature: number
-  deepseekTopP: number
-  deepseekMaxTokens: number
   transcriptionLanguage: 'auto' | 'en' | 'pt'
   alwaysOnTop: boolean
   windowOpacity: number
@@ -45,11 +41,6 @@ const OPENAI_OAUTH_MODEL_OPTIONS = [
   'gpt-5.1-codex-max',
   'gpt-5.1-codex-mini'
 ]
-
-const getDeepSeekMaxTokenLimit = (): number => 8192
-
-const clampNumber = (value: number | undefined, min: number, max: number, fallback: number): number =>
-  typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback
 
 const getSuggestedModels = (settings: Pick<AppSettings, 'llmProvider' | 'llmBaseUrl'>): string[] => {
   if (settings.llmProvider === 'openai-oauth') {
@@ -126,26 +117,8 @@ const normalizeSettings = (settings: AppSettings): AppSettings => {
     llmModel = getDefaultModelForSettings(settings)
   }
 
-  const isDeepSeek =
-    settings.llmProvider === 'openai-compatible' &&
-    isDeepSeekModelConfig({ ...settings, model: llmModel })
-  const deepseekFallback = getDefaultOutputTokens({ ...settings, model: llmModel })
-  const requestedDeepSeekMaxTokens = isDeepSeek ? settings.deepseekMaxTokens : deepseekFallback
-  const isLegacyDeepSeekTokenDefault = isDeepSeek && requestedDeepSeekMaxTokens === 120
-  const deepseekMaxTokens = Math.round(
-    clampNumber(
-      isLegacyDeepSeekTokenDefault ? undefined : requestedDeepSeekMaxTokens,
-      32,
-      getDeepSeekMaxTokenLimit(),
-      deepseekFallback
-    )
-  )
-
   return {
     ...settings,
-    deepseekTemperature: clampNumber(settings.deepseekTemperature, 0, 2, 0.3),
-    deepseekTopP: clampNumber(settings.deepseekTopP, 0, 1, 0.9),
-    deepseekMaxTokens,
     llmAuthMode,
     llmModel
   }
@@ -219,11 +192,6 @@ const DEFAULT_SETTINGS: AppSettings = {
     process.env.OPENAI_MODEL ||
     process.env.VITE_OPENAI_MODEL ||
     'gpt-4o-mini',
-  deepseekTemperature: Number(process.env.DEEPSEEK_TEMPERATURE || 0.3),
-  deepseekTopP: Number(process.env.DEEPSEEK_TOP_P || 0.9),
-  deepseekMaxTokens: Number(
-    process.env.DEEPSEEK_MAX_TOKENS || getDefaultOutputTokens({ model: 'deepseek-chat' })
-  ),
   transcriptionLanguage:
     process.env.TRANSCRIPTION_LANGUAGE === 'pt' || process.env.VITE_TRANSCRIPTION_LANGUAGE === 'pt'
       ? 'pt'

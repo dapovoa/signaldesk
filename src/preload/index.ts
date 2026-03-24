@@ -39,9 +39,6 @@ export interface AppSettings {
   llmBaseUrl: string
   llmCustomHeaders: string
   llmModel: string
-  deepseekTemperature: number
-  deepseekTopP: number
-  deepseekMaxTokens: number
   transcriptionLanguage: 'auto' | 'en' | 'pt'
   alwaysOnTop: boolean
   windowOpacity: number
@@ -246,6 +243,13 @@ const api = {
       callback(data)
     ipcRenderer.on('question-detected', handler)
     return () => ipcRenderer.removeListener('question-detected', handler)
+  },
+
+  onQuestionNotDetectedByModel: (callback: (data: { text: string }) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, data: { text: string }): void =>
+      callback(data)
+    ipcRenderer.on('question-not-detected-by-model', handler)
+    return () => ipcRenderer.removeListener('question-not-detected-by-model', handler)
   },
 
   onAnswerStream: (callback: (chunk: string) => void): (() => void) => {
