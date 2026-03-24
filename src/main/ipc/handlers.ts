@@ -35,6 +35,8 @@ let avatarProfileManager: AvatarProfileManager | null = null
 let mainWindow: BrowserWindow | null = null
 let isCapturing = false
 let isGeneratingAnswer = false
+let isClassifyingQuestion = false
+let lastModelQuestionClassificationAt = 0
 let utteranceDebounceTimer: NodeJS.Timeout | null = null
 let isWaylandSession = false
 const OPENAI_OAUTH_MODELS = [
@@ -92,32 +94,6 @@ const shouldUseResponsesApi = (settings: AppSettings): boolean => {
   }
 
   return settings.llmProvider === 'openai' && settings.llmAuthMode !== 'oauth-token'
-}
-
-const getDeepSeekOverrides = (settings: AppSettings) => {
-  const isDeepSeek =
-    settings.llmProvider === 'openai-compatible' &&
-    (settings.llmBaseUrl?.toLowerCase().includes('deepseek') ||
-      settings.llmModel?.toLowerCase().startsWith('deepseek-'))
-
-  if (!isDeepSeek) {
-    return {}
-  }
-
-  const isReasonerModel = settings.llmModel?.toLowerCase() === 'deepseek-reasoner'
-
-  return {
-    maxTokens: settings.deepseekMaxTokens,
-    temperature: settings.deepseekTemperature,
-    topP: settings.deepseekTopP,
-    extraBody: isReasonerModel
-      ? undefined
-      : {
-          thinking: {
-            type: 'disabled'
-          }
-        }
-  }
 }
 
 const isOpenAIOAuthExpired = (settings: AppSettings): boolean =>
@@ -252,6 +228,204 @@ const logAvatarContext = (question: string, avatarContext?: { snippets: Array<{
       distance: Number(snippet.distance.toFixed(4))
     }))
   })
+}
+
+type ClassifierQuestionType = 'direct' | 'indirect' | 'scenario' | 'none'
+
+interface ModelQuestionClassification {
+  shouldAnswer: boolean
+  confidence: number
+  questionType: ClassifierQuestionType
+}
+
+interface ModelClassifierResult {
+  supported: boolean
+  detection: { text: string; confidence: number; questionType: 'direct' | 'indirect' | 'scenario' } | null
+}
+
+const MODEL_CLASSIFIER_THRESHOLD = 0.62
+const MODEL_CLASSIFIER_MIN_CHARS = 80
+const MODEL_CLASSIFIER_MIN_INTERVAL_MS = 5000
+
+const notifyQuestionNotDetected = (text: string): void => {
+  const normalized = text.trim()
+  if (!normalized) return
+  mainWindow?.webContents.send('question-not-detected-by-model', { text: normalized })
+}
+
+const getModelClassifierPrompt = (): string => `
+Classify whether the interviewer turn requires the candidate to answer now.
+Return strict JSON only, no markdown:
+{"shouldAnswer":boolean,"confidence":number,"questionType":"direct|indirect|scenario|none"}
+
+Rules:
+- shouldAnswer=true only when this is a genuine interview prompt/question for the candidate.
+- shouldAnswer=false for greetings, confirmations, transitions, filler, and commentary.
+- confidence is 0..1.
+- questionType:
+  - direct: explicit concrete question
+  - indirect: conversational prompt requesting candidate context
+  - scenario: hypothetical/case-based prompt
+  - none: not a real candidate question
+`
+
+const clamp01 = (value: number): number => Math.max(0, Math.min(1, value))
+
+const shouldRunModelClassifier = (turnText: string): boolean => {
+  if (turnText.trim().length < MODEL_CLASSIFIER_MIN_CHARS) {
+    return false
+  }
+
+  const now = Date.now()
+  if (now - lastModelQuestionClassificationAt < MODEL_CLASSIFIER_MIN_INTERVAL_MS) {
+    return false
+  }
+
+  lastModelQuestionClassificationAt = now
+  return true
+}
+
+const extractClassifierJson = (raw: string): ModelQuestionClassification | null => {
+  const candidate = raw.trim()
+  if (!candidate) return null
+
+  const match = candidate.match(/\{[\s\S]*\}/)
+  const jsonText = match ? match[0] : candidate
+
+  let parsed: unknown = null
+  try {
+    parsed = JSON.parse(jsonText)
+  } catch {
+    return null
+  }
+
+  if (!parsed || typeof parsed !== 'object') return null
+
+  const shouldAnswer = Reflect.get(parsed, 'shouldAnswer')
+  const confidence = Reflect.get(parsed, 'confidence')
+  const questionType = Reflect.get(parsed, 'questionType')
+
+  if (typeof shouldAnswer !== 'boolean') return null
+  if (typeof confidence !== 'number' || Number.isNaN(confidence)) return null
+  if (
+    questionType !== 'direct' &&
+    questionType !== 'indirect' &&
+    questionType !== 'scenario' &&
+    questionType !== 'none'
+  ) {
+    return null
+  }
+
+  return {
+    shouldAnswer,
+    confidence: clamp01(confidence),
+    questionType
+  }
+}
+
+const classifyTurnWithModel = async (turnText: string): Promise<ModelClassifierResult> => {
+  const settings = settingsManager?.getSettings()
+  if (!settings) {
+    return { supported: false, detection: null }
+  }
+
+  const providerConfig = getProviderConfig(settings)
+  if (settings.llmProvider === 'openai-oauth') {
+    providerConfig.apiKey = (await ensureOpenAIOAuthToken()) || ''
+  }
+
+  if (!providerConfig.apiKey?.trim()) {
+    return { supported: false, detection: null }
+  }
+
+  const model = settings.llmModel || 'gpt-4o-mini'
+  const classifierPrompt = getModelClassifierPrompt()
+  const classifierInput = `Interviewer turn:\n${turnText}`
+
+  try {
+    let rawOutput = ''
+
+    if (settings.llmProvider === 'openai-oauth') {
+      const stream = streamChatGPTCodexResponse({
+        accessToken: providerConfig.apiKey,
+        accountId: settings.llmOauthAccountId || '',
+        baseURL: providerConfig.baseURL,
+        body: {
+          model,
+          instructions: classifierPrompt,
+          input: [
+            {
+              role: 'user',
+              content: [{ type: 'input_text', text: classifierInput }]
+            }
+          ],
+          tools: [],
+          tool_choice: 'auto',
+          parallel_tool_calls: false,
+          store: false,
+          include: []
+        }
+      })
+
+      for await (const event of stream) {
+        if (event.type === 'response.output_text.delta' && event.delta) {
+          rawOutput += event.delta
+        }
+      }
+    } else {
+      const client = createOpenAIClient({
+        apiKey: providerConfig.apiKey,
+        baseURL: providerConfig.baseURL,
+        customHeaders: providerConfig.customHeaders
+      })
+
+      const request: Record<string, unknown> = {
+        model,
+        stream: false,
+        temperature: 0,
+        messages: [
+          { role: 'system', content: classifierPrompt },
+          { role: 'user', content: classifierInput }
+        ],
+        max_completion_tokens: 120
+      }
+
+      const completion = await client.chat.completions.create(request as never)
+      rawOutput = completion.choices[0]?.message?.content || ''
+    }
+
+    const parsed = extractClassifierJson(rawOutput)
+    if (!parsed) {
+      console.warn('[QuestionClassifier] invalid model JSON output')
+      return { supported: false, detection: null }
+    }
+
+    if (!parsed.shouldAnswer || parsed.questionType === 'none') {
+      console.log('[QuestionClassifier] model classified as non-question:', {
+        confidence: parsed.confidence
+      })
+      return { supported: true, detection: null }
+    }
+
+    if (parsed.confidence < MODEL_CLASSIFIER_THRESHOLD) {
+      console.log('[QuestionClassifier] model confidence below threshold:', {
+        confidence: parsed.confidence
+      })
+      return { supported: true, detection: null }
+    }
+
+    return {
+      supported: true,
+      detection: {
+        text: turnText,
+        confidence: parsed.confidence,
+        questionType: parsed.questionType
+      }
+    }
+  } catch (error) {
+    console.warn('[QuestionClassifier] model classifier unavailable, using heuristic fallback:', error)
+    return { supported: false, detection: null }
+  }
 }
 
 const generateAnswerForQuestion = async (questionText: string): Promise<void> => {
@@ -809,8 +983,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         customHeaders: providerConfig.customHeaders,
         chatgptAccountId: settings.llmOauthAccountId,
         useResponsesApi: shouldUseResponsesApi(settings),
-        model: settings.llmModel,
-        ...getDeepSeekOverrides(settings)
+        model: settings.llmModel
       })
 
       // Set up OpenAI event listeners ONCE
@@ -877,9 +1050,53 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           clearTimeout(utteranceDebounceTimer)
         }
         utteranceDebounceTimer = setTimeout(() => {
-          console.log('[Pipeline] debounce elapsed -> detector')
-          questionDetector?.onUtteranceEnd()
           utteranceDebounceTimer = null
+          if (!questionDetector) return
+
+          void (async () => {
+            console.log('[Pipeline] debounce elapsed -> detector')
+            if (isClassifyingQuestion) {
+              console.log('[Pipeline] classifier busy, skipping this cycle')
+              return
+            }
+
+            isClassifyingQuestion = true
+            try {
+              const turnText = questionDetector.getCurrentBuffer()
+              if (!turnText) {
+                questionDetector.clearBuffer()
+                return
+              }
+
+              if (!shouldRunModelClassifier(turnText)) {
+                const detected = questionDetector.onUtteranceEnd()
+                if (!detected) {
+                  notifyQuestionNotDetected(turnText)
+                }
+                return
+              }
+
+              const classifierResult = await classifyTurnWithModel(turnText)
+              if (classifierResult.supported) {
+                questionDetector.clearBuffer()
+                if (classifierResult.detection) {
+                  console.log('[Pipeline] model classifier triggered:', classifierResult.detection)
+                  questionDetector.emit('questionDetected', classifierResult.detection)
+                } else {
+                  console.log('[Pipeline] model classifier did not detect a question')
+                  notifyQuestionNotDetected(turnText)
+                }
+                return
+              }
+
+              const detected = questionDetector.onUtteranceEnd()
+              if (!detected) {
+                notifyQuestionNotDetected(turnText)
+              }
+            } finally {
+              isClassifyingQuestion = false
+            }
+          })()
         }, 1200)
         mainWindow?.webContents.send('utterance-end')
       })
@@ -1148,6 +1365,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         apiKey: providerConfig.apiKey,
         baseURL: providerConfig.baseURL,
         customHeaders: providerConfig.customHeaders,
+        chatgptAccountId: settings.llmOauthAccountId,
         model: settings.llmModel || 'gpt-4o-mini'
       })
 
@@ -1158,8 +1376,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           customHeaders: providerConfig.customHeaders,
           chatgptAccountId: settings.llmOauthAccountId,
           useResponsesApi: shouldUseResponsesApi(settings),
-          model: settings.llmModel,
-          ...getDeepSeekOverrides(settings)
+          model: settings.llmModel
         })
 
         // Set up OpenAI event listeners
@@ -1181,8 +1398,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           customHeaders: providerConfig.customHeaders,
           chatgptAccountId: settings.llmOauthAccountId,
           useResponsesApi: shouldUseResponsesApi(settings),
-          model: settings.llmModel,
-          ...getDeepSeekOverrides(settings)
+          model: settings.llmModel
         })
       }
 
