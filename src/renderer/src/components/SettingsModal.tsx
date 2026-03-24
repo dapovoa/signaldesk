@@ -66,14 +66,6 @@ const getDefaultModelForSettings = (settings: AppSettings): string => {
   return ''
 }
 
-const isDeepSeekSettings = (settings: Pick<AppSettings, 'llmProvider' | 'llmBaseUrl' | 'llmModel'>): boolean =>
-  settings.llmProvider === 'openai-compatible' &&
-  (settings.llmBaseUrl.toLowerCase().includes('deepseek') ||
-    settings.llmModel.toLowerCase().startsWith('deepseek-'))
-
-const inputFieldClassName =
-  'w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors'
-
 function SectionDivider({ label }: { label: string }): React.ReactNode {
   return (
     <div className="flex items-center gap-3 py-1">
@@ -901,60 +893,6 @@ export function SettingsModal(): React.ReactNode | null {
               </div>
             )}
           </div>
-
-          {isDeepSeekSettings(localSettings) && (
-            <div className="space-y-3">
-              <div className="flex gap-3 overflow-x-auto pb-1">
-                <div className="min-w-0 flex-1 space-y-2">
-                  <label className="settings-field-label block">Temperature</label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={localSettings.deepseekTemperature}
-                    onChange={(e) =>
-                      setLocalSettings({
-                        ...localSettings,
-                        deepseekTemperature: Number(e.target.value || 0)
-                      })
-                    }
-                    className={`${inputFieldClassName} min-h-[46px]`}
-                  />
-                </div>
-
-                <div className="min-w-0 flex-1 space-y-2">
-                  <label className="settings-field-label block">Top P</label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={localSettings.deepseekTopP}
-                    onChange={(e) =>
-                      setLocalSettings({
-                        ...localSettings,
-                        deepseekTopP: Number(e.target.value || 0)
-                      })
-                    }
-                    className={`${inputFieldClassName} min-h-[46px]`}
-                  />
-                </div>
-
-                <div className="min-w-0 flex-1 space-y-2">
-                  <label className="settings-field-label block">Max Tokens</label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={localSettings.deepseekMaxTokens}
-                    onChange={(e) =>
-                      setLocalSettings({
-                        ...localSettings,
-                        deepseekMaxTokens: Number(e.target.value || 0)
-                      })
-                    }
-                    className={`${inputFieldClassName} min-h-[46px]`}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
 
           {localSettings.transcriptionProvider !== 'assemblyai' && (
             <>
