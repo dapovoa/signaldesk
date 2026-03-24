@@ -10,6 +10,7 @@ export function AnswerPanel(): React.JSX.Element {
     currentAnswer,
     currentQuestion,
     currentAnswerTruncated,
+    manualAssistSuggested,
     isGenerating,
     clearHistory,
     generateAnswerManually
@@ -54,8 +55,7 @@ export function AnswerPanel(): React.JSX.Element {
   }
 
   const hasContent = answers.length > 0 || currentAnswer
-  const shouldPulseManualGenerate =
-    isCapturing && !isGenerating && !currentQuestion.trim() && !currentAnswer
+  const shouldPulseManualGenerate = isCapturing && !isGenerating && manualAssistSuggested
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-transparent">
@@ -70,30 +70,15 @@ export function AnswerPanel(): React.JSX.Element {
           <button
             onClick={generateAnswerManually}
             disabled={isGenerating}
-            className={`group relative flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-cyan-200 transition-colors hover:border-cyan-300/25 hover:bg-cyan-400/12 hover:text-cyan-100 disabled:cursor-not-allowed disabled:opacity-60 ${
+            className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
               shouldPulseManualGenerate
-                ? 'animate-pulse border-cyan-300/35 bg-cyan-400/18 shadow-[0_0_0_4px_rgba(34,211,238,0.14)]'
-                : 'border-cyan-400/15 bg-cyan-400/8'
+                ? 'animate-pulse border-cyan-400/30 bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 shadow-[0_0_20px_rgba(34,211,238,0.35)] hover:from-cyan-300 hover:to-teal-300'
+                : 'border-cyan-400/20 bg-cyan-400/14 text-cyan-100 hover:border-cyan-300/30 hover:bg-cyan-400/22'
             }`}
-            title={
-              shouldPulseManualGenerate
-                ? 'No question detected yet. Generate from current transcript.'
-                : 'Generate answer from the current transcript'
-            }
+            title="Generate answer from the current transcript"
           >
-            <span
-              className={`relative inline-flex h-5 w-5 items-center justify-center rounded-full ${
-                shouldPulseManualGenerate ? 'bg-cyan-300/20' : 'bg-transparent'
-              }`}
-            >
-              {shouldPulseManualGenerate && (
-                <span className="absolute inset-0 rounded-full border border-cyan-300/40 animate-ping" />
-              )}
-              <Wand2 className="relative z-10 w-4 h-4" />
-            </span>
-            <span className="text-[11px] font-semibold uppercase tracking-[0.16em]">
-              {shouldPulseManualGenerate ? 'Generate Now' : 'Assist'}
-            </span>
+            <Wand2 className="h-4 w-4" />
+            <span>Gerar resposta</span>
           </button>
           {hasContent && (
             <button

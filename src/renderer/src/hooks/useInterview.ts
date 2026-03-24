@@ -18,11 +18,13 @@ export function useInterview() {
     currentAnswer,
     currentQuestion,
     currentAnswerTruncated,
+    manualAssistSuggested,
     settings,
     error,
     isSessionActive,
     setCapturing,
     setError,
+    setManualAssistSuggested,
     setProcessingScreenshot,
     clearAll
   } = useInterviewStore()
@@ -83,13 +85,14 @@ export function useInterview() {
 
     try {
       setError(null)
+      setManualAssistSuggested(false)
       await window.api.generateAnswerManually(transcriptText)
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to generate answer'
       setError(errorMessage)
       console.error('Manual answer generation error:', err)
     }
-  }, [setError])
+  }, [setError, setManualAssistSuggested])
 
   const captureAndAnalyzeScreenshot = useCallback(async () => {
     try {
@@ -135,6 +138,7 @@ export function useInterview() {
     currentAnswer,
     currentQuestion,
     currentAnswerTruncated,
+    manualAssistSuggested,
     settings,
     error: error || audioError,
     audioSource,
