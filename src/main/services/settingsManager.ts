@@ -30,6 +30,8 @@ export interface AppSettings {
   windowOpacity: number
   pauseThreshold: number
   autoStart: boolean
+  captureSourceId: string
+  captureSourceType: 'window' | 'screen' | 'auto'
 }
 
 const OPENAI_OAUTH_MODEL_OPTIONS = [
@@ -202,7 +204,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   alwaysOnTop: true,
   windowOpacity: 1.0,
   pauseThreshold: 1500,
-  autoStart: false
+  autoStart: false,
+  captureSourceId: '',
+  captureSourceType: 'auto'
 }
 
 export class SettingsManager {

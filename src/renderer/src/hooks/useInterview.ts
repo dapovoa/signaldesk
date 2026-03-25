@@ -103,6 +103,9 @@ export function useInterview() {
       const captureResult = await window.api.captureScreenshot()
 
       if (!captureResult.success || !captureResult.imageData) {
+        if (captureResult.error === 'Screenshot canceled') {
+          return
+        }
         throw new Error(captureResult.error || 'Failed to capture screenshot')
       }
 
@@ -119,6 +122,9 @@ export function useInterview() {
       // If question is detected, the answer generation will be handled by event listeners
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to process screenshot'
+      if (errorMessage === 'Screenshot canceled') {
+        return
+      }
       setError(errorMessage)
       console.error('Screenshot capture/analysis error:', err)
     } finally {

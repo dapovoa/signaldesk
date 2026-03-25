@@ -345,10 +345,11 @@ const getSolutionSystemPrompt = (
     return `${sharedPrompt}
 
 This is a coding problem from a live interview.
-- Explain the approach briefly and naturally.
-- Provide code in the language shown in the screenshot.
-- Include only the reasoning needed to make the solution understandable.
-- Mention complexity only if it is relevant.`
+- Answer as a candidate speaking out loud, not as a tutor writing a solution sheet.
+- Start with the approach and the key data structure or algorithm.
+- Keep it concise and practical.
+- Do not output markdown, bullets, headings, or code unless the interviewer explicitly asks to write code.
+- Mention complexity only if it materially supports the answer.`
   } else if (questionType === 'system-design') {
     return `${sharedPrompt}
 
@@ -356,14 +357,16 @@ This is a system design discussion from a live interview.
 - Clarify assumptions when needed.
 - Walk through the design in a practical order.
 - Mention trade-offs only when they matter to the design choice.
-- Keep the explanation grounded and conversational.`
+- Keep the explanation grounded and conversational.
+- Do not output markdown, bullets, headings, or long structured sections.`
   } else {
     return `${sharedPrompt}
 
 This is a live technical interview question.
 - Answer it directly.
 - Keep the explanation practical.
-- Add extra detail only when the question clearly needs it.`
+- Add extra detail only when the question clearly needs it.
+- Do not output markdown, bullets, headings, or long structured sections.`
   }
 }
 
@@ -470,15 +473,8 @@ export class OpenAIService extends EventEmitter {
           {
             type: 'text',
             text: questionText
-              ? `Here is the interview question: "${questionText}"\n\nProvide a detailed step-by-step solution with code examples:`
-              : `Analyze this screenshot carefully. Extract the interview question/problem statement from the image, then provide a detailed step-by-step solution with code examples.
-
-First, identify what the question is asking, then provide:
-- Problem understanding
-- Approach explanation
-- Step-by-step solution
-- Code implementation with comments
-- Complexity analysis`
+              ? `Here is the interview question: "${questionText}"\n\nAnswer it the way I should say it in the interview. Keep it short, direct, and practical.`
+              : `Analyze this screenshot carefully. Extract the interview question or technical prompt from the image, then answer it the way I should say it in the interview. Keep it short, direct, and practical.`
           },
           {
             type: 'image_url',
@@ -511,15 +507,8 @@ First, identify what the question is asking, then provide:
                   {
                     type: 'input_text',
                     text: questionText
-                      ? `Here is the interview question: "${questionText}"\n\nProvide a detailed step-by-step solution with code examples:`
-                      : `Analyze this screenshot carefully. Extract the interview question/problem statement from the image, then provide a detailed step-by-step solution with code examples.
-
-First, identify what the question is asking, then provide:
-- Problem understanding
-- Approach explanation
-- Step-by-step solution
-- Code implementation with comments
-- Complexity analysis`
+                      ? `Here is the interview question: "${questionText}"\n\nAnswer it the way I should say it in the interview. Keep it short, direct, and practical.`
+                      : `Analyze this screenshot carefully. Extract the interview question or technical prompt from the image, then answer it the way I should say it in the interview. Keep it short, direct, and practical.`
                   },
                   {
                     type: 'input_image',
@@ -560,8 +549,9 @@ First, identify what the question is asking, then provide:
           })
         }
 
-        this.emit('complete', fullResponse)
-        return fullResponse
+        const normalizedResponse = normalizeInterviewAnswer(fullResponse)
+        this.emit('complete', normalizedResponse)
+        return normalizedResponse
       }
 
       const request: StreamingChatCompletionRequest = {
@@ -620,8 +610,9 @@ First, identify what the question is asking, then provide:
         })
       }
 
-      this.emit('complete', fullResponse)
-      return fullResponse
+      const normalizedResponse = normalizeInterviewAnswer(fullResponse)
+      this.emit('complete', normalizedResponse)
+      return normalizedResponse
     } catch (error) {
       this.emit('error', error)
       throw new Error(this.mapImageGenerationError(error))

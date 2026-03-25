@@ -1282,7 +1282,25 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         screenshotService = new ScreenshotService(mainWindow || undefined)
       }
 
-      const result = await screenshotService.captureActiveWindow()
+      const settings = settingsManager?.getSettings()
+      const result = await screenshotService.captureActiveWindow(
+        settings?.captureSourceId,
+        settings?.captureSourceType
+      )
+
+      if (
+        result.success &&
+        result.sourceId &&
+        result.sourceType &&
+        settingsManager &&
+        (settings?.captureSourceId !== result.sourceId ||
+          settings?.captureSourceType !== result.sourceType)
+      ) {
+        settingsManager.updateSettings({
+          captureSourceId: result.sourceId,
+          captureSourceType: result.sourceType
+        })
+      }
 
       if (result.success && result.imageData) {
         mainWindow?.webContents.send('screenshot-captured', { imageData: result.imageData })
@@ -1461,9 +1479,14 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           questionType: analysis.questionType
         }
       } else {
-        // No question detected - but if confidence is moderate, still try to generate solution
-        if (analysis.confidence && analysis.confidence >= 0.3) {
-          console.log('Low confidence but attempting solution generation anyway...')
+        // Only force a generation pass when extraction is still fairly strong.
+        if (
+          analysis.confidence &&
+          analysis.confidence >= 0.65 &&
+          analysis.questionText &&
+          analysis.questionText.trim().length > 20
+        ) {
+          console.log('Moderate-confidence question text found, attempting answer generation...')
           const questionText = analysis.questionText?.trim() || 'Technical problem from screenshot'
           const profile = avatarProfileManager?.getProfile()
           const avatarContext = await avatarKnowledgeService?.buildContextPack(questionText)
@@ -1500,7 +1523,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           }
         }
 
-        // No question detected - log why
         console.log('No question detected. Analysis:', {
           isQuestion: analysis.isQuestion,
           confidence: analysis.confidence,
