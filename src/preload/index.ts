@@ -44,6 +44,8 @@ export interface AppSettings {
   windowOpacity: number
   pauseThreshold: number
   autoStart: boolean
+  captureSourceId: string
+  captureSourceType: 'window' | 'screen' | 'auto'
 }
 
 export interface AvatarProfile {
