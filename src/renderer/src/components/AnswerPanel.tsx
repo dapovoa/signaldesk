@@ -105,8 +105,8 @@ export function AnswerPanel(): React.JSX.Element {
                 {currentQuestion && (
                   <div className="bg-cyan-400/6 px-4 py-3">
                     <div className="flex items-start gap-2">
-                      <p className="flex min-w-0 flex-1 items-start gap-2 text-[13px] font-medium leading-5 text-cyan-50">
-                        <span className="text-[10px] uppercase tracking-[0.14em] text-cyan-300/80">
+                      <p className="flex min-w-0 flex-1 items-start gap-2 text-[14px] font-medium leading-5 text-cyan-100/90">
+                        <span className="text-[11px] uppercase tracking-[0.14em] text-cyan-300/70">
                           Q:
                         </span>
                         <span
@@ -137,7 +137,7 @@ export function AnswerPanel(): React.JSX.Element {
                     </p>
                   )}
                   {currentAnswer ? (
-                    <p className="whitespace-pre-wrap text-[18px] leading-8 text-dark-100">
+                    <p className="whitespace-pre-wrap text-[16px] leading-7 text-dark-100">
                       {currentAnswer}
                       <span className="ml-1 inline-block h-4 w-0.5 animate-pulse bg-cyan-300" />
                     </p>
@@ -174,8 +174,8 @@ export function AnswerPanel(): React.JSX.Element {
                 >
                   <div className="bg-white/[0.03] px-4 py-3">
                     <div className="flex items-start gap-2">
-                      <p className="flex min-w-0 flex-1 items-start gap-2 text-[13px] font-medium leading-5 text-dark-300">
-                        <span className="text-[10px] uppercase tracking-[0.14em] text-dark-500">
+                      <p className="flex min-w-0 flex-1 items-start gap-2 text-[14px] font-medium leading-5 text-dark-300">
+                        <span className="text-[11px] uppercase tracking-[0.14em] text-dark-500">
                           Q:
                         </span>
                         <span
@@ -204,7 +204,7 @@ export function AnswerPanel(): React.JSX.Element {
                         Output cut short by the model token limit.
                       </p>
                     )}
-                    <div className="max-w-none text-[18px] leading-8 text-dark-100">
+                    <div className="max-w-none text-[16px] leading-7 text-dark-100">
                       <MarkdownRenderer content={answer.answer} />
                     </div>
                   </div>
