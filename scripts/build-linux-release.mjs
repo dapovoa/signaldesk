@@ -27,5 +27,6 @@ const run = (command, args) => {
 }
 
 run('npm', ['version', version, '--no-git-tag-version'])
+run('npm', ['run', 'build:clean-dist'])
 run('npm', ['run', 'build'])
 run('npx', ['electron-builder', '--linux', '--config', 'electron-builder.release.yml'])
