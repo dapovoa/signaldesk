@@ -6,7 +6,8 @@ import { EmbeddingProvider, IngestedChunk } from './avatarTypes'
 
 const SUPPORTED_EXTENSIONS = new Set(['.md', '.txt', '.json'])
 const DEFAULT_PROFILE_ID = 'default'
-const AVATAR_VERBOSE_LOGS = process.env.SIGNALDESK_AVATAR_VERBOSE === '1'
+const SIGNALDESK_VERBOSE = process.env.SIGNALDESK_VERBOSE === '1'
+const AVATAR_VERBOSE_LOGS = SIGNALDESK_VERBOSE || process.env.SIGNALDESK_AVATAR_VERBOSE === '1'
 
 const normalizeWhitespace = (value: string): string =>
   value.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/[ \t]+\n/g, '\n').trim()

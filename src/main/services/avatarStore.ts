@@ -9,7 +9,8 @@ interface DocumentUpsertResult {
 }
 
 const VECTOR_TABLE = 'chunk_embeddings_vec'
-const AVATAR_VERBOSE_LOGS = process.env.SIGNALDESK_AVATAR_VERBOSE === '1'
+const SIGNALDESK_VERBOSE = process.env.SIGNALDESK_VERBOSE === '1'
+const AVATAR_VERBOSE_LOGS = SIGNALDESK_VERBOSE || process.env.SIGNALDESK_AVATAR_VERBOSE === '1'
 
 const toJson = (value: unknown): string => JSON.stringify(value)
 const resolveLoadableExtensionPath = (loadablePath: string): string => {

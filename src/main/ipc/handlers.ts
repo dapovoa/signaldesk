@@ -278,7 +278,8 @@ const buildInterviewContext = (profile: AvatarProfile): string => {
 }
 
 const buildIdentityBase = (profile: AvatarProfile): string => profile.identityBase.trim()
-const AVATAR_VERBOSE_LOGS = process.env.SIGNALDESK_AVATAR_VERBOSE === '1'
+const SIGNALDESK_VERBOSE = process.env.SIGNALDESK_VERBOSE === '1'
+const AVATAR_VERBOSE_LOGS = SIGNALDESK_VERBOSE || process.env.SIGNALDESK_AVATAR_VERBOSE === '1'
 
 const ensureDirectory = (directory: string): void => {
   fs.mkdirSync(directory, { recursive: true })

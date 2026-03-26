@@ -21,7 +21,9 @@ interface AssemblyAITurnMessage {
 }
 
 const DEFAULT_SAMPLE_RATE = 16000
-const ASSEMBLYAI_VERBOSE_LOGS = process.env.SIGNALDESK_ASSEMBLYAI_VERBOSE === '1'
+const SIGNALDESK_VERBOSE = process.env.SIGNALDESK_VERBOSE === '1'
+const ASSEMBLYAI_VERBOSE_LOGS =
+  SIGNALDESK_VERBOSE || process.env.SIGNALDESK_ASSEMBLYAI_VERBOSE === '1'
 
 const buildUrl = (config: AssemblyAIRealtimeConfig): string => {
   const params = new URLSearchParams({
