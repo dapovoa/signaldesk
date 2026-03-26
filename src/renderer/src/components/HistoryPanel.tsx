@@ -1,4 +1,4 @@
-import { Check, Clock, Copy, History, Search, Trash2, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, Clock, History, Search, Trash2, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnswerEntry } from '../store/interviewStore'
 import { MarkdownRenderer } from './MarkdownRenderer'
@@ -13,7 +13,7 @@ export function HistoryPanel({ onClose }: HistoryPanelProps): React.JSX.Element 
   const [history, setHistory] = useState<AnswerEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [expandedQuestions, setExpandedQuestions] = useState<Record<string, boolean>>({})
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -42,36 +42,6 @@ export function HistoryPanel({ onClose }: HistoryPanelProps): React.JSX.Element 
         entry.question.toLowerCase().includes(query) || entry.answer.toLowerCase().includes(query)
     )
   }, [history, searchQuery])
-
-  const copyToClipboard = async (text: string, id: string): Promise<void> => {
-    try {
-      const result = await window.api.writeToClipboard(text)
-      if (result.success) {
-        setCopiedId(id)
-        setTimeout(() => setCopiedId(null), 2000)
-      } else {
-        console.error('Failed to copy:', result.error)
-        // Fallback to browser clipboard API
-        try {
-          await navigator.clipboard.writeText(text)
-          setCopiedId(id)
-          setTimeout(() => setCopiedId(null), 2000)
-        } catch (fallbackErr) {
-          console.error('Fallback clipboard copy failed:', fallbackErr)
-        }
-      }
-    } catch (err) {
-      console.error('Failed to copy:', err)
-      // Fallback to browser clipboard API
-      try {
-        await navigator.clipboard.writeText(text)
-        setCopiedId(id)
-        setTimeout(() => setCopiedId(null), 2000)
-      } catch (fallbackErr) {
-        console.error('Fallback clipboard copy failed:', fallbackErr)
-      }
-    }
-  }
 
   const deleteEntry = async (id: string): Promise<void> => {
     try {
@@ -123,6 +93,13 @@ export function HistoryPanel({ onClose }: HistoryPanelProps): React.JSX.Element 
       hour: '2-digit',
       minute: '2-digit'
     })
+  }
+
+  const toggleQuestionExpanded = (id: string): void => {
+    setExpandedQuestions((prev) => ({
+      ...prev,
+      [id]: !prev[id]
+    }))
   }
 
   return (
@@ -225,17 +202,37 @@ export function HistoryPanel({ onClose }: HistoryPanelProps): React.JSX.Element 
           </div>
         ) : (
           filteredHistory.map((entry) => (
+            (() => {
+              const isQuestionExpanded = Boolean(expandedQuestions[entry.id])
+
+              return (
             <div
               key={entry.id}
-              className="animate-fade-in overflow-hidden rounded-[22px] bg-white/[0.035]"
+              className="animate-fade-in overflow-hidden rounded-[24px] border border-white/[0.05] bg-white/[0.035] shadow-[0_16px_48px_rgba(0,0,0,0.16)]"
             >
               <div className="bg-white/[0.03] px-4 py-3">
-                <p className="text-sm font-medium leading-6 text-dark-300">
-                  <span className="mr-2 text-[11px] uppercase tracking-[0.24em] text-dark-500">
-                    Q:
-                  </span>
-                  {entry.question}
-                </p>
+                <div className="flex items-start gap-2">
+                  <p className="flex min-w-0 flex-1 items-center gap-2 text-[13px] font-medium leading-5 text-dark-300">
+                    <span className="text-[10px] uppercase tracking-[0.14em] text-dark-500">
+                      Q:
+                    </span>
+                    <span className={`min-w-0 flex-1 ${isQuestionExpanded ? '' : 'truncate'}`}>
+                      {entry.question}
+                    </span>
+                  </p>
+                  <button
+                    onClick={() => toggleQuestionExpanded(entry.id)}
+                    className="mt-0.5 rounded-md p-1 text-dark-500 transition-colors hover:bg-white/[0.08] hover:text-cyan-300"
+                    title={isQuestionExpanded ? 'Collapse question' : 'Expand question'}
+                    type="button"
+                  >
+                    {isQuestionExpanded ? (
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                </div>
                 <div className="mt-2 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-1 text-xs text-dark-500">
                     <Clock className="w-3 h-3" />
@@ -256,27 +253,13 @@ export function HistoryPanel({ onClose }: HistoryPanelProps): React.JSX.Element 
                     Output cut short by the model token limit.
                   </p>
                 )}
-                <MarkdownRenderer content={entry.answer} />
-                <div className="mt-3 flex justify-end">
-                  <button
-                    onClick={() => copyToClipboard(entry.answer, entry.id)}
-                    className="flex items-center gap-1 rounded-xl border border-white/5 bg-white/[0.04] px-2.5 py-1.5 text-xs text-dark-400 transition-colors hover:border-cyan-400/15 hover:bg-cyan-400/8 hover:text-cyan-300"
-                  >
-                    {copiedId === entry.id ? (
-                      <>
-                        <Check className="w-3 h-3" />
-                        <span>Copied!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3 h-3" />
-                        <span>Copy</span>
-                      </>
-                    )}
-                  </button>
+                <div className="max-w-none text-[16px] leading-7 text-dark-100">
+                  <MarkdownRenderer content={entry.answer} />
                 </div>
               </div>
             </div>
+              )
+            })()
           ))
         )}
       </div>
