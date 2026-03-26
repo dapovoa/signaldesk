@@ -78,7 +78,7 @@ export function AnswerPanel(): React.JSX.Element {
             title="Generate answer from the current transcript"
           >
             <Wand2 className="h-4 w-4" />
-            <span>Gerar resposta</span>
+            <span>Generate answer</span>
           </button>
           {hasContent && (
             <button

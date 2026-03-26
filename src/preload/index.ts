@@ -217,7 +217,7 @@ const api = {
     sessionDuration: number
     timestamp: number
     [key: string]: unknown
-  }): Promise<{ success: boolean; data?: unknown; error?: string }> =>
+  }): Promise<{ success: boolean; data?: unknown; error?: string; skipped?: boolean }> =>
     ipcRenderer.invoke('call-session-api', payload),
 
   // Event listeners

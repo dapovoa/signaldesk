@@ -38,7 +38,14 @@ let isGeneratingAnswer = false
 let isClassifyingQuestion = false
 let lastModelQuestionClassificationAt = 0
 let utteranceDebounceTimer: NodeJS.Timeout | null = null
+let pendingQuestionTimer: NodeJS.Timeout | null = null
+let pendingQuestionBase: string | null = null
+let pendingQuestionFragments: string[] = []
 let isWaylandSession = false
+const QUESTION_FOLLOW_UP_WINDOW_MS = 700
+const QUESTION_FINALIZE_AFTER_UTTERANCE_MS = 350
+const SUPPRESS_STALE_NO_QUESTION_MS = 4000
+let lastAnswerCompletedAt = 0
 const OPENAI_OAUTH_MODELS = [
   'gpt-5.4',
   'gpt-5.4-mini',
@@ -250,7 +257,60 @@ const MODEL_CLASSIFIER_MIN_INTERVAL_MS = 5000
 const notifyQuestionNotDetected = (text: string): void => {
   const normalized = text.trim()
   if (!normalized) return
+  if (isGeneratingAnswer || pendingQuestionTimer) return
+  if (lastAnswerCompletedAt && Date.now() - lastAnswerCompletedAt < SUPPRESS_STALE_NO_QUESTION_MS) {
+    return
+  }
   mainWindow?.webContents.send('question-not-detected-by-model', { text: normalized })
+}
+
+const clearPendingQuestionState = (): void => {
+  if (pendingQuestionTimer) {
+    clearTimeout(pendingQuestionTimer)
+    pendingQuestionTimer = null
+  }
+  pendingQuestionBase = null
+  pendingQuestionFragments = []
+}
+
+const buildPendingQuestionText = (): string => {
+  const parts = [pendingQuestionBase || '', ...pendingQuestionFragments]
+  const normalized: string[] = []
+
+  for (const part of parts) {
+    const trimmed = part.trim()
+    if (!trimmed) continue
+
+    const lower = trimmed.toLowerCase()
+    const alreadyIncluded = normalized.some((existing) => existing.toLowerCase() === lower)
+    if (!alreadyIncluded) {
+      normalized.push(trimmed)
+    }
+  }
+
+  return normalized.join(' ')
+}
+
+const restartPendingQuestionTimer = (delayMs = QUESTION_FOLLOW_UP_WINDOW_MS): void => {
+  if (pendingQuestionTimer) {
+    clearTimeout(pendingQuestionTimer)
+  }
+
+  pendingQuestionTimer = setTimeout(() => {
+    pendingQuestionTimer = null
+    const fullQuestion = buildPendingQuestionText()
+    clearPendingQuestionState()
+
+    if (!fullQuestion) {
+      return
+    }
+
+    void generateAnswerForQuestion(fullQuestion).catch((error) => {
+      isGeneratingAnswer = false
+      console.error('[Pipeline] queued detector answer failed:', error)
+      mainWindow?.webContents.send('answer-error', (error as Error).message)
+    })
+  }, delayMs)
 }
 
 const getModelClassifierPrompt = (): string => `
@@ -462,6 +522,21 @@ const generateAnswerForQuestion = async (questionText: string): Promise<void> =>
     isGeneratingAnswer = false
     throw error
   }
+}
+
+const scheduleAnswerForDetectedQuestion = (questionText: string): void => {
+  const trimmedQuestion = questionText.trim()
+  if (trimmedQuestion && !pendingQuestionBase) {
+    pendingQuestionBase = trimmedQuestion
+  } else if (
+    trimmedQuestion &&
+    pendingQuestionBase &&
+    pendingQuestionBase.toLowerCase() !== trimmedQuestion.toLowerCase()
+  ) {
+    pendingQuestionFragments.push(trimmedQuestion)
+  }
+
+  restartPendingQuestionTimer()
 }
 
 export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false): void {
@@ -994,6 +1069,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
       openaiService.on('complete', (answer) => {
         isGeneratingAnswer = false
+        lastAnswerCompletedAt = Date.now()
         console.log('[Pipeline] answer-complete:', answer.slice(0, 160))
         mainWindow?.webContents.send('answer-complete', answer)
       })
@@ -1017,8 +1093,15 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           text: event.text,
           isFinal: event.isFinal
         })
-        questionDetector?.addTranscript(event.text, event.isFinal)
         mainWindow?.webContents.send('transcript', event)
+
+        if (pendingQuestionTimer && event.isFinal) {
+          pendingQuestionFragments.push(event.text.trim())
+          restartPendingQuestionTimer()
+          return
+        }
+
+        questionDetector?.addTranscript(event.text, event.isFinal)
 
         // Try early detection for faster response on high-confidence questions
         if (event.isFinal && questionDetector && openaiService) {
@@ -1029,20 +1112,19 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
               return
             }
             console.log('[Pipeline] early detection triggered:', earlyDetection)
-            mainWindow?.webContents.send('question-detected', earlyDetection)
-            try {
-              await generateAnswerForQuestion(earlyDetection.text)
-            } catch (error) {
-              isGeneratingAnswer = false
-              console.error('[Pipeline] early detection answer failed:', error)
-              mainWindow?.webContents.send('answer-error', (error as Error).message)
-            }
+            scheduleAnswerForDetectedQuestion(earlyDetection.text)
           }
         }
       })
 
       whisperService.on('utteranceEnd', () => {
         if (!isCapturing) {
+          return
+        }
+        if (pendingQuestionTimer) {
+          console.log('[Pipeline] utterance end -> finalize pending question')
+          restartPendingQuestionTimer(QUESTION_FINALIZE_AFTER_UTTERANCE_MS)
+          mainWindow?.webContents.send('utterance-end')
           return
         }
         console.log('[Pipeline] utterance end -> debounce')
@@ -1124,17 +1206,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           return
         }
         console.log('[Pipeline] detector triggered:', detection)
-        mainWindow?.webContents.send('question-detected', detection)
-
-        if (openaiService) {
-          try {
-            await generateAnswerForQuestion(detection.text)
-          } catch (error) {
-            isGeneratingAnswer = false
-            console.error('[Pipeline] detector answer failed:', error)
-            mainWindow?.webContents.send('answer-error', (error as Error).message)
-          }
-        }
+        scheduleAnswerForDetectedQuestion(detection.text)
       })
 
       isCapturing = true
@@ -1152,7 +1224,9 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
   ipcMain.handle('stop-capture', async () => {
     isCapturing = false
+    lastAnswerCompletedAt = 0
     isGeneratingAnswer = false
+    clearPendingQuestionState()
     if (utteranceDebounceTimer) {
       clearTimeout(utteranceDebounceTimer)
       utteranceDebounceTimer = null
@@ -1325,10 +1399,16 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       payload: { sessionDuration: number; timestamp: number; [key: string]: unknown }
     ) => {
       try {
-        // Placeholder API endpoint - can be configured via settings or environment variable
-        const API_ENDPOINT = process.env.SESSION_API_URL || 'https://api.example.com/session'
+        const apiEndpoint = process.env.SESSION_API_URL?.trim()
 
-        const response = await fetch(API_ENDPOINT, {
+        if (!apiEndpoint) {
+          return {
+            success: false,
+            skipped: true
+          }
+        }
+
+        const response = await fetch(apiEndpoint, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'

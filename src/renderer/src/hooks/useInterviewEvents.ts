@@ -85,11 +85,15 @@ export function useInterviewEvents() {
 
     const unsubQuestionNotDetectedByModel = window.api.onQuestionNotDetectedByModel(() => {
       const state = useInterviewStore.getState()
+      const lastTranscriptAt = state.transcripts[state.transcripts.length - 1]?.timestamp ?? 0
+      const lastAnswerAt = state.answers[state.answers.length - 1]?.timestamp ?? 0
+
       if (
         state.isCapturing &&
         !state.isGenerating &&
         !state.currentQuestion.trim() &&
-        !state.currentAnswer.trim()
+        !state.currentAnswer.trim() &&
+        lastTranscriptAt > lastAnswerAt
       ) {
         setManualAssistSuggested(true)
       }
