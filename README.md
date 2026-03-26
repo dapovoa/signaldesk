@@ -2,33 +2,13 @@
 
 SignalDesk is a desktop assistant for live interview support.
 
-It listens to interviewer audio, detects likely questions or prompts, and generates short suggested answers in real time. The app is built with Electron, React, TypeScript, and `electron-vite`.
-
-## What it does
-
-- Captures live interview audio from system output / loopback
-- Transcribes speech using OpenAI or AssemblyAI
-- Detects prompts and interview questions from transcript turns
-- Generates suggested answers with OpenAI or ChatGPT OAuth/Codex-backed flows
-- Stores local answer history
-- Supports screenshot capture and question analysis
-
-## Stack
-
-- Electron
-- React
-- TypeScript
-- Zustand
-- Tailwind CSS
-- `electron-builder`
+It captures interviewer audio, transcribes speech, detects likely interview questions, and generates short suggested answers in real time.
 
 ## Requirements
 
-- Node.js 22 recommended
+- Node.js 22
 - npm
 - Linux, macOS, or Windows
-
-Node 20 may still work for development, but some dependencies already expect Node 22+.
 
 ## Development
 
@@ -44,7 +24,7 @@ Run in development:
 npm run dev
 ```
 
-On Linux:
+Linux:
 
 ```bash
 npm run dev:linux
@@ -58,13 +38,13 @@ npm run typecheck
 
 ## Build
 
-Generic production build:
+Generic build:
 
 ```bash
 npm run build
 ```
 
-Platform packages:
+Platform builds:
 
 ```bash
 npm run build:linux
@@ -72,23 +52,109 @@ npm run build:win
 npm run build:mac
 ```
 
-Linux packaging currently produces:
+Artifacts are written to `dist/`.
 
-- `.AppImage`
-- `.snap`
-- `.deb`
+## Providers
 
-Artifacts are written to:
+### Transcription providers
 
-```bash
-dist/
-```
+SignalDesk supports two transcription paths:
+
+- `assemblyai`
+- `openai`
+
+#### AssemblyAI
+
+- `transcriptionProvider = assemblyai`
+- `transcriptionApiKey`
+- `assemblyAiSpeechModel`
+- `assemblyAiLanguageDetection`
+- `assemblyAiMinTurnSilence`
+- `assemblyAiMaxTurnSilence`
+- `assemblyAiKeytermsPrompt`
+- `assemblyAiPrompt`
+
+#### OpenAI
+
+- `transcriptionProvider = openai`
+- `llmApiKey`
+
+### LLM providers
+
+SignalDesk supports three LLM provider modes:
+
+- `openai`
+- `openai-oauth`
+- `openai-compatible`
+
+#### openai
+
+- `llmProvider = openai`
+- `llmAuthMode = api-key` or `oauth-token`
+- `llmApiKey`
+- `llmModel`
+
+#### openai-oauth
+
+- `llmProvider = openai-oauth`
+- `llmOauthToken`
+- `llmOauthRefreshToken`
+- `llmOauthExpiresAt`
+- `llmOauthAccountId`
+- `llmModel`
+
+#### openai-compatible
+
+- `llmProvider = openai-compatible`
+- `llmBaseUrl`
+- `llmApiKey`
+- `llmCustomHeaders`
+- `llmModel`
+
+Example:
+- `llmBaseUrl = https://api.deepseek.com`
+- `llmModel = deepseek-chat`
 
 ## Configuration
 
-Runtime settings are stored in Electron `userData`, not inside the project directory.
+Settings are stored in the app settings file under Electron `userData`.
 
-Configured credentials and tokens are managed through the in-app settings panel and stored locally by the app.
+On Linux this is typically:
+
+```text
+~/.config/signaldesk/settings.json
+```
+
+Environment variables are also supported as defaults for development.
+
+Examples:
+
+- `TRANSCRIPTION_PROVIDER`
+- `ASSEMBLYAI_API_KEY`
+- `LLM_PROVIDER`
+- `LLM_AUTH_MODE`
+- `LLM_API_KEY`
+- `LLM_BASE_URL`
+- `LLM_MODEL`
+
+## Debug Logging
+
+By default, runtime logs are quiet.
+
+To enable all verbose runtime logs:
+
+```bash
+SIGNALDESK_VERBOSE=1 npm run dev:linux
+```
+
+Granular flags are also supported:
+
+```bash
+SIGNALDESK_PIPELINE_VERBOSE=1
+SIGNALDESK_OPENAI_VERBOSE=1
+SIGNALDESK_AVATAR_VERBOSE=1
+SIGNALDESK_ASSEMBLYAI_VERBOSE=1
+```
 
 ## Project Structure
 
@@ -102,5 +168,4 @@ scripts         Utility scripts
 
 ## Notes
 
-- On GNOME Wayland, some window-management features such as always-on-top and opacity may be limited by the compositor.
-- Dash/taskbar icon and window identity are more reliable in packaged builds than in `dev` mode.
+- On GNOME Wayland, always-on-top and opacity can be limited by the compositor.
