@@ -191,7 +191,7 @@ export interface Api {
     sessionDuration: number
     timestamp: number
     [key: string]: unknown
-  }) => Promise<{ success: boolean; data?: unknown; error?: string }>
+  }) => Promise<{ success: boolean; data?: unknown; error?: string; skipped?: boolean }>
 
   // Event listeners
   onTranscript: (callback: (event: TranscriptEvent) => void) => () => void
