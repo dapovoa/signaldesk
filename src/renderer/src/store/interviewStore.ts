@@ -102,6 +102,7 @@ interface InterviewState {
 
   // History view
   showHistory: boolean
+  isTranscriptHidden: boolean
 
   // Session timer
   isSessionActive: boolean
@@ -140,6 +141,7 @@ interface InterviewState {
   setShowAvatar: (show: boolean) => void
 
   setShowHistory: (show: boolean) => void
+  setTranscriptHidden: (hidden: boolean) => void
 
   // Session timer actions
   startSession: () => void
@@ -214,6 +216,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
   avatarReindexProgress: null,
   showAvatar: false,
   showHistory: false,
+  isTranscriptHidden: false,
 
   isSessionActive: false,
   sessionStartTime: null,
@@ -319,6 +322,7 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
   setShowAvatar: (show) => set({ showAvatar: show }),
 
   setShowHistory: (show) => set({ showHistory: show }),
+  setTranscriptHidden: (hidden) => set({ isTranscriptHidden: hidden }),
 
   startSession: () =>
     set({

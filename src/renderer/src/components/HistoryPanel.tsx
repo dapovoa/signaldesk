@@ -212,11 +212,13 @@ export function HistoryPanel({ onClose }: HistoryPanelProps): React.JSX.Element 
             >
               <div className="bg-white/[0.03] px-4 py-3">
                 <div className="flex items-start gap-2">
-                  <p className="flex min-w-0 flex-1 items-center gap-2 text-[13px] font-medium leading-5 text-dark-300">
+                  <p className="flex min-w-0 flex-1 items-start gap-2 text-[13px] font-medium leading-5 text-dark-300">
                     <span className="text-[10px] uppercase tracking-[0.14em] text-dark-500">
                       Q:
                     </span>
-                    <span className={`min-w-0 flex-1 ${isQuestionExpanded ? '' : 'truncate'}`}>
+                    <span
+                      className={`min-w-0 flex-1 ${isQuestionExpanded ? 'block' : 'truncate'}`}
+                    >
                       {entry.question}
                     </span>
                   </p>
@@ -253,7 +255,7 @@ export function HistoryPanel({ onClose }: HistoryPanelProps): React.JSX.Element 
                     Output cut short by the model token limit.
                   </p>
                 )}
-                <div className="max-w-none text-[16px] leading-7 text-dark-100">
+                <div className="max-w-none text-[18px] leading-8 text-dark-100">
                   <MarkdownRenderer content={entry.answer} />
                 </div>
               </div>
