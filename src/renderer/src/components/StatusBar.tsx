@@ -112,12 +112,7 @@ export function StatusBar(): React.JSX.Element {
               }
             `}
           >
-            {isGenerating ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Processing</span>
-              </>
-            ) : isCapturing ? (
+            {isCapturing ? (
               <>
                 <MicOff className="w-4 h-4" />
                 <span>Stop</span>

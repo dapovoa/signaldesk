@@ -1,18 +1,32 @@
 import { MessageSquare } from 'lucide-react'
 import { useEffect, useRef } from 'react'
 import { useInterview } from '../hooks/useInterview'
+import { useInterviewStore } from '../store/interviewStore'
 
 export function TranscriptPanel(): React.JSX.Element {
   const { transcripts, currentTranscript, isCapturing, isSpeaking } = useInterview()
+  const { isTranscriptHidden } = useInterviewStore()
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    if (isTranscriptHidden) {
+      return
     }
-  }, [transcripts, currentTranscript])
+
+    const frameId = window.requestAnimationFrame(() => {
+      if (scrollRef.current) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+      }
+    })
+
+    return () => window.cancelAnimationFrame(frameId)
+  }, [transcripts, currentTranscript, isTranscriptHidden])
 
   const hasContent = transcripts.length > 0 || currentTranscript
+
+  if (isTranscriptHidden) {
+    return <></>
+  }
 
   return (
     <div className="flex h-52 flex-col border-b border-white/5 bg-black/10">
@@ -47,7 +61,7 @@ export function TranscriptPanel(): React.JSX.Element {
         ) : hasContent ? (
           <>
             {transcripts.map((transcript, index) => (
-              <div key={transcript.id} className="flex gap-2 py-1 text-[13px]">
+              <div key={transcript.id} className="flex gap-2 py-1 text-[14px]">
                 <span className="min-w-[22px] pt-0.5 font-mono text-[11px] text-dark-500">
                   {index + 1}.
                 </span>
@@ -56,7 +70,7 @@ export function TranscriptPanel(): React.JSX.Element {
             ))}
 
             {currentTranscript && (
-              <div className="flex gap-2 py-1 text-[13px]">
+              <div className="flex gap-2 py-1 text-[14px]">
                 <span className="min-w-[22px] pt-0.5 font-mono text-[11px] text-cyan-300">
                   {transcripts.length + 1}.
                 </span>

@@ -1,4 +1,4 @@
-import { History, Minus, Pin, PinOff, Play, Settings, Square, UserCircle2, X } from 'lucide-react'
+import { Focus, History, Minus, Pin, PinOff, Play, Settings, Square, UserCircle2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useSessionTimer } from '../hooks/useSessionTimer'
 import { useInterviewStore } from '../store/interviewStore'
@@ -10,6 +10,8 @@ export function Header(): React.JSX.Element {
     setShowAvatar,
     showHistory,
     setShowHistory,
+    isTranscriptHidden,
+    setTranscriptHidden,
     isSessionActive,
     startSession,
     endSession
@@ -103,6 +105,18 @@ export function Header(): React.JSX.Element {
           title={showHistory ? 'Show current session' : 'Show history'}
         >
           <History size={14} />
+        </button>
+
+        <button
+          onClick={() => setTranscriptHidden(!isTranscriptHidden)}
+          className={`rounded-xl border p-2 transition-colors ${
+            isTranscriptHidden
+              ? 'border-cyan-400/20 bg-cyan-400/10 text-cyan-300'
+              : 'border-white/5 bg-white/[0.04] text-dark-400 hover:border-cyan-400/15 hover:bg-cyan-400/8 hover:text-cyan-300'
+          }`}
+          title={isTranscriptHidden ? 'Show transcript' : 'Focus answers'}
+        >
+          <Focus size={14} />
         </button>
 
         <button

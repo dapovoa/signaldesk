@@ -1,5 +1,8 @@
 import { EventEmitter } from 'events'
 
+const QUESTION_DETECTOR_VERBOSE =
+  process.env.SIGNALDESK_VERBOSE === '1' || process.env.SIGNALDESK_PIPELINE_VERBOSE === '1'
+
 export interface DetectedQuestion {
   text: string
   confidence: number
@@ -96,21 +99,26 @@ export class QuestionDetector extends EventEmitter {
     if (!fullText) return false
 
     if (this.shouldIgnore(fullText)) {
-      console.log(`[QuestionDetector] Ignored short/noise turn: "${fullText}"`)
+      if (QUESTION_DETECTOR_VERBOSE) {
+        console.log(`[QuestionDetector] Ignored short/noise turn: "${fullText}"`)
+      }
       return false
     }
 
     const detection = this.analyzeTurn(fullText)
     if (!detection || detection.confidence < this.confidenceThreshold) {
-      console.log(`[QuestionDetector] Ignored low-confidence turn: "${fullText}"`)
+      if (QUESTION_DETECTOR_VERBOSE) {
+        console.log(`[QuestionDetector] Ignored low-confidence turn: "${fullText}"`)
+      }
       return false
     }
 
-    console.log(
-      `[QuestionDetector] Turn analyzed: "${fullText}" - Confidence: ${detection.confidence.toFixed(2)}, Type: ${detection.questionType}`
-    )
-
-    console.log(`[QuestionDetector] RESPONSE NEEDED: "${fullText}"`)
+    if (QUESTION_DETECTOR_VERBOSE) {
+      console.log(
+        `[QuestionDetector] Turn analyzed: "${fullText}" - Confidence: ${detection.confidence.toFixed(2)}, Type: ${detection.questionType}`
+      )
+      console.log(`[QuestionDetector] RESPONSE NEEDED: "${fullText}"`)
+    }
     this.emit('questionDetected', detection)
     return true
   }
