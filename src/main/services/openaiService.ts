@@ -42,6 +42,7 @@ const getConfiguredMaxTokens = (config: OpenAIConfig): number =>
   config.maxTokens ?? getDefaultOutputTokens(config)
 
 const MAX_INTERVIEW_ANSWER_TOKENS = 220
+const OPENAI_VERBOSE_LOGS = process.env.SIGNALDESK_OPENAI_VERBOSE === '1'
 
 const getEffectiveMaxTokens = (
   config: OpenAIConfig,
@@ -388,11 +389,6 @@ export class OpenAIService extends EventEmitter {
       throw new Error('OpenAI client not initialized')
     }
 
-    console.log('[OpenAIService] generateAnswer called:', {
-      model: this.config.model || 'gpt-4o-mini',
-      question
-    })
-
     const systemPrompt = getSystemPrompt(
       question,
       options?.identityBase || '',
@@ -400,27 +396,37 @@ export class OpenAIService extends EventEmitter {
       options?.avatarContext || ''
     )
     this.systemPrompt = systemPrompt
-    console.log('[OpenAIService] system prompt variables:', buildAvatarPromptVariables(
-      options?.identityBase || '',
-      options?.interviewContext || '',
-      options?.avatarContext || ''
-    ))
-    console.log('[OpenAIService] system prompt preview:', systemPrompt.slice(0, 1200))
+    if (OPENAI_VERBOSE_LOGS) {
+      console.log('[OpenAIService] generateAnswer called:', {
+        model: this.config.model || 'gpt-4o-mini',
+        question
+      })
+      console.log('[OpenAIService] system prompt variables:', buildAvatarPromptVariables(
+        options?.identityBase || '',
+        options?.interviewContext || '',
+        options?.avatarContext || ''
+      ))
+      console.log('[OpenAIService] system prompt preview:', systemPrompt.slice(0, 1200))
+    }
     const messages: Message[] = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: question }
     ]
 
     try {
-      console.log('[OpenAIService] sending chat completion request')
+      if (OPENAI_VERBOSE_LOGS) {
+        console.log('[OpenAIService] sending chat completion request')
+      }
       const fullResponse = await this.streamAnswerWithRetry(messages, {
         maxTokensCap: MAX_INTERVIEW_ANSWER_TOKENS
       })
       const normalizedResponse = normalizeInterviewAnswer(fullResponse)
-      console.log('[OpenAIService] answer completed:', {
-        length: normalizedResponse.length,
-        preview: normalizedResponse.slice(0, 160)
-      })
+      if (OPENAI_VERBOSE_LOGS) {
+        console.log('[OpenAIService] answer completed:', {
+          length: normalizedResponse.length,
+          text: normalizedResponse
+        })
+      }
 
       this.emit('complete', normalizedResponse)
       return normalizedResponse
@@ -458,12 +464,14 @@ export class OpenAIService extends EventEmitter {
       options?.avatarContext || '',
       questionType
     )
-    console.log('[OpenAIService] screenshot prompt variables:', buildAvatarPromptVariables(
-      options?.identityBase || '',
-      options?.interviewContext || '',
-      options?.avatarContext || ''
-    ))
-    console.log('[OpenAIService] screenshot prompt preview:', solutionPrompt.slice(0, 1200))
+    if (OPENAI_VERBOSE_LOGS) {
+      console.log('[OpenAIService] screenshot prompt variables:', buildAvatarPromptVariables(
+        options?.identityBase || '',
+        options?.interviewContext || '',
+        options?.avatarContext || ''
+      ))
+      console.log('[OpenAIService] screenshot prompt preview:', solutionPrompt.slice(0, 1200))
+    }
 
     const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
       { role: 'system', content: solutionPrompt },
@@ -570,11 +578,13 @@ export class OpenAIService extends EventEmitter {
         request.extra_body = this.config.extraBody
       }
 
-      console.log('[OpenAIService] screenshot request params:', {
-        model: request.model,
-        temperature: request.temperature,
-        top_p: request.top_p
-      })
+      if (OPENAI_VERBOSE_LOGS) {
+        console.log('[OpenAIService] screenshot request params:', {
+          model: request.model,
+          temperature: request.temperature,
+          top_p: request.top_p
+        })
+      }
 
       const stream = await this.client.chat.completions.create(
         request as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming
@@ -694,13 +704,15 @@ export class OpenAIService extends EventEmitter {
       request.extra_body = this.config.extraBody
     }
 
-    console.log('[OpenAIService] chat request params:', {
-      model: request.model,
-      temperature: request.temperature,
-      top_p: request.top_p,
-      max_tokens: undefined,
-      max_completion_tokens: undefined
-    })
+    if (OPENAI_VERBOSE_LOGS) {
+      console.log('[OpenAIService] chat request params:', {
+        model: request.model,
+        temperature: request.temperature,
+        top_p: request.top_p,
+        max_tokens: undefined,
+        max_completion_tokens: undefined
+      })
+    }
 
     const stream = await this.client!.chat.completions.create(
       request as OpenAI.Chat.Completions.ChatCompletionCreateParamsStreaming
@@ -719,7 +731,7 @@ export class OpenAIService extends EventEmitter {
       fullResponse = appendResult.nextResponse
 
       if (appendResult.emittedChunk) {
-        if (fullResponse.length === appendResult.emittedChunk.length) {
+        if (OPENAI_VERBOSE_LOGS && fullResponse.length === appendResult.emittedChunk.length) {
           console.log('[OpenAIService] first stream chunk received')
         }
         this.emit('stream', appendResult.emittedChunk)
@@ -803,7 +815,11 @@ export class OpenAIService extends EventEmitter {
         const appendResult = appendWithinApproxTokenCap(fullResponse, event.delta, maxTokens)
         fullResponse = appendResult.nextResponse
 
-        if (appendResult.emittedChunk && fullResponse.length === appendResult.emittedChunk.length) {
+        if (
+          OPENAI_VERBOSE_LOGS &&
+          appendResult.emittedChunk &&
+          fullResponse.length === appendResult.emittedChunk.length
+        ) {
           console.log('[OpenAIService] first stream chunk received')
         }
         if (appendResult.emittedChunk) {
