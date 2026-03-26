@@ -20,7 +20,7 @@ export function StatusBar(): React.JSX.Element {
     if (isGenerating) return 'Generating answer...'
     if (isSpeaking) return 'Listening...'
     if (isCapturing) {
-      return 'Listening to interviewer (Speakers/Loopback)'
+      return 'Listening to interviewer'
     }
     return 'Click Start to begin'
   }

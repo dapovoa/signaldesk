@@ -1,5 +1,5 @@
-import { Check, Copy, Sparkles, Trash2, Wand2 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { Sparkles, Trash2, Wand2 } from 'lucide-react'
+import { useEffect, useRef } from 'react'
 import { useInterview } from '../hooks/useInterview'
 import { MarkdownRenderer } from './MarkdownRenderer'
 
@@ -16,43 +16,12 @@ export function AnswerPanel(): React.JSX.Element {
     generateAnswerManually
   } = useInterview()
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [copiedId, setCopiedId] = useState<string | null>(null)
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
   }, [answers, currentAnswer])
-
-  const copyToClipboard = async (text: string, id: string): Promise<void> => {
-    try {
-      const result = await window.api.writeToClipboard(text)
-      if (result.success) {
-        setCopiedId(id)
-        setTimeout(() => setCopiedId(null), 2000)
-      } else {
-        console.error('Failed to copy:', result.error)
-        // Fallback to browser clipboard API
-        try {
-          await navigator.clipboard.writeText(text)
-          setCopiedId(id)
-          setTimeout(() => setCopiedId(null), 2000)
-        } catch (fallbackErr) {
-          console.error('Fallback clipboard copy failed:', fallbackErr)
-        }
-      }
-    } catch (err) {
-      console.error('Failed to copy:', err)
-      // Fallback to browser clipboard API
-      try {
-        await navigator.clipboard.writeText(text)
-        setCopiedId(id)
-        setTimeout(() => setCopiedId(null), 2000)
-      } catch (fallbackErr) {
-        console.error('Fallback clipboard copy failed:', fallbackErr)
-      }
-    }
-  }
 
   const hasContent = answers.length > 0 || currentAnswer
   const shouldPulseManualGenerate = isCapturing && !isGenerating && manualAssistSuggested
@@ -70,15 +39,15 @@ export function AnswerPanel(): React.JSX.Element {
           <button
             onClick={generateAnswerManually}
             disabled={isGenerating}
-            className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+            className={`inline-flex items-center justify-center rounded-full p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
               shouldPulseManualGenerate
-                ? 'animate-pulse border-cyan-400/30 bg-gradient-to-r from-cyan-400 to-teal-400 text-slate-950 shadow-[0_0_20px_rgba(34,211,238,0.35)] hover:from-cyan-300 hover:to-teal-300'
-                : 'border-cyan-400/20 bg-cyan-400/14 text-cyan-100 hover:border-cyan-300/30 hover:bg-cyan-400/22'
+                ? 'text-green-400'
+                : 'text-cyan-300 hover:text-cyan-200'
             }`}
             title="Generate answer from the current transcript"
+            type="button"
           >
-            <Wand2 className="h-4 w-4" />
-            <span>Generate answer</span>
+            <Wand2 className={`h-4 w-4 ${shouldPulseManualGenerate ? 'animate-pulse' : ''}`} />
           </button>
           {hasContent && (
             <button
@@ -114,11 +83,11 @@ export function AnswerPanel(): React.JSX.Element {
             {answers.map((answer) => (
               <div
                 key={answer.id}
-                className="animate-fade-in overflow-hidden rounded-[22px] bg-white/[0.035]"
+                className="animate-fade-in overflow-hidden rounded-[24px] border border-white/[0.05] bg-white/[0.035] shadow-[0_16px_48px_rgba(0,0,0,0.16)]"
               >
                 <div className="bg-white/[0.03] px-4 py-3">
-                  <p className="flex items-center gap-2 text-sm font-medium leading-6 text-dark-300">
-                    <span className="text-[11px] uppercase tracking-[0.12em] text-dark-500">
+                  <p className="flex items-center gap-2 text-[13px] font-medium leading-5 text-dark-300">
+                    <span className="text-[10px] uppercase tracking-[0.14em] text-dark-500">
                       Q:
                     </span>
                     <span className="min-w-0 flex-1 truncate">{answer.question}</span>
@@ -130,24 +99,8 @@ export function AnswerPanel(): React.JSX.Element {
                       Output cut short by the model token limit.
                     </p>
                   )}
-                  <MarkdownRenderer content={answer.answer} />
-                  <div className="mt-3 flex justify-end">
-                    <button
-                      onClick={() => copyToClipboard(answer.answer, answer.id)}
-                      className="flex items-center gap-1 rounded-xl border border-white/5 bg-white/[0.04] px-2.5 py-1.5 text-xs text-dark-400 transition-colors hover:border-cyan-400/15 hover:bg-cyan-400/8 hover:text-cyan-300"
-                    >
-                      {copiedId === answer.id ? (
-                        <>
-                          <Check className="w-3 h-3" />
-                          <span>Copied!</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3 h-3" />
-                          <span>Copy</span>
-                        </>
-                      )}
-                    </button>
+                  <div className="max-w-none text-[16px] leading-7 text-dark-100">
+                    <MarkdownRenderer content={answer.answer} />
                   </div>
                 </div>
               </div>
@@ -155,11 +108,11 @@ export function AnswerPanel(): React.JSX.Element {
 
             {/* Current streaming answer */}
             {(currentAnswer || isGenerating) && (
-              <div className="animate-fade-in overflow-hidden rounded-[22px] bg-gradient-to-br from-cyan-400/10 to-teal-400/6">
+              <div className="animate-fade-in overflow-hidden rounded-[24px] border border-cyan-400/10 bg-gradient-to-br from-cyan-400/10 to-teal-400/6 shadow-[0_20px_56px_rgba(14,165,233,0.08)]">
                 {currentQuestion && (
                   <div className="bg-cyan-400/6 px-4 py-3">
-                    <p className="flex items-center gap-2 text-sm font-medium leading-6 text-cyan-50">
-                      <span className="text-[11px] uppercase tracking-[0.12em] text-cyan-300/80">
+                    <p className="flex items-center gap-2 text-[13px] font-medium leading-5 text-cyan-50">
+                      <span className="text-[10px] uppercase tracking-[0.14em] text-cyan-300/80">
                         Q:
                       </span>
                       <span className="min-w-0 flex-1 truncate">{currentQuestion}</span>
@@ -173,7 +126,7 @@ export function AnswerPanel(): React.JSX.Element {
                     </p>
                   )}
                   {currentAnswer ? (
-                    <p className="whitespace-pre-wrap text-[15px] leading-6 text-dark-100">
+                    <p className="whitespace-pre-wrap text-[16px] leading-7 text-dark-100">
                       {currentAnswer}
                       <span className="ml-1 inline-block h-4 w-0.5 animate-pulse bg-cyan-300" />
                     </p>

@@ -1,10 +1,69 @@
-import React from 'react'
+import React, { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import { Check, Copy } from 'lucide-react'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
 interface MarkdownRendererProps {
   content: string
+}
+
+function CodeBlock({
+  language,
+  codeString
+}: {
+  language: string
+  codeString: string
+}): React.JSX.Element {
+  const [copied, setCopied] = useState(false)
+
+  const copyCode = async (): Promise<void> => {
+    try {
+      const result = await window.api.writeToClipboard(codeString)
+      if (!result.success) {
+        await navigator.clipboard.writeText(codeString)
+      }
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (error) {
+      console.error('Failed to copy code block:', error)
+    }
+  }
+
+  return (
+    <div className="my-3 overflow-hidden rounded-xl border border-white/8 bg-[#0b1220]">
+      <div className="flex items-center justify-between border-b border-white/8 bg-white/[0.03] px-3 py-2">
+        <span className="text-[11px] uppercase tracking-[0.14em] text-dark-400">
+          {language || 'code'}
+        </span>
+        <button
+          onClick={copyCode}
+          className="flex items-center gap-1 rounded-lg border border-white/8 bg-white/[0.04] px-2 py-1 text-[11px] text-dark-300 transition-colors hover:border-cyan-400/20 hover:bg-cyan-400/10 hover:text-cyan-200"
+          type="button"
+        >
+          {copied ? (
+            <>
+              <Check className="h-3 w-3" />
+              <span>Copied</span>
+            </>
+          ) : (
+            <>
+              <Copy className="h-3 w-3" />
+              <span>Copy</span>
+            </>
+          )}
+        </button>
+      </div>
+      <SyntaxHighlighter
+        style={vscDarkPlus}
+        language={language}
+        PreTag="div"
+        className="!m-0 !rounded-none text-[14px] leading-6"
+      >
+        {codeString}
+      </SyntaxHighlighter>
+    </div>
+  )
 }
 
 export function MarkdownRenderer({ content }: MarkdownRendererProps): React.JSX.Element {
@@ -57,16 +116,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps): React.JSX.
             const isInline = !match
 
             return !isInline && match ? (
-              <div className="my-3 rounded-lg overflow-hidden">
-                <SyntaxHighlighter
-                  style={vscDarkPlus}
-                  language={language}
-                  PreTag="div"
-                  className="!m-0 !rounded-lg text-[15px] leading-6"
-                >
-                  {codeString}
-                </SyntaxHighlighter>
-              </div>
+              <CodeBlock language={language} codeString={codeString} />
             ) : (
               <code
                 className="rounded-md bg-white/[0.06] px-1.5 py-0.5 font-mono text-xs text-cyan-200"

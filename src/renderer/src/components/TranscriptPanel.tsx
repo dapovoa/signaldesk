@@ -47,20 +47,20 @@ export function TranscriptPanel(): React.JSX.Element {
         ) : hasContent ? (
           <>
             {transcripts.map((transcript, index) => (
-              <div key={transcript.id} className="flex gap-2 py-1 text-sm">
+              <div key={transcript.id} className="flex gap-2 py-1 text-[13px]">
                 <span className="min-w-[22px] pt-0.5 font-mono text-[11px] text-dark-500">
                   {index + 1}.
                 </span>
-                <p className="flex-1 leading-relaxed text-dark-200">{transcript.text}</p>
+                <p className="flex-1 leading-5 text-dark-200">{transcript.text}</p>
               </div>
             ))}
 
             {currentTranscript && (
-              <div className="flex gap-2 py-1 text-sm">
+              <div className="flex gap-2 py-1 text-[13px]">
                 <span className="min-w-[22px] pt-0.5 font-mono text-[11px] text-cyan-300">
                   {transcripts.length + 1}.
                 </span>
-                <p className="flex-1 leading-relaxed text-dark-200">
+                <p className="flex-1 leading-5 text-dark-200">
                   {currentTranscript}
                   <span className="inline-block w-0.5 h-4 bg-blue-400 ml-1 animate-pulse align-middle" />
                 </p>
