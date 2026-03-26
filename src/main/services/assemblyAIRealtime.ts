@@ -21,6 +21,7 @@ interface AssemblyAITurnMessage {
 }
 
 const DEFAULT_SAMPLE_RATE = 16000
+const ASSEMBLYAI_VERBOSE_LOGS = process.env.SIGNALDESK_ASSEMBLYAI_VERBOSE === '1'
 
 const buildUrl = (config: AssemblyAIRealtimeConfig): string => {
   const params = new URLSearchParams({
@@ -204,11 +205,13 @@ export class AssemblyAIRealtimeClient extends EventEmitter {
     const transcript = message.transcript?.trim()
     if (!transcript) return
 
-    console.log('[AssemblyAIRealtime] Turn:', {
-      text: transcript,
-      endOfTurn: Boolean(message.end_of_turn),
-      formatted: Boolean(message.turn_is_formatted)
-    })
+    if (ASSEMBLYAI_VERBOSE_LOGS) {
+      console.log('[AssemblyAIRealtime] Turn:', {
+        text: transcript,
+        endOfTurn: Boolean(message.end_of_turn),
+        formatted: Boolean(message.turn_is_formatted)
+      })
+    }
 
     if (!this.speechActive) {
       this.speechActive = true

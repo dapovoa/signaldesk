@@ -45,7 +45,8 @@ let pendingQuestionFragments: string[] = []
 let isWaylandSession = false
 const QUESTION_FOLLOW_UP_WINDOW_MS = 500
 const QUESTION_FINALIZE_AFTER_UTTERANCE_MS = 350
-const QUESTION_FINALIZE_AFTER_COMPOUND_UTTERANCE_MS = 900
+const QUESTION_FINALIZE_AFTER_COMPOUND_UTTERANCE_MS = 700
+const UTTERANCE_DEBOUNCE_MS = 1000
 const SUPPRESS_STALE_NO_QUESTION_MS = 4000
 let lastAnswerCompletedAt = 0
 
@@ -277,6 +278,7 @@ const buildInterviewContext = (profile: AvatarProfile): string => {
 }
 
 const buildIdentityBase = (profile: AvatarProfile): string => profile.identityBase.trim()
+const AVATAR_VERBOSE_LOGS = process.env.SIGNALDESK_AVATAR_VERBOSE === '1'
 
 const ensureDirectory = (directory: string): void => {
   fs.mkdirSync(directory, { recursive: true })
@@ -289,6 +291,10 @@ const logAvatarContext = (question: string, avatarContext?: { snippets: Array<{
   tags: string[]
   distance: number
 }>; promptContext: string } | null): void => {
+  if (!AVATAR_VERBOSE_LOGS) {
+    return
+  }
+
   if (!avatarContext) {
     console.log('[AvatarRAG] no retrieved memory:', { question })
     return
@@ -1142,7 +1148,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         if (!answerTimingTrace.firstStreamAt) {
           answerTimingTrace.firstStreamAt = Date.now()
         }
-        console.log('[Pipeline] answer-stream chunk:', chunk.slice(0, 80))
         mainWindow?.webContents.send('answer-stream', chunk)
       })
 
@@ -1151,7 +1156,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         lastAnswerCompletedAt = Date.now()
         logAnswerTimingSummary('complete')
         resetAnswerTimingTrace()
-        console.log('[Pipeline] answer-complete:', answer.slice(0, 160))
         mainWindow?.webContents.send('answer-complete', answer)
       })
 
@@ -1173,16 +1177,11 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           return
         }
         lastTranscriptActivityAt = Date.now()
-        console.log('[Pipeline] transcript received:', {
-          text: event.text,
-          isFinal: event.isFinal
-        })
         mainWindow?.webContents.send('transcript', event)
 
         if (utteranceDebounceTimer) {
           clearTimeout(utteranceDebounceTimer)
           utteranceDebounceTimer = null
-          console.log('[Pipeline] canceled pending detector debounce due to continued speech')
         }
 
         if (pendingQuestionTimer) {
@@ -1200,10 +1199,8 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           const earlyDetection = questionDetector.checkEarlyDetection(event.text)
           if (earlyDetection) {
             if (isGeneratingAnswer) {
-              console.log('[Pipeline] skipping early detection while answer is already generating')
               return
             }
-            console.log('[Pipeline] early detection triggered:', earlyDetection)
             scheduleAnswerForDetectedQuestion(earlyDetection.text)
           }
         }
@@ -1215,12 +1212,10 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         }
         answerTimingTrace.utteranceEndAt = Date.now()
         if (pendingQuestionTimer) {
-          console.log('[Pipeline] utterance end -> finalize pending question')
           restartPendingQuestionTimer(getPendingFinalizeDelay())
           mainWindow?.webContents.send('utterance-end')
           return
         }
-        console.log('[Pipeline] utterance end -> debounce')
         if (utteranceDebounceTimer) {
           clearTimeout(utteranceDebounceTimer)
         }
@@ -1230,9 +1225,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
           void (async () => {
             answerTimingTrace.debounceElapsedAt = Date.now()
-            console.log('[Pipeline] debounce elapsed -> detector')
             if (isClassifyingQuestion) {
-              console.log('[Pipeline] classifier busy, skipping this cycle')
               return
             }
 
@@ -1246,7 +1239,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
               }
 
                if (lastTranscriptActivityAt > classifierStartedAt) {
-                console.log('[Pipeline] detector skipped because speech resumed before classification')
                 return
               }
 
@@ -1260,7 +1252,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
               const classifierResult = await classifyTurnWithModel(turnText)
               if (lastTranscriptActivityAt > classifierStartedAt) {
-                console.log('[Pipeline] classifier result ignored because newer speech arrived')
                 return
               }
               lastModelQuestionClassificationAt = Date.now()
@@ -1268,10 +1259,8 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
                 answerTimingTrace.classifierTriggeredAt = Date.now()
                 questionDetector.clearBuffer()
                 if (classifierResult.detection) {
-                  console.log('[Pipeline] model classifier triggered:', classifierResult.detection)
                   questionDetector.emit('questionDetected', classifierResult.detection)
                 } else {
-                  console.log('[Pipeline] model classifier did not detect a question')
                   notifyQuestionNotDetected(turnText)
                 }
                 return
@@ -1285,7 +1274,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
               isClassifyingQuestion = false
             }
           })()
-        }, 1200)
+        }, UTTERANCE_DEBOUNCE_MS)
         mainWindow?.webContents.send('utterance-end')
       })
 
@@ -1308,10 +1297,8 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           return
         }
         if (isGeneratingAnswer) {
-          console.log('[Pipeline] skipping detector trigger while answer is already generating')
           return
         }
-        console.log('[Pipeline] detector triggered:', detection)
         scheduleAnswerForDetectedQuestion(detection.text)
       })
 

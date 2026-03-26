@@ -415,13 +415,15 @@ export class AvatarIngestionService {
     let processedDocuments = 0
     let embeddedChunks = 0
 
-    console.log('[AvatarIngestion] sync started:', {
-      sourceDirectory: this.sourceDirectory,
-      fileCount: files.length,
-      embeddingModel: this.embeddingProvider.model,
-      storedEmbeddingModel: storedEmbeddingModel || null,
-      forceFullReembed
-    })
+    if (AVATAR_VERBOSE_LOGS) {
+      console.log('[AvatarIngestion] sync started:', {
+        sourceDirectory: this.sourceDirectory,
+        fileCount: files.length,
+        embeddingModel: this.embeddingProvider.model,
+        storedEmbeddingModel: storedEmbeddingModel || null,
+        forceFullReembed
+      })
+    }
 
     onProgress?.({
       totalDocuments: files.length,
@@ -460,14 +462,16 @@ export class AvatarIngestionService {
       const chunks = buildChunks(filePath, content, sourceType)
       if (chunks.length === 0) continue
 
-      console.log('[AvatarIngestion] processing document:', {
-        filePath: path.basename(filePath),
-        documentId: result.documentId,
-        progress: `${processedDocuments + 1}/${files.length}`,
-        changed: result.changed,
-        forced: forceFullReembed,
-        chunkCount: chunks.length
-      })
+      if (AVATAR_VERBOSE_LOGS) {
+        console.log('[AvatarIngestion] processing document:', {
+          filePath: path.basename(filePath),
+          documentId: result.documentId,
+          progress: `${processedDocuments + 1}/${files.length}`,
+          changed: result.changed,
+          forced: forceFullReembed,
+          chunkCount: chunks.length
+        })
+      }
 
       const chunkIds = this.store.replaceDocumentChunks(result.documentId, chunks)
       const embeddings = await this.embeddingProvider.embedDocuments(chunks.map((chunk) => chunk.content))
@@ -495,12 +499,14 @@ export class AvatarIngestionService {
       })
     }
 
-    console.log('[AvatarIngestion] sync completed:', {
-      processedDocuments,
-      embeddedChunks,
-      embeddingModel: this.embeddingProvider.model,
-      forceFullReembed,
-      durationMs: Date.now() - startedAt
-    })
+    if (AVATAR_VERBOSE_LOGS) {
+      console.log('[AvatarIngestion] sync completed:', {
+        processedDocuments,
+        embeddedChunks,
+        embeddingModel: this.embeddingProvider.model,
+        forceFullReembed,
+        durationMs: Date.now() - startedAt
+      })
+    }
   }
 }
