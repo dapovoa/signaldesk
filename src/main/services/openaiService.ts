@@ -42,7 +42,8 @@ const getConfiguredMaxTokens = (config: OpenAIConfig): number =>
   config.maxTokens ?? getDefaultOutputTokens(config)
 
 const MAX_INTERVIEW_ANSWER_TOKENS = 220
-const OPENAI_VERBOSE_LOGS = process.env.SIGNALDESK_OPENAI_VERBOSE === '1'
+const SIGNALDESK_VERBOSE = process.env.SIGNALDESK_VERBOSE === '1'
+const OPENAI_VERBOSE_LOGS = SIGNALDESK_VERBOSE || process.env.SIGNALDESK_OPENAI_VERBOSE === '1'
 
 const getEffectiveMaxTokens = (
   config: OpenAIConfig,
