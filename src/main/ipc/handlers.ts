@@ -67,6 +67,8 @@ let answerTimingTrace: AnswerTimingTrace = {
   ragReadyAt: null,
   firstStreamAt: null
 }
+const PIPELINE_VERBOSE =
+  process.env.SIGNALDESK_VERBOSE === '1' || process.env.SIGNALDESK_PIPELINE_VERBOSE === '1'
 const OPENAI_OAUTH_MODELS = [
   'gpt-5.4',
   'gpt-5.4-mini',
@@ -100,6 +102,10 @@ const formatTimingDelta = (from: number | null, to: number | null): string | nul
 }
 
 const logAnswerTimingSummary = (stage: 'complete' | 'error'): void => {
+  if (!PIPELINE_VERBOSE) {
+    return
+  }
+
   console.log('[Timing] answer path:', {
     stage,
     utteranceToDebounce: formatTimingDelta(
@@ -1306,7 +1312,9 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       isCapturing = true
       // Start Whisper service
       await whisperService.start()
-      console.log('Audio capture started successfully')
+      if (PIPELINE_VERBOSE) {
+        console.log('Audio capture started successfully')
+      }
 
       return { success: true }
     } catch (error) {
@@ -1343,7 +1351,9 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     // Remove question detector listeners to prevent duplicates on next start
     questionDetector?.removeAllListeners()
     questionDetector?.clearBuffer()
-    console.log('Audio capture stopped')
+    if (PIPELINE_VERBOSE) {
+      console.log('Audio capture stopped')
+    }
 
     return { success: true }
   })

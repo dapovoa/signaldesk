@@ -6,6 +6,9 @@ import * as path from 'path'
 import { AssemblyAIRealtimeClient } from './assemblyAIRealtime'
 import { createOpenAIClient } from './openaiClient'
 
+const WHISPER_VERBOSE =
+  process.env.SIGNALDESK_VERBOSE === '1' || process.env.SIGNALDESK_ASSEMBLYAI_VERBOSE === '1'
+
 export interface TranscriptEvent {
   text: string
   isFinal: boolean
@@ -75,7 +78,9 @@ export class WhisperService extends EventEmitter {
       this.realtimeClient.on('error', (error) => this.emit('error', error))
 
       await this.realtimeClient.start()
-      console.log('WhisperService started in AssemblyAI realtime mode')
+      if (WHISPER_VERBOSE) {
+        console.log('WhisperService started in AssemblyAI realtime mode')
+      }
       this.emit('started')
       return
     }
@@ -85,7 +90,9 @@ export class WhisperService extends EventEmitter {
       this.checkAndProcess()
     }, 300)
 
-    console.log('WhisperService started')
+    if (WHISPER_VERBOSE) {
+      console.log('WhisperService started')
+    }
     this.emit('started')
   }
 
@@ -109,7 +116,9 @@ export class WhisperService extends EventEmitter {
     }
 
     this.audioBuffer = []
-    console.log('WhisperService stopped')
+    if (WHISPER_VERBOSE) {
+      console.log('WhisperService stopped')
+    }
     this.emit('stopped')
   }
 

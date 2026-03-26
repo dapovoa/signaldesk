@@ -65,7 +65,7 @@ export function TranscriptPanel(): React.JSX.Element {
                 <span className="min-w-[22px] pt-0.5 font-mono text-[11px] text-dark-500">
                   {index + 1}.
                 </span>
-                <p className="flex-1 leading-5 text-dark-200">{transcript.text}</p>
+                <p className="reading-font flex-1 leading-5 text-dark-200">{transcript.text}</p>
               </div>
             ))}
 
@@ -74,7 +74,7 @@ export function TranscriptPanel(): React.JSX.Element {
                 <span className="min-w-[22px] pt-0.5 font-mono text-[11px] text-cyan-300">
                   {transcripts.length + 1}.
                 </span>
-                <p className="flex-1 leading-5 text-dark-200">
+                <p className="reading-font flex-1 leading-5 text-dark-200">
                   {currentTranscript}
                   <span className="inline-block w-0.5 h-4 bg-blue-400 ml-1 animate-pulse align-middle" />
                 </p>
