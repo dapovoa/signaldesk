@@ -54,6 +54,23 @@ npm run build:mac
 
 Artifacts are written to `dist/`.
 
+Linux build naming:
+
+```bash
+npm run build:linux
+```
+
+- normal local build
+- example: `signaldesk_amd64.deb`
+
+```bash
+npm run build:linux:release -- 0.0.3
+```
+
+- release build with explicit version
+- updates `package.json` and `package-lock.json` to that version
+- examples: `signaldesk_0.0.3_amd64.deb`, `signaldesk_0.0.3.AppImage`
+
 ## Providers
 
 ### Transcription providers

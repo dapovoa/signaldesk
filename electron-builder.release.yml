@@ -1,0 +1,10 @@
+extends: ./electron-builder.yml
+
+appImage:
+  artifactName: ${name}_${version}.${ext}
+
+deb:
+  artifactName: ${name}_${version}_${arch}.${ext}
+
+snap:
+  artifactName: ${name}_${version}.${ext}
