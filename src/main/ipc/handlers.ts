@@ -37,6 +37,7 @@ let isCapturing = false
 let isGeneratingAnswer = false
 let isClassifyingQuestion = false
 let lastModelQuestionClassificationAt = 0
+let lastTranscriptActivityAt = 0
 let utteranceDebounceTimer: NodeJS.Timeout | null = null
 let pendingQuestionTimer: NodeJS.Timeout | null = null
 let pendingQuestionBase: string | null = null
@@ -44,6 +45,7 @@ let pendingQuestionFragments: string[] = []
 let isWaylandSession = false
 const QUESTION_FOLLOW_UP_WINDOW_MS = 700
 const QUESTION_FINALIZE_AFTER_UTTERANCE_MS = 350
+const QUESTION_FINALIZE_AFTER_COMPOUND_UTTERANCE_MS = 900
 const SUPPRESS_STALE_NO_QUESTION_MS = 4000
 let lastAnswerCompletedAt = 0
 const OPENAI_OAUTH_MODELS = [
@@ -312,6 +314,11 @@ const restartPendingQuestionTimer = (delayMs = QUESTION_FOLLOW_UP_WINDOW_MS): vo
     })
   }, delayMs)
 }
+
+const getPendingFinalizeDelay = (): number =>
+  pendingQuestionFragments.length > 0
+    ? QUESTION_FINALIZE_AFTER_COMPOUND_UTTERANCE_MS
+    : QUESTION_FINALIZE_AFTER_UTTERANCE_MS
 
 const getModelClassifierPrompt = (): string => `
 Classify whether the interviewer turn requires the candidate to answer now.
@@ -1089,14 +1096,23 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         if (!isCapturing) {
           return
         }
+        lastTranscriptActivityAt = Date.now()
         console.log('[Pipeline] transcript received:', {
           text: event.text,
           isFinal: event.isFinal
         })
         mainWindow?.webContents.send('transcript', event)
 
-        if (pendingQuestionTimer && event.isFinal) {
-          pendingQuestionFragments.push(event.text.trim())
+        if (utteranceDebounceTimer) {
+          clearTimeout(utteranceDebounceTimer)
+          utteranceDebounceTimer = null
+          console.log('[Pipeline] canceled pending detector debounce due to continued speech')
+        }
+
+        if (pendingQuestionTimer) {
+          if (event.isFinal && event.text.trim()) {
+            pendingQuestionFragments.push(event.text.trim())
+          }
           restartPendingQuestionTimer()
           return
         }
@@ -1123,7 +1139,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         }
         if (pendingQuestionTimer) {
           console.log('[Pipeline] utterance end -> finalize pending question')
-          restartPendingQuestionTimer(QUESTION_FINALIZE_AFTER_UTTERANCE_MS)
+          restartPendingQuestionTimer(getPendingFinalizeDelay())
           mainWindow?.webContents.send('utterance-end')
           return
         }
@@ -1143,10 +1159,16 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
             }
 
             isClassifyingQuestion = true
+            const classifierStartedAt = Date.now()
             try {
               const turnText = questionDetector.getCurrentBuffer()
               if (!turnText) {
                 questionDetector.clearBuffer()
+                return
+              }
+
+               if (lastTranscriptActivityAt > classifierStartedAt) {
+                console.log('[Pipeline] detector skipped because speech resumed before classification')
                 return
               }
 
@@ -1159,6 +1181,10 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
               }
 
               const classifierResult = await classifyTurnWithModel(turnText)
+              if (lastTranscriptActivityAt > classifierStartedAt) {
+                console.log('[Pipeline] classifier result ignored because newer speech arrived')
+                return
+              }
               if (classifierResult.supported) {
                 questionDetector.clearBuffer()
                 if (classifierResult.detection) {
