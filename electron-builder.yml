@@ -40,7 +40,11 @@ linux:
     - deb
   category: Utility
 appImage:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${name}.${ext}
+deb:
+  artifactName: ${name}_${arch}.${ext}
+snap:
+  artifactName: ${name}.${ext}
 npmRebuild: false
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/
