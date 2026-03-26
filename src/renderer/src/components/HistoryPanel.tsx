@@ -255,7 +255,7 @@ export function HistoryPanel({ onClose }: HistoryPanelProps): React.JSX.Element 
                     Output cut short by the model token limit.
                   </p>
                 )}
-                <div className="max-w-none text-[16px] leading-7 text-dark-100">
+                <div className="reading-font max-w-none text-[16px] font-normal leading-7 tracking-[0.01em] text-dark-100">
                   <MarkdownRenderer content={entry.answer} />
                 </div>
               </div>

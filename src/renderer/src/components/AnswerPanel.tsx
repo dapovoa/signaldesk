@@ -137,7 +137,7 @@ export function AnswerPanel(): React.JSX.Element {
                     </p>
                   )}
                   {currentAnswer ? (
-                    <p className="whitespace-pre-wrap text-[16px] leading-7 text-dark-100">
+                    <p className="reading-font whitespace-pre-wrap text-[16px] font-normal leading-7 tracking-[0.01em] text-dark-100">
                       {currentAnswer}
                       <span className="ml-1 inline-block h-4 w-0.5 animate-pulse bg-cyan-300" />
                     </p>
@@ -204,7 +204,7 @@ export function AnswerPanel(): React.JSX.Element {
                         Output cut short by the model token limit.
                       </p>
                     )}
-                    <div className="max-w-none text-[16px] leading-7 text-dark-100">
+                    <div className="reading-font max-w-none text-[16px] font-normal leading-7 tracking-[0.01em] text-dark-100">
                       <MarkdownRenderer content={answer.answer} />
                     </div>
                   </div>

@@ -68,7 +68,7 @@ function CodeBlock({
 
 export function MarkdownRenderer({ content }: MarkdownRendererProps): React.JSX.Element {
   return (
-    <div className="markdown-content">
+    <div className="markdown-content text-inherit font-normal leading-inherit tracking-inherit">
       <ReactMarkdown
         components={{
           // Headings
@@ -92,16 +92,24 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps): React.JSX.
           ),
           // Paragraphs
           p: ({ ...props }) => (
-            <p className="mb-2 text-inherit text-dark-100 last:mb-0" {...props} />
+            <p className="mb-2 text-inherit font-inherit leading-inherit tracking-inherit text-dark-100 last:mb-0" {...props} />
           ),
           // Lists
           ul: ({ ...props }) => (
-            <ul className="mb-2 ml-4 list-inside list-disc space-y-1 text-inherit text-dark-100" {...props} />
+            <ul
+              className="mb-2 ml-4 list-inside list-disc space-y-1 text-inherit font-inherit leading-inherit tracking-inherit text-dark-100"
+              {...props}
+            />
           ),
           ol: ({ ...props }) => (
-            <ol className="mb-2 ml-4 list-inside list-decimal space-y-1 text-inherit text-dark-100" {...props} />
+            <ol
+              className="mb-2 ml-4 list-inside list-decimal space-y-1 text-inherit font-inherit leading-inherit tracking-inherit text-dark-100"
+              {...props}
+            />
           ),
-          li: ({ ...props }) => <li className="text-inherit text-dark-100" {...props} />,
+          li: ({ ...props }) => (
+            <li className="text-inherit font-inherit leading-inherit tracking-inherit text-dark-100" {...props} />
+          ),
           // Code blocks
           code: ({ className, children, ...props }) => {
             const match = /language-(\w+)/.exec(className || '')
@@ -123,7 +131,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps): React.JSX.
           // Blockquotes
           blockquote: ({ ...props }) => (
             <blockquote
-              className="my-2 border-l-2 border-cyan-400/30 bg-cyan-400/5 py-1 pl-3 text-inherit italic text-dark-200"
+              className="my-2 border-l-2 border-cyan-400/30 bg-cyan-400/5 py-1 pl-3 text-inherit font-inherit leading-inherit tracking-inherit italic text-dark-200"
               {...props}
             />
           ),
@@ -158,7 +166,10 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps): React.JSX.
             />
           ),
           td: ({ ...props }) => (
-            <td className="border border-dark-700/50 px-3 py-2 text-inherit text-dark-100" {...props} />
+            <td
+              className="border border-dark-700/50 px-3 py-2 text-inherit font-inherit leading-inherit tracking-inherit text-dark-100"
+              {...props}
+            />
           )
         }}
       >
