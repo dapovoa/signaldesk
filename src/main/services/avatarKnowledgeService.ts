@@ -18,6 +18,7 @@ export class AvatarKnowledgeService {
   private ingestion: AvatarIngestionService | null
   private retrieval: AvatarRetrievalService | null
   private initPromise: Promise<void> | null = null
+  private refreshPromise: Promise<void> | null = null
   private lastRefreshAt = 0
   private readonly databasePath: string
   private lastError: string | null = null
@@ -157,13 +158,18 @@ export class AvatarKnowledgeService {
 
     await this.initialize()
 
-    if (Date.now() - this.lastRefreshAt >= REFRESH_INTERVAL_MS) {
-      try {
-        await this.ingestion.syncSourceDirectory()
-        this.lastRefreshAt = Date.now()
-      } catch (error) {
-        console.warn('[AvatarKnowledge] periodic source sync failed:', error)
-      }
+    if (Date.now() - this.lastRefreshAt >= REFRESH_INTERVAL_MS && !this.refreshPromise) {
+      this.refreshPromise = this.ingestion
+        .syncSourceDirectory()
+        .then(() => {
+          this.lastRefreshAt = Date.now()
+        })
+        .catch((error) => {
+          console.warn('[AvatarKnowledge] periodic source sync failed:', error)
+        })
+        .finally(() => {
+          this.refreshPromise = null
+        })
     }
 
     return this.retrieval.buildContextPack(question)

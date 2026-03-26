@@ -43,11 +43,29 @@ let pendingQuestionTimer: NodeJS.Timeout | null = null
 let pendingQuestionBase: string | null = null
 let pendingQuestionFragments: string[] = []
 let isWaylandSession = false
-const QUESTION_FOLLOW_UP_WINDOW_MS = 700
+const QUESTION_FOLLOW_UP_WINDOW_MS = 500
 const QUESTION_FINALIZE_AFTER_UTTERANCE_MS = 350
 const QUESTION_FINALIZE_AFTER_COMPOUND_UTTERANCE_MS = 900
 const SUPPRESS_STALE_NO_QUESTION_MS = 4000
 let lastAnswerCompletedAt = 0
+
+interface AnswerTimingTrace {
+  utteranceEndAt: number | null
+  debounceElapsedAt: number | null
+  classifierTriggeredAt: number | null
+  answerRequestedAt: number | null
+  ragReadyAt: number | null
+  firstStreamAt: number | null
+}
+
+let answerTimingTrace: AnswerTimingTrace = {
+  utteranceEndAt: null,
+  debounceElapsedAt: null,
+  classifierTriggeredAt: null,
+  answerRequestedAt: null,
+  ragReadyAt: null,
+  firstStreamAt: null
+}
 const OPENAI_OAUTH_MODELS = [
   'gpt-5.4',
   'gpt-5.4-mini',
@@ -62,6 +80,56 @@ const isNotFoundError = (error: unknown): boolean => {
   if (!error) return false
   const msg = error instanceof Error ? error.message : String(error)
   return msg.includes('404') || msg.toLowerCase().includes('not found')
+}
+
+const resetAnswerTimingTrace = (): void => {
+  answerTimingTrace = {
+    utteranceEndAt: null,
+    debounceElapsedAt: null,
+    classifierTriggeredAt: null,
+    answerRequestedAt: null,
+    ragReadyAt: null,
+    firstStreamAt: null
+  }
+}
+
+const formatTimingDelta = (from: number | null, to: number | null): string | null => {
+  if (!from || !to) return null
+  return `${to - from}ms`
+}
+
+const logAnswerTimingSummary = (stage: 'complete' | 'error'): void => {
+  console.log('[Timing] answer path:', {
+    stage,
+    utteranceToDebounce: formatTimingDelta(
+      answerTimingTrace.utteranceEndAt,
+      answerTimingTrace.debounceElapsedAt
+    ),
+    debounceToClassifier: formatTimingDelta(
+      answerTimingTrace.debounceElapsedAt,
+      answerTimingTrace.classifierTriggeredAt
+    ),
+    classifierToAnswerRequest: formatTimingDelta(
+      answerTimingTrace.classifierTriggeredAt,
+      answerTimingTrace.answerRequestedAt
+    ),
+    answerRequestToRagReady: formatTimingDelta(
+      answerTimingTrace.answerRequestedAt,
+      answerTimingTrace.ragReadyAt
+    ),
+    ragReadyToFirstStream: formatTimingDelta(
+      answerTimingTrace.ragReadyAt,
+      answerTimingTrace.firstStreamAt
+    ),
+    answerRequestToFirstStream: formatTimingDelta(
+      answerTimingTrace.answerRequestedAt,
+      answerTimingTrace.firstStreamAt
+    ),
+    totalFromUtteranceToFirstStream: formatTimingDelta(
+      answerTimingTrace.utteranceEndAt,
+      answerTimingTrace.firstStreamAt
+    )
+  })
 }
 
 const getProviderConfig = (settings: AppSettings) => {
@@ -348,7 +416,6 @@ const shouldRunModelClassifier = (turnText: string): boolean => {
     return false
   }
 
-  lastModelQuestionClassificationAt = now
   return true
 }
 
@@ -509,6 +576,7 @@ const generateAnswerForQuestion = async (questionText: string): Promise<void> =>
     throw new Error('No question text provided')
   }
 
+  answerTimingTrace.answerRequestedAt = Date.now()
   isGeneratingAnswer = true
   mainWindow?.webContents.send('question-detected', {
     text: trimmedQuestion,
@@ -519,6 +587,7 @@ const generateAnswerForQuestion = async (questionText: string): Promise<void> =>
   try {
     const profile = avatarProfileManager?.getProfile()
     const avatarContext = await avatarKnowledgeService?.buildContextPack(trimmedQuestion)
+    answerTimingTrace.ragReadyAt = Date.now()
     logAvatarContext(trimmedQuestion, avatarContext)
     await openaiService.generateAnswer(trimmedQuestion, {
       identityBase: profile ? buildIdentityBase(profile) : '',
@@ -1070,6 +1139,9 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
       // Set up OpenAI event listeners ONCE
       openaiService.on('stream', (chunk) => {
+        if (!answerTimingTrace.firstStreamAt) {
+          answerTimingTrace.firstStreamAt = Date.now()
+        }
         console.log('[Pipeline] answer-stream chunk:', chunk.slice(0, 80))
         mainWindow?.webContents.send('answer-stream', chunk)
       })
@@ -1077,6 +1149,8 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       openaiService.on('complete', (answer) => {
         isGeneratingAnswer = false
         lastAnswerCompletedAt = Date.now()
+        logAnswerTimingSummary('complete')
+        resetAnswerTimingTrace()
         console.log('[Pipeline] answer-complete:', answer.slice(0, 160))
         mainWindow?.webContents.send('answer-complete', answer)
       })
@@ -1088,6 +1162,8 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
       openaiService.on('error', (error) => {
         isGeneratingAnswer = false
+        logAnswerTimingSummary('error')
+        resetAnswerTimingTrace()
         console.error('[Pipeline] answer-error event:', error)
       })
 
@@ -1137,6 +1213,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         if (!isCapturing) {
           return
         }
+        answerTimingTrace.utteranceEndAt = Date.now()
         if (pendingQuestionTimer) {
           console.log('[Pipeline] utterance end -> finalize pending question')
           restartPendingQuestionTimer(getPendingFinalizeDelay())
@@ -1152,6 +1229,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           if (!questionDetector) return
 
           void (async () => {
+            answerTimingTrace.debounceElapsedAt = Date.now()
             console.log('[Pipeline] debounce elapsed -> detector')
             if (isClassifyingQuestion) {
               console.log('[Pipeline] classifier busy, skipping this cycle')
@@ -1185,7 +1263,9 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
                 console.log('[Pipeline] classifier result ignored because newer speech arrived')
                 return
               }
+              lastModelQuestionClassificationAt = Date.now()
               if (classifierResult.supported) {
+                answerTimingTrace.classifierTriggeredAt = Date.now()
                 questionDetector.clearBuffer()
                 if (classifierResult.detection) {
                   console.log('[Pipeline] model classifier triggered:', classifierResult.detection)
@@ -1251,6 +1331,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
   ipcMain.handle('stop-capture', async () => {
     isCapturing = false
     lastAnswerCompletedAt = 0
+    resetAnswerTimingTrace()
     isGeneratingAnswer = false
     clearPendingQuestionState()
     if (utteranceDebounceTimer) {
