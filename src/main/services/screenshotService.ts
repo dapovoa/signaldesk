@@ -79,7 +79,6 @@ export class ScreenshotService {
         }
       }
 
-      console.log('Capturing saved source:', matchedSource.name)
       return {
         success: true,
         imageData: matchedSource.thumbnail.toDataURL(),
@@ -112,11 +111,6 @@ export class ScreenshotService {
           error: 'No windows available to capture'
         }
       }
-
-      console.log(
-        'Available windows:',
-        sources.map((s) => s.name)
-      )
 
       const appWindowPatterns = [
         'SignalDesk',
@@ -154,8 +148,6 @@ export class ScreenshotService {
       })
 
       const activeSource = browserSource || filteredSources[0]
-
-      console.log('Capturing window:', activeSource.name)
 
       if (!activeSource || activeSource.thumbnail.isEmpty()) {
         return {
@@ -202,7 +194,6 @@ export class ScreenshotService {
       }
 
       const activeSource = usableSources[0]
-      console.log('Capturing screen fallback:', activeSource.name)
 
       return {
         success: true,

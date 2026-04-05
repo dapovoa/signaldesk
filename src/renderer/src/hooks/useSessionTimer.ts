@@ -67,11 +67,7 @@ async function callSessionApi(elapsedTimeMs: number): Promise<void> {
       timestamp: Date.now()
     }
 
-    const result = await window.api.callSessionApi(payload)
-
-    if (result.success) {
-      console.log('Session API called successfully after 10 minutes')
-    }
+    await window.api.callSessionApi(payload)
   } catch (error) {
     console.error('Failed to call session API:', error)
   }

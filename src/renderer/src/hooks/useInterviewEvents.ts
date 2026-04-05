@@ -53,8 +53,6 @@ export function useInterviewEvents() {
     }
     listenersSetUp.current = true
 
-    console.log('Setting up IPC event listeners (once)')
-
     const unsubTranscript = window.api.onTranscript((event) => {
       if (event.isFinal) {
         addTranscript({
@@ -125,12 +123,10 @@ export function useInterviewEvents() {
     })
 
     const unsubQuestionDetectedFromImage = window.api.onQuestionDetectedFromImage((question) => {
-      console.log('Question detected from screenshot:', question.text)
       setCurrentQuestion(question.text)
     })
 
     const unsubScreenshotNoQuestion = window.api.onScreenshotNoQuestion((data) => {
-      console.log('No question detected in screenshot:', data.message)
       setError(data.message)
     })
 
@@ -139,7 +135,6 @@ export function useInterviewEvents() {
     })
 
     return () => {
-      console.log('Cleaning up IPC event listeners')
       unsubTranscript()
       unsubSpeechStarted()
       unsubUtteranceEnd()

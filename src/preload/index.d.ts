@@ -83,6 +83,11 @@ export interface AudioSource {
   thumbnail: string
 }
 
+export interface AudioSourceSelectionResult {
+  sources: AudioSource[]
+  canceled: boolean
+}
+
 export interface AnswerEntry {
   id: string
   question: string
@@ -153,7 +158,7 @@ export interface Api {
   stopCapture: () => Promise<{ success: boolean }>
   getCaptureStatus: () => Promise<boolean>
   sendAudioData: (audioData: ArrayBuffer) => void
-  getAudioSources: () => Promise<AudioSource[]>
+  getAudioSources: () => Promise<AudioSourceSelectionResult>
 
   // Window controls
   setAlwaysOnTop: (value: boolean) => Promise<boolean>

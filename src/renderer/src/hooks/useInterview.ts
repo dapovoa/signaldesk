@@ -42,9 +42,14 @@ export function useInterview() {
   const startInterview = useCallback(
     async () => {
       setError(null)
-      clearAll()
       try {
-        await startAudioCapture()
+        const started = await startAudioCapture()
+        if (!started) {
+          setCapturing(false)
+          return
+        }
+
+        clearAll()
         setCapturing(true)
       } catch (err) {
         setCapturing(false)

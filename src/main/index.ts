@@ -1,3 +1,4 @@
+import './services/consoleFilter'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import { app, BrowserWindow, nativeImage, session, shell } from 'electron'
 import { existsSync } from 'fs'

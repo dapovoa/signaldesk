@@ -5,7 +5,7 @@ interface UseAudioCaptureReturn {
   isCapturing: boolean
   error: string | null
   audioSource: 'system'
-  startCapture: (sourceId?: string) => Promise<void>
+  startCapture: (sourceId?: string) => Promise<boolean>
   stopCapture: () => Promise<void>
 }
 
@@ -18,7 +18,7 @@ export function useAudioCapture(): UseAudioCaptureReturn {
     const raw = err instanceof Error ? err.message : String(err || fallback)
 
     if (raw.includes("Error invoking remote method 'get-audio-sources'")) {
-      return 'Desktop audio source not available.'
+      return raw.replace(/^Error invoking remote method 'get-audio-sources':\s*/, '')
     }
 
     if (raw.includes("Error invoking remote method 'start-capture'")) {
@@ -30,6 +30,20 @@ export function useAudioCapture(): UseAudioCaptureReturn {
     }
 
     return raw
+  }
+
+  const isCaptureCancellation = (message: string): boolean => {
+    const lower = message.toLowerCase()
+
+    return (
+      lower.includes('audio source selection canceled') ||
+      lower.includes('audio source selection cancelled') ||
+      lower.includes('permission dismissed') ||
+      lower.includes('user canceled') ||
+      lower.includes('user cancelled') ||
+      lower.includes('selection canceled') ||
+      lower.includes('selection cancelled')
+    )
   }
 
   const getSpeakerMonitorDeviceId = useCallback(async (): Promise<string | undefined> => {
@@ -61,7 +75,7 @@ export function useAudioCapture(): UseAudioCaptureReturn {
   }, [])
 
   const startCapture = useCallback(
-    async (sourceId?: string) => {
+    async (sourceId?: string): Promise<boolean> => {
       try {
         setError(null)
 
@@ -77,11 +91,15 @@ export function useAudioCapture(): UseAudioCaptureReturn {
         // Preferred path: capture from speaker monitor/loopback device.
         const monitorDeviceId = sourceId || (await getSpeakerMonitorDeviceId())
         if (monitorDeviceId) {
-          console.log('Starting speaker monitor capture with device:', monitorDeviceId)
           await audioServiceRef.current.startSpeakerMonitorCapture(monitorDeviceId)
         } else {
           // Fallback path for systems where loopback monitor isn't exposed.
-          const sources = await window.api.getAudioSources()
+          const sourceSelection = await window.api.getAudioSources()
+          if (sourceSelection.canceled) {
+            return false
+          }
+
+          const sources = sourceSelection.sources
           if (sources.length === 0) {
             throw new Error(
               'No speaker monitor device found. Configure a monitor/loopback audio input in PipeWire/PulseAudio.'
@@ -95,27 +113,36 @@ export function useAudioCapture(): UseAudioCaptureReturn {
               s.name.toLowerCase() === 'screen'
           )
           const targetSourceId = screenSource ? screenSource.id : sources[0].id
-          console.log('Fallback: starting desktop system audio capture with source:', targetSourceId)
           await audioServiceRef.current.startSystemAudioCapture(targetSourceId)
         }
 
         setIsCapturing(true)
+        return true
       } catch (err) {
         const message = cleanErrorMessage(err, 'Failed to start capture')
-        setError(message)
-        console.error('Audio capture error:', err)
+        const canceled = isCaptureCancellation(message)
+
+        if (canceled) {
+          setError(null)
+        } else {
+          setError(message)
+          console.error('Audio capture error:', err)
+        }
 
         // Clean up on error
         if (audioServiceRef.current) {
           await audioServiceRef.current.stop()
           audioServiceRef.current = null
         }
+        setIsCapturing(false)
 
         try {
           await window.api.stopCapture()
         } catch {
           // Ignore stop errors
         }
+
+        return false
       }
     },
     [getSpeakerMonitorDeviceId]

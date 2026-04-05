@@ -103,14 +103,12 @@ If you find ANY of these, respond with JSON where isQuestion=true and include th
         }
 
         if (!content.trim()) {
-          console.log('Vision API returned empty content')
           return {
             isQuestion: false,
             confidence: 0
           }
         }
 
-        console.log('Vision API response:', content.substring(0, 200))
         return this.parseVisionOutput(content)
       }
 
@@ -169,14 +167,12 @@ If you find ANY of these, respond with JSON where isQuestion=true and include th
 
       const content = response.choices[0]?.message?.content
       if (!content) {
-        console.log('Vision API returned empty content')
         return {
           isQuestion: false,
           confidence: 0
         }
       }
 
-      console.log('Vision API response:', content.substring(0, 200))
       return this.parseVisionOutput(content)
     } catch (error) {
       console.error('Vision analysis error:', error)
@@ -199,12 +195,6 @@ If you find ANY of these, respond with JSON where isQuestion=true and include th
       }
 
       const parsed = JSON.parse(cleanedContent)
-      console.log('Parsed vision result:', {
-        isQuestion: parsed.isQuestion,
-        hasQuestionText: !!parsed.questionText,
-        questionType: parsed.questionType,
-        confidence: parsed.confidence
-      })
 
       const result = {
         isQuestion: parsed.isQuestion === true || parsed.isQuestion === 'true',
@@ -223,9 +213,6 @@ If you find ANY of these, respond with JSON where isQuestion=true and include th
 
       return result
     } catch (parseError) {
-      console.error('Failed to parse JSON response:', parseError)
-      console.log('Raw content:', content)
-
       // If not JSON, try to extract information from text
       const lowerContent = content.toLowerCase()
       const isQuestion =

@@ -169,9 +169,13 @@ export class AvatarKnowledgeService {
         .syncSourceDirectory()
         .then(() => {
           this.lastRefreshAt = Date.now()
+          this.lastError = null
         })
         .catch((error) => {
-          console.warn('[AvatarKnowledge] periodic source sync failed:', error)
+          this.lastError = error instanceof Error ? error.message : 'Avatar sync failed'
+          if (AVATAR_VERBOSE_LOGS) {
+            console.warn('[AvatarKnowledge] periodic source sync failed:', error)
+          }
         })
         .finally(() => {
           this.refreshPromise = null

@@ -699,9 +699,11 @@ export class OpenAIService extends EventEmitter {
               throw error
             }
 
-            console.warn(
-              '[OpenAIService] Responses API unavailable for current credentials; falling back to chat.completions'
-            )
+            if (OPENAI_VERBOSE_LOGS) {
+              console.warn(
+                '[OpenAIService] Responses API unavailable for current credentials; falling back to chat.completions'
+              )
+            }
             return await this.streamAnswerWithChatCompletions(messages, options)
           }
         }
@@ -892,7 +894,9 @@ export class OpenAIService extends EventEmitter {
   }
 
   private emitTruncated(event: OpenAITruncatedEvent): void {
-    console.warn('[OpenAIService] response truncated:', event)
+    if (OPENAI_VERBOSE_LOGS) {
+      console.warn('[OpenAIService] response truncated:', event)
+    }
     this.emit('truncated', event)
   }
 

@@ -185,9 +185,11 @@ export class WhisperService extends EventEmitter {
     const bufferTooLarge = bufferDuration >= this.MAX_BUFFER_DURATION_MS
 
     if ((hasEnoughAudio && hasSilence) || bufferTooLarge) {
-      console.log(
-        `===> Processing: ${(bufferDuration / 1000).toFixed(2)}s audio, ${(timeSinceLastAudio / 1000).toFixed(2)}s since last audio`
-      )
+      if (WHISPER_VERBOSE) {
+        console.log(
+          `===> Processing: ${(bufferDuration / 1000).toFixed(2)}s audio, ${(timeSinceLastAudio / 1000).toFixed(2)}s since last audio`
+        )
+      }
       this.processAudioBuffer()
     }
   }
@@ -204,7 +206,9 @@ export class WhisperService extends EventEmitter {
     // Skip if audio is too short
     const durationMs = (combinedBuffer.length / this.BYTES_PER_SAMPLE / this.SAMPLE_RATE) * 1000
     if (durationMs < this.MIN_AUDIO_DURATION_MS) {
-      console.log(`===> Skipping: audio too short (${(durationMs / 1000).toFixed(2)}s)`)
+      if (WHISPER_VERBOSE) {
+        console.log(`===> Skipping: audio too short (${(durationMs / 1000).toFixed(2)}s)`)
+      }
       this.isProcessing = false
       return
     }
@@ -218,7 +222,9 @@ export class WhisperService extends EventEmitter {
       tempFile = path.join(os.tmpdir(), `whisper_${Date.now()}.wav`)
       fs.writeFileSync(tempFile, wavBuffer)
 
-      console.log(`===> Sending ${(durationMs / 1000).toFixed(2)}s of audio to transcription API...`)
+      if (WHISPER_VERBOSE) {
+        console.log(`===> Sending ${(durationMs / 1000).toFixed(2)}s of audio to transcription API...`)
+      }
 
       // Send to Whisper API
       const transcription = await this.transcribeWithRetry(tempFile)
@@ -228,9 +234,13 @@ export class WhisperService extends EventEmitter {
       if (text && text.length > 0) {
         // Filter out common noise transcriptions
         if (this.isNoise(text)) {
-          console.log(`Filtered noise: "${text}"`)
+          if (WHISPER_VERBOSE) {
+            console.log(`Filtered noise: "${text}"`)
+          }
         } else {
-          console.log(`Transcription: "${text}"`)
+          if (WHISPER_VERBOSE) {
+            console.log(`Transcription: "${text}"`)
+          }
 
           const event: TranscriptEvent = {
             text: text,

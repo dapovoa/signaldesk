@@ -136,6 +136,24 @@ const isNotFoundError = (error: unknown): boolean => {
   return msg.includes('404') || msg.toLowerCase().includes('not found')
 }
 
+const isAudioSourceSelectionCanceled = (error: unknown): boolean => {
+  const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error || '')
+  const lower = message.toLowerCase()
+
+  return (
+    lower.includes('screencastportal') ||
+    lower.includes('failed to start the screen cast session') ||
+    lower.includes('failed to get sources') ||
+    lower.includes('unknown error occurred') ||
+    lower.includes('aborterror') ||
+    lower.includes('permission dismissed') ||
+    lower.includes('user canceled') ||
+    lower.includes('user cancelled') ||
+    lower.includes('selection canceled') ||
+    lower.includes('selection cancelled')
+  )
+}
+
 const resetAnswerTimingTrace = (): void => {
   answerTimingTrace = {
     utteranceEndAt: null,
@@ -677,21 +695,27 @@ const classifyTurnWithModel = async (turnText: string): Promise<ModelClassifierR
 
     const parsed = extractClassifierJson(rawOutput)
     if (!parsed) {
-      console.warn('[QuestionClassifier] invalid model JSON output')
+      if (PIPELINE_VERBOSE) {
+        console.warn('[QuestionClassifier] invalid model JSON output')
+      }
       return { supported: false, detection: null }
     }
 
     if (!parsed.shouldAnswer || parsed.questionType === 'none') {
-      console.log('[QuestionClassifier] model classified as non-question:', {
-        confidence: parsed.confidence
-      })
+      if (PIPELINE_VERBOSE) {
+        console.log('[QuestionClassifier] model classified as non-question:', {
+          confidence: parsed.confidence
+        })
+      }
       return { supported: true, detection: null }
     }
 
     if (parsed.confidence < MODEL_CLASSIFIER_THRESHOLD) {
-      console.log('[QuestionClassifier] model confidence below threshold:', {
-        confidence: parsed.confidence
-      })
+      if (PIPELINE_VERBOSE) {
+        console.log('[QuestionClassifier] model confidence below threshold:', {
+          confidence: parsed.confidence
+        })
+      }
       return { supported: true, detection: null }
     }
 
@@ -704,7 +728,9 @@ const classifyTurnWithModel = async (turnText: string): Promise<ModelClassifierR
       }
     }
   } catch (error) {
-    console.warn('[QuestionClassifier] model classifier unavailable, using heuristic fallback:', error)
+    if (PIPELINE_VERBOSE) {
+      console.warn('[QuestionClassifier] model classifier unavailable, using heuristic fallback:', error)
+    }
     return { supported: false, detection: null }
   }
 }
@@ -794,7 +820,9 @@ const attachOpenAIServiceListeners = (service: OpenAIService): void => {
       return
     }
 
-    console.warn('[Pipeline] answer truncated by max token limit')
+    if (PIPELINE_VERBOSE) {
+      console.warn('[Pipeline] answer truncated by max token limit')
+    }
     mainWindow?.webContents.send('answer-truncated')
   })
 
@@ -1044,7 +1072,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         return { success: true, models }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Failed to fetch models'
-        console.error('Error fetching models:', errorMessage)
         return { success: false, error: errorMessage, models: [] }
       }
     }
@@ -1095,7 +1122,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         return { success: true, models }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Failed to fetch Ollama models'
-        console.error('Error fetching Ollama embedding models:', errorMessage)
         return { success: false, error: errorMessage, models: [] as Array<{ id: string; name: string }> }
       }
     }
@@ -1555,14 +1581,24 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         fetchWindowIcons: true
       })
 
-      return sources.map((source) => ({
-        id: source.id,
-        name: source.name,
-        thumbnail: source.thumbnail.toDataURL()
-      }))
+      return {
+        sources: sources.map((source) => ({
+          id: source.id,
+          name: source.name,
+          thumbnail: source.thumbnail.toDataURL()
+        })),
+        canceled: false
+      }
     } catch (error) {
-      console.error('Failed to get audio sources:', error)
-      throw new Error('Desktop audio source not available.')
+      if (!isAudioSourceSelectionCanceled(error)) {
+        console.error('Failed to get audio sources:', error)
+        throw new Error('Desktop audio source not available.')
+      }
+
+      return {
+        sources: [],
+        canceled: true
+      }
     }
   })
 
@@ -1705,7 +1741,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         }
 
         const result = await response.json()
-        console.log('Session API called successfully:', result)
         return { success: true, data: result }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Failed to call session API'
@@ -1773,17 +1808,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       }
       attachOpenAIServiceListeners(openaiService)
 
-      // Analyze screenshot for interview question
-      console.log('Analyzing screenshot for interview question...')
       const analysis = await visionService.analyzeScreenshot(imageData)
-
-      console.log('Analysis result:', {
-        isQuestion: analysis.isQuestion,
-        hasQuestionText: !!analysis.questionText,
-        questionTextLength: analysis.questionText?.length || 0,
-        questionType: analysis.questionType,
-        confidence: analysis.confidence
-      })
 
       // Check if question is detected - be more lenient
       if (analysis.isQuestion) {
@@ -1791,9 +1816,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         const questionText = analysis.questionText?.trim() || 'Interview question from screenshot'
         const profile = avatarProfileManager?.getProfile()
         const avatarContext = await avatarKnowledgeService?.buildContextPack(questionText)
-
-        console.log('Question detected:', questionText.substring(0, 100))
-        console.log('Question type:', analysis.questionType)
 
         // Send question detected event
         mainWindow?.webContents.send('question-detected-from-image', {
@@ -1842,7 +1864,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           analysis.questionText &&
           analysis.questionText.trim().length > 20
         ) {
-          console.log('Moderate-confidence question text found, attempting answer generation...')
           const questionText = analysis.questionText?.trim() || 'Technical problem from screenshot'
           const profile = avatarProfileManager?.getProfile()
           const avatarContext = await avatarKnowledgeService?.buildContextPack(questionText)
@@ -1881,12 +1902,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
             // Fall through to no question message
           }
         }
-
-        console.log('No question detected. Analysis:', {
-          isQuestion: analysis.isQuestion,
-          confidence: analysis.confidence,
-          hasQuestionText: !!analysis.questionText
-        })
 
         mainWindow?.webContents.send('screenshot-no-question', {
           message:

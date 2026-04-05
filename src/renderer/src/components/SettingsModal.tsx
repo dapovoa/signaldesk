@@ -308,9 +308,19 @@ export function SettingsModal(): React.ReactNode | null {
         ? localSettings.llmOauthToken?.trim()
         : localSettings.llmApiKey?.trim()
     const baseURL = localSettings.llmBaseUrl?.trim()
+
+    if (provider === 'openai-oauth' && oauthStatus === 'ok') {
+      setOauthStatus('idle')
+      setOauthMessage('')
+    }
+
     if (!credential) {
       setConnectionStatus('error')
-      setConnectionMessage('Credential is required before testing the connection.')
+      setConnectionMessage(
+        provider === 'openai-oauth'
+          ? 'Connect via browser before testing the OAuth provider.'
+          : 'Credential is required before testing the connection.'
+      )
       return
     }
 
@@ -399,6 +409,10 @@ export function SettingsModal(): React.ReactNode | null {
   const hasStoredOAuthSession = Boolean(
     localSettings.llmOauthToken || localSettings.llmOauthRefreshToken
   )
+  const usesManualCredentialInput = localSettings.llmProvider !== 'openai-oauth'
+  const usesOAuthCredential =
+    localSettings.llmProvider === 'openai-oauth' ||
+    (localSettings.llmProvider === 'openai' && localSettings.llmAuthMode === 'oauth-token')
 
   const handleConnectOpenAI = async (): Promise<void> => {
     try {
@@ -700,23 +714,52 @@ export function SettingsModal(): React.ReactNode | null {
               </div>
             )}
 
-            <label className="block text-sm font-medium text-dark-200">
-              {localSettings.llmProvider === 'openai-oauth' ||
-              (localSettings.llmProvider === 'openai' &&
-                localSettings.llmAuthMode === 'oauth-token')
-                ? 'OAuth Token'
-                : 'API Key'}
-              {localSettings.llmProvider === 'openai' && localSettings.llmAuthMode === 'api-key' && (
-                <a
-                  href="https://platform.openai.com/api-keys"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ml-2 text-xs text-blue-400 hover:underline"
-                >
-                  Dashboard →
-                </a>
-              )}
-            </label>
+            {usesManualCredentialInput && (
+              <>
+                <label className="block text-sm font-medium text-dark-200">
+                  {usesOAuthCredential
+                    ? 'OAuth Token'
+                    : 'API Key'}
+                  {localSettings.llmProvider === 'openai' &&
+                    localSettings.llmAuthMode === 'api-key' && (
+                      <a
+                        href="https://platform.openai.com/api-keys"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ml-2 text-xs text-blue-400 hover:underline"
+                      >
+                        Dashboard →
+                      </a>
+                    )}
+                </label>
+                <div className="relative">
+                  <input
+                    type={showCredential ? 'text' : 'password'}
+                    value={usesOAuthCredential ? localSettings.llmOauthToken : localSettings.llmApiKey}
+                    onChange={(e) =>
+                      setLocalSettings(
+                        usesOAuthCredential
+                          ? { ...localSettings, llmOauthToken: e.target.value }
+                          : { ...localSettings, llmApiKey: e.target.value }
+                      )
+                    }
+                    placeholder={
+                      usesOAuthCredential
+                        ? 'Enter your OAuth access token'
+                        : 'Enter your API key'
+                    }
+                    className="w-full px-3 py-2 pr-10 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCredential(!showCredential)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-dark-400 hover:text-dark-200"
+                  >
+                    {showCredential ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </>
+            )}
             {localSettings.llmProvider === 'openai-oauth' && (
               <div className="space-y-2">
                 <div className="w-full">
@@ -760,42 +803,6 @@ export function SettingsModal(): React.ReactNode | null {
                 )}
               </div>
             )}
-            <div className="relative">
-              <input
-                type={showCredential ? 'text' : 'password'}
-                value={
-                  localSettings.llmProvider === 'openai-oauth' ||
-                  (localSettings.llmProvider === 'openai' &&
-                    localSettings.llmAuthMode === 'oauth-token')
-                    ? localSettings.llmOauthToken
-                    : localSettings.llmApiKey
-                }
-                onChange={(e) =>
-                  setLocalSettings(
-                    localSettings.llmProvider === 'openai-oauth' ||
-                      (localSettings.llmProvider === 'openai' &&
-                        localSettings.llmAuthMode === 'oauth-token')
-                      ? { ...localSettings, llmOauthToken: e.target.value }
-                      : { ...localSettings, llmApiKey: e.target.value }
-                  )
-                }
-                placeholder={
-                  localSettings.llmProvider === 'openai-oauth' ||
-                  (localSettings.llmProvider === 'openai' &&
-                    localSettings.llmAuthMode === 'oauth-token')
-                    ? 'Enter your OAuth access token'
-                    : 'Enter your API key'
-                }
-                className="w-full px-3 py-2 pr-10 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
-              />
-              <button
-                type="button"
-                onClick={() => setShowCredential(!showCredential)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-dark-400 hover:text-dark-200"
-              >
-                {showCredential ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
             <button
               type="button"
               onClick={handleTestConnection}

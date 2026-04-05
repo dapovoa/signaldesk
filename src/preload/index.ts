@@ -85,6 +85,11 @@ export interface AudioSource {
   thumbnail: string
 }
 
+export interface AudioSourceSelectionResult {
+  sources: AudioSource[]
+  canceled: boolean
+}
+
 export interface AnswerEntry {
   id: string
   question: string
@@ -169,7 +174,7 @@ const api = {
   stopCapture: (): Promise<{ success: boolean }> => ipcRenderer.invoke('stop-capture'),
   getCaptureStatus: (): Promise<boolean> => ipcRenderer.invoke('get-capture-status'),
   sendAudioData: (audioData: ArrayBuffer): void => ipcRenderer.send('audio-data', audioData),
-  getAudioSources: (): Promise<AudioSource[]> => ipcRenderer.invoke('get-audio-sources'),
+  getAudioSources: (): Promise<AudioSourceSelectionResult> => ipcRenderer.invoke('get-audio-sources'),
 
   // Window controls
   setAlwaysOnTop: (value: boolean): Promise<boolean> =>

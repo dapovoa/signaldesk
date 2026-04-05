@@ -9,10 +9,69 @@ interface DocumentUpsertResult {
 }
 
 const VECTOR_TABLE = 'chunk_embeddings_vec'
+const FTS_TABLE = 'chunk_search_fts'
 const SIGNALDESK_VERBOSE = process.env.SIGNALDESK_VERBOSE === '1'
 const AVATAR_VERBOSE_LOGS = SIGNALDESK_VERBOSE || process.env.SIGNALDESK_AVATAR_VERBOSE === '1'
+const FTS_STOP_WORDS = new Set([
+  'a',
+  'about',
+  'and',
+  'are',
+  'can',
+  'como',
+  'com',
+  'das',
+  'de',
+  'do',
+  'dos',
+  'for',
+  'how',
+  'its',
+  'mais',
+  'mas',
+  'nos',
+  'not',
+  'o',
+  'of',
+  'on',
+  'or',
+  'para',
+  'por',
+  'qual',
+  'quais',
+  'que',
+  'sobre',
+  'the',
+  'their',
+  'them',
+  'this',
+  'uma',
+  'what',
+  'when',
+  'where',
+  'which',
+  'who',
+  'why',
+  'with',
+  'you',
+  'your'
+])
 
 const toJson = (value: unknown): string => JSON.stringify(value)
+const normalizeSearchText = (value: string): string => value.replace(/\s+/g, ' ').trim()
+const parseStringArray = (value?: string | null): string[] => {
+  if (!value) {
+    return []
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []
+  } catch {
+    return []
+  }
+}
+
 const resolveLoadableExtensionPath = (loadablePath: string): string => {
   const unpackedPath = loadablePath.replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`)
 
@@ -33,8 +92,56 @@ const toSqliteInteger = (value: number): bigint => {
   return BigInt(normalized)
 }
 
+const tokenizeForFts = (value: string): string[] => {
+  const tokens = value
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/\p{M}+/gu, '')
+    .match(/[\p{L}\p{N}]{2,}/gu)
+
+  if (!tokens) {
+    return []
+  }
+
+  const normalized: string[] = []
+  for (const token of tokens) {
+    if (FTS_STOP_WORDS.has(token)) {
+      continue
+    }
+
+    if (!normalized.includes(token)) {
+      normalized.push(token)
+    }
+  }
+
+  return normalized.slice(0, 10)
+}
+
+const buildFtsQuery = (value: string): string =>
+  tokenizeForFts(value)
+    .map((token) => `${token}*`)
+    .join(' OR ')
+
+const mapRetrievedRows = (
+  rows: Array<
+    AvatarRetrievedSnippet & {
+      tagsJson?: string | null
+      headingsJson?: string | null
+      structureScore?: number | null
+    }
+  >
+): AvatarRetrievedSnippet[] =>
+  rows.map((row) => ({
+    ...row,
+    sectionTitle: row.sectionTitle || row.title,
+    tags: parseStringArray(row.tagsJson),
+    headings: parseStringArray(row.headingsJson),
+    structureScore: Number(row.structureScore || 0)
+  }))
+
 export class AvatarStore {
   private db: import('better-sqlite3').Database
+  private ftsEnabled: boolean
 
   constructor(private readonly databasePath: string) {
     const require = createRequire(import.meta.url)
@@ -49,6 +156,10 @@ export class AvatarStore {
     this.db.loadExtension(resolveLoadableExtensionPath(sqliteVec.getLoadablePath()))
 
     this.createBaseSchema()
+    this.ftsEnabled = this.ensureFtsTable()
+    if (this.ftsEnabled) {
+      this.syncFtsIndex()
+    }
   }
 
   close(): void {
@@ -141,6 +252,14 @@ export class AvatarStore {
   replaceDocumentChunks(documentId: number, chunks: IngestedChunk[]): number[] {
     this.clearDocumentChunks(documentId)
 
+    const document = this.db
+      .prepare(
+        `SELECT title, source_type AS sourceType
+         FROM documents
+         WHERE id = ?`
+      )
+      .get(documentId) as { title: string; sourceType: string } | undefined
+
     const insert = this.db.prepare(
       `INSERT INTO chunks (
         document_id,
@@ -154,6 +273,21 @@ export class AvatarStore {
         updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
+    const insertFts =
+      this.ftsEnabled && document
+        ? this.db.prepare(
+            `INSERT INTO ${FTS_TABLE} (
+              rowid,
+              title,
+              summary,
+              content,
+              tags,
+              headings,
+              kind,
+              source_type
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+        : null
 
     const now = new Date().toISOString()
     const ids: number[] = []
@@ -171,7 +305,21 @@ export class AvatarStore {
           now,
           now
         )
-        ids.push(Number(result.lastInsertRowid))
+        const chunkId = Number(result.lastInsertRowid)
+        ids.push(chunkId)
+
+        if (insertFts && document) {
+          insertFts.run(
+            toSqliteInteger(chunkId),
+            normalizeSearchText(document.title),
+            normalizeSearchText(chunk.summary),
+            normalizeSearchText(chunk.content),
+            normalizeSearchText(chunk.tags.join(' ')),
+            normalizeSearchText(chunk.headings.join(' ')),
+            normalizeSearchText(chunk.kind),
+            normalizeSearchText(document.sourceType)
+          )
+        }
       })
     })
 
@@ -289,13 +437,51 @@ export class AvatarStore {
       }
     >
 
-    return rows.map((row) => ({
-      ...row,
-      sectionTitle: row.sectionTitle || row.title,
-      tags: row.tagsJson ? ((JSON.parse(row.tagsJson) as string[]) || []) : [],
-      headings: row.headingsJson ? ((JSON.parse(row.headingsJson) as string[]) || []) : [],
-      structureScore: Number(row.structureScore || 0)
-    }))
+    return mapRetrievedRows(rows)
+  }
+
+  searchLexical(questionText: string, limit: number): AvatarRetrievedSnippet[] {
+    if (!this.ftsEnabled || !this.hasFtsTable()) {
+      return []
+    }
+
+    const queryText = buildFtsQuery(questionText)
+    if (!queryText) {
+      return []
+    }
+
+    const query = `
+      SELECT
+        c.id AS chunkId,
+        c.document_id AS documentId,
+        d.title AS title,
+        d.source_type AS sourceType,
+        c.kind AS kind,
+        json_extract(c.metadata_json, '$.sectionTitle') AS sectionTitle,
+        json_extract(c.metadata_json, '$.tags') AS tagsJson,
+        json_extract(c.metadata_json, '$.headings') AS headingsJson,
+        json_extract(c.metadata_json, '$.structureScore') AS structureScore,
+        c.content AS content,
+        c.summary AS summary,
+        c.importance AS importance,
+        bm25(${FTS_TABLE}, 4.5, 2.2, 1.0, 1.6, 1.3, 0.8, 0.4) AS distance
+      FROM ${FTS_TABLE}
+      JOIN chunks c ON c.id = ${FTS_TABLE}.rowid
+      JOIN documents d ON d.id = c.document_id
+      WHERE ${FTS_TABLE} MATCH ?
+      ORDER BY distance ASC, c.importance DESC
+      LIMIT ?
+    `
+
+    const rows = this.db.prepare(query).all(queryText, limit) as Array<
+      AvatarRetrievedSnippet & {
+        tagsJson?: string | null
+        headingsJson?: string | null
+        structureScore?: number | null
+      }
+    >
+
+    return mapRetrievedRows(rows)
   }
 
   getMetadata(key: string): string | undefined {
@@ -337,6 +523,9 @@ export class AvatarStore {
       this.db.prepare(`DELETE FROM documents WHERE profile_id = ?`).run(profileId)
       this.db.prepare(`DELETE FROM app_metadata WHERE key IN ('embedding_model', 'embedding_dimensions')`).run()
       this.db.exec(`DROP TABLE IF EXISTS ${VECTOR_TABLE}`)
+      if (this.ftsEnabled && this.hasFtsTable()) {
+        this.db.prepare(`DELETE FROM ${FTS_TABLE}`).run()
+      }
     })
 
     transaction()
@@ -365,6 +554,14 @@ export class AvatarStore {
       removeTransaction(rows.map((row) => row.id))
     }
 
+    if (rows.length > 0 && this.ftsEnabled && this.hasFtsTable()) {
+      const removeFts = this.db.prepare(`DELETE FROM ${FTS_TABLE} WHERE rowid = ?`)
+      const removeFtsTransaction = this.db.transaction((ids: number[]) => {
+        ids.forEach((id) => removeFts.run(toSqliteInteger(id)))
+      })
+      removeFtsTransaction(rows.map((row) => row.id))
+    }
+
     this.db.prepare(`DELETE FROM chunks WHERE document_id = ?`).run(documentId)
   }
 
@@ -378,6 +575,142 @@ export class AvatarStore {
       .get(VECTOR_TABLE) as { name: string } | undefined
 
     return Boolean(row?.name)
+  }
+
+  private hasFtsTable(): boolean {
+    const row = this.db
+      .prepare(
+        `SELECT name
+         FROM sqlite_master
+         WHERE type = 'table' AND name = ?`
+      )
+      .get(FTS_TABLE) as { name: string } | undefined
+
+    return Boolean(row?.name)
+  }
+
+  private syncFtsIndex(): void {
+    if (!this.hasFtsTable()) {
+      return
+    }
+
+    const totals = this.db
+      .prepare(
+        `
+          SELECT
+            (SELECT COUNT(*) FROM chunks) AS chunkCount,
+            (SELECT COUNT(*) FROM ${FTS_TABLE}) AS ftsCount,
+            (SELECT COUNT(*)
+             FROM chunks c
+             LEFT JOIN ${FTS_TABLE} fts ON fts.rowid = c.id
+             WHERE fts.rowid IS NULL) AS missingCount,
+            (SELECT COUNT(*)
+             FROM ${FTS_TABLE} fts
+             LEFT JOIN chunks c ON c.id = fts.rowid
+             WHERE c.id IS NULL) AS orphanCount
+        `
+      )
+      .get() as {
+      chunkCount: number
+      ftsCount: number
+      missingCount: number
+      orphanCount: number
+    }
+
+    const chunkCount = Number(totals.chunkCount || 0)
+    const ftsCount = Number(totals.ftsCount || 0)
+    const missingCount = Number(totals.missingCount || 0)
+    const orphanCount = Number(totals.orphanCount || 0)
+
+    if (missingCount === 0 && orphanCount === 0) {
+      return
+    }
+
+    if (AVATAR_VERBOSE_LOGS) {
+      console.log('[AvatarStore] syncing FTS index:', {
+        chunkCount,
+        ftsCount,
+        missingCount,
+        orphanCount
+      })
+    }
+
+    const orphanRows = this.db
+      .prepare(
+        `
+          SELECT fts.rowid AS rowId
+          FROM ${FTS_TABLE} fts
+          LEFT JOIN chunks c ON c.id = fts.rowid
+          WHERE c.id IS NULL
+          ORDER BY fts.rowid ASC
+        `
+      )
+      .all() as Array<{ rowId: number }>
+
+    const missingRows = this.db
+      .prepare(
+        `
+          SELECT
+            c.id AS chunkId,
+            d.title AS title,
+            d.source_type AS sourceType,
+            c.summary AS summary,
+            c.content AS content,
+            c.kind AS kind,
+            json_extract(c.metadata_json, '$.tags') AS tagsJson,
+            json_extract(c.metadata_json, '$.headings') AS headingsJson
+          FROM chunks c
+          JOIN documents d ON d.id = c.document_id
+          LEFT JOIN ${FTS_TABLE} fts ON fts.rowid = c.id
+          WHERE fts.rowid IS NULL
+          ORDER BY c.id ASC
+        `
+      )
+      .all() as Array<{
+      chunkId: number
+      title: string
+      sourceType: string
+      summary: string
+      content: string
+      kind: string
+      tagsJson?: string | null
+      headingsJson?: string | null
+    }>
+
+    const deleteOrphan = this.db.prepare(`DELETE FROM ${FTS_TABLE} WHERE rowid = ?`)
+    const insertMissing = this.db.prepare(
+      `INSERT INTO ${FTS_TABLE} (
+        rowid,
+        title,
+        summary,
+        content,
+        tags,
+        headings,
+        kind,
+        source_type
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+
+    const transaction = this.db.transaction(() => {
+      for (const row of orphanRows) {
+        deleteOrphan.run(toSqliteInteger(row.rowId))
+      }
+
+      for (const row of missingRows) {
+        insertMissing.run(
+          toSqliteInteger(row.chunkId),
+          normalizeSearchText(row.title),
+          normalizeSearchText(row.summary),
+          normalizeSearchText(row.content),
+          normalizeSearchText(parseStringArray(row.tagsJson).join(' ')),
+          normalizeSearchText(parseStringArray(row.headingsJson).join(' ')),
+          normalizeSearchText(row.kind),
+          normalizeSearchText(row.sourceType)
+        )
+      }
+    })
+
+    transaction()
   }
 
   private createBaseSchema(): void {
@@ -452,5 +785,31 @@ export class AvatarStore {
         now,
         now
       )
+  }
+
+  private ensureFtsTable(): boolean {
+    if (this.hasFtsTable()) {
+      return true
+    }
+
+    try {
+      this.db.exec(`
+        CREATE VIRTUAL TABLE IF NOT EXISTS ${FTS_TABLE} USING fts5(
+          title,
+          summary,
+          content,
+          tags,
+          headings,
+          kind,
+          source_type,
+          tokenize = 'unicode61 remove_diacritics 2'
+        );
+      `)
+
+      return true
+    } catch (error) {
+      console.warn('[AvatarStore] FTS5 unavailable, lexical retrieval disabled:', error)
+      return false
+    }
   }
 }

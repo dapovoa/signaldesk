@@ -2,6 +2,9 @@ import { AvatarStore } from './avatarStore'
 import { AvatarContextPack, AvatarRetrievedSnippet, EmbeddingProvider } from './avatarTypes'
 
 const DEFAULT_PROFILE_ID = 'default'
+const HYBRID_VECTOR_WEIGHT = 0.65
+const HYBRID_LEXICAL_WEIGHT = 0.95
+const HYBRID_RANK_OFFSET = 3
 
 const inferQuestionKinds = (question: string): string[] => {
   const lower = question.toLowerCase()
@@ -168,6 +171,83 @@ const rerankSnippets = (
   return dedupeSnippets(ranked, limit)
 }
 
+const mergeSnippetMetadata = (
+  current: AvatarRetrievedSnippet,
+  next: AvatarRetrievedSnippet
+): AvatarRetrievedSnippet => {
+  const mergeList = (left: string[], right: string[]): string[] => [...new Set([...left, ...right])]
+
+  return {
+    ...current,
+    sectionTitle:
+      next.sectionTitle.length > current.sectionTitle.length ? next.sectionTitle : current.sectionTitle,
+    tags: mergeList(current.tags, next.tags),
+    headings: mergeList(current.headings, next.headings),
+    structureScore: Math.max(current.structureScore, next.structureScore),
+    importance: Math.max(current.importance, next.importance)
+  }
+}
+
+const buildHybridDistance = (
+  vectorRank?: number,
+  lexicalRank?: number
+): number => {
+  const vectorScore = vectorRank ? HYBRID_VECTOR_WEIGHT / (vectorRank + HYBRID_RANK_OFFSET) : 0
+  const lexicalScore = lexicalRank ? HYBRID_LEXICAL_WEIGHT / (lexicalRank + HYBRID_RANK_OFFSET) : 0
+  const hybridScore = vectorScore + lexicalScore
+
+  return hybridScore > 0 ? 1 / hybridScore : Number.POSITIVE_INFINITY
+}
+
+const mergeRetrievedSnippets = (
+  vectorSnippets: AvatarRetrievedSnippet[],
+  lexicalSnippets: AvatarRetrievedSnippet[],
+  limit: number
+): AvatarRetrievedSnippet[] => {
+  const merged = new Map<
+    number,
+    {
+      snippet: AvatarRetrievedSnippet
+      vectorRank?: number
+      lexicalRank?: number
+    }
+  >()
+
+  const upsert = (
+    snippet: AvatarRetrievedSnippet,
+    rank: number,
+    source: 'vector' | 'lexical'
+  ): void => {
+    const existing = merged.get(snippet.chunkId)
+    if (existing) {
+      existing.snippet = mergeSnippetMetadata(existing.snippet, snippet)
+      if (source === 'vector') {
+        existing.vectorRank ??= rank
+      } else {
+        existing.lexicalRank ??= rank
+      }
+      return
+    }
+
+    merged.set(snippet.chunkId, {
+      snippet,
+      vectorRank: source === 'vector' ? rank : undefined,
+      lexicalRank: source === 'lexical' ? rank : undefined
+    })
+  }
+
+  vectorSnippets.forEach((snippet, index) => upsert(snippet, index + 1, 'vector'))
+  lexicalSnippets.forEach((snippet, index) => upsert(snippet, index + 1, 'lexical'))
+
+  return [...merged.values()]
+    .map(({ snippet, vectorRank, lexicalRank }) => ({
+      ...snippet,
+      distance: buildHybridDistance(vectorRank, lexicalRank)
+    }))
+    .sort((left, right) => left.distance - right.distance || right.importance - left.importance)
+    .slice(0, Math.max(limit * 4, 16))
+}
+
 const dedupeSnippets = (snippets: AvatarRetrievedSnippet[], limit: number): AvatarRetrievedSnippet[] => {
   const byDocument = new Map<number, number>()
   const results: AvatarRetrievedSnippet[] = []
@@ -241,10 +321,19 @@ export class AvatarRetrievalService {
     const normalizedQuestion = question.trim()
     if (!normalizedQuestion) return null
 
-    const queryEmbedding = await this.embeddingProvider.embedQuery(normalizedQuestion)
-    if (!queryEmbedding.length) return null
+    const lexical = this.store.searchLexical(normalizedQuestion, Math.max(limit * 3, 12))
+    let vector: AvatarRetrievedSnippet[] = []
 
-    const raw = this.store.searchSimilar(queryEmbedding, Math.max(limit * 3, 12))
+    try {
+      const queryEmbedding = await this.embeddingProvider.embedQuery(normalizedQuestion)
+      if (queryEmbedding.length) {
+        vector = this.store.searchSimilar(queryEmbedding, Math.max(limit * 3, 12))
+      }
+    } catch {
+      vector = []
+    }
+
+    const raw = mergeRetrievedSnippets(vector, lexical, limit)
     const snippets = rerankSnippets(normalizedQuestion, raw, limit)
 
     if (snippets.length === 0) {
