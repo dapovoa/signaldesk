@@ -28,7 +28,9 @@ export function AnswerPanel(): React.JSX.Element {
 
   const hasContent = answers.length > 0 || currentAnswer
   const shouldPulseManualGenerate = isCapturing && !isGenerating && manualAssistSuggested
-  const willGenerateAnswer = currentQuestion.trim().length > 0 || isGenerating
+  const hasPendingAutoAnswer =
+    currentQuestion.trim().length > 0 && !currentAnswer.trim() && !manualAssistSuggested
+  const willGenerateAnswer = isGenerating || hasPendingAutoAnswer
 
   const toggleQuestionExpanded = (id: string): void => {
     setExpandedQuestions((prev) => ({
@@ -57,13 +59,17 @@ export function AnswerPanel(): React.JSX.Element {
           </div>
           <button
             onClick={generateAnswerManually}
-            disabled={isGenerating}
+            disabled={willGenerateAnswer}
             className={`inline-flex items-center justify-center rounded-full p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
               shouldPulseManualGenerate
                 ? 'text-green-400'
                 : 'text-dark-500 hover:text-dark-300'
             }`}
-            title="Generate answer from the current transcript"
+            title={
+              willGenerateAnswer
+                ? 'Automatic answer already pending'
+                : 'Generate answer from the current transcript'
+            }
             type="button"
           >
             <Wand2 className={`h-4 w-4 ${shouldPulseManualGenerate ? 'animate-pulse' : ''}`} />
