@@ -11,7 +11,7 @@ export interface TranscriptEvent {
 export interface DetectedQuestion {
   text: string
   confidence: number
-  questionType: 'direct' | 'indirect' | 'rhetorical' | 'unknown'
+  questionType: 'direct' | 'indirect' | 'scenario' | 'unknown'
 }
 
 export interface DetectedQuestionFromImage {

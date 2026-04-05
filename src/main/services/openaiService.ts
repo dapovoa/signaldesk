@@ -104,6 +104,25 @@ interface TruncationEvent {
   provider: TruncationProvider
 }
 
+export interface OpenAIStreamEvent {
+  requestId: number
+  chunk: string
+}
+
+export interface OpenAICompleteEvent {
+  requestId: number
+  answer: string
+}
+
+export interface OpenAIErrorEvent {
+  requestId: number
+  error: unknown
+}
+
+export interface OpenAITruncatedEvent extends TruncationEvent {
+  requestId: number
+}
+
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message
   if (typeof error === 'string') return error
@@ -385,7 +404,11 @@ export class OpenAIService extends EventEmitter {
     this.systemPrompt = getSystemPrompt()
   }
 
-  async generateAnswer(question: string, options?: GenerateAnswerOptions): Promise<string> {
+  async generateAnswer(
+    question: string,
+    options?: GenerateAnswerOptions,
+    requestId = Date.now()
+  ): Promise<string> {
     if (!this.client) {
       throw new Error('OpenAI client not initialized')
     }
@@ -419,7 +442,8 @@ export class OpenAIService extends EventEmitter {
         console.log('[OpenAIService] sending chat completion request')
       }
       const fullResponse = await this.streamAnswerWithRetry(messages, {
-        maxTokensCap: MAX_INTERVIEW_ANSWER_TOKENS
+        maxTokensCap: MAX_INTERVIEW_ANSWER_TOKENS,
+        requestId
       })
       const normalizedResponse = normalizeInterviewAnswer(fullResponse)
       if (OPENAI_VERBOSE_LOGS) {
@@ -429,11 +453,11 @@ export class OpenAIService extends EventEmitter {
         })
       }
 
-      this.emit('complete', normalizedResponse)
+      this.emit('complete', { requestId, answer: normalizedResponse } satisfies OpenAICompleteEvent)
       return normalizedResponse
     } catch (error) {
       console.error('[OpenAIService] answer generation failed:', error)
-      this.emit('error', error)
+      this.emit('error', { requestId, error } satisfies OpenAIErrorEvent)
       throw error
     }
   }
@@ -449,7 +473,8 @@ export class OpenAIService extends EventEmitter {
     imageBase64: string,
     questionText?: string,
     questionType?: 'leetcode' | 'system-design' | 'other',
-    options?: GenerateAnswerOptions
+    options?: GenerateAnswerOptions,
+    requestId = Date.now()
   ): Promise<string> {
     if (!this.client) {
       throw new Error('OpenAI client not initialized')
@@ -540,7 +565,10 @@ export class OpenAIService extends EventEmitter {
             fullResponse = appendResult.nextResponse
 
             if (appendResult.emittedChunk) {
-              this.emit('stream', appendResult.emittedChunk)
+              this.emit('stream', {
+                requestId,
+                chunk: appendResult.emittedChunk
+              } satisfies OpenAIStreamEvent)
             }
 
             if (appendResult.reachedCap) {
@@ -552,6 +580,7 @@ export class OpenAIService extends EventEmitter {
 
         if (truncationReason) {
           this.emitTruncated({
+            requestId,
             reason: truncationReason,
             maxTokens,
             provider: 'responses_codex'
@@ -559,7 +588,10 @@ export class OpenAIService extends EventEmitter {
         }
 
         const normalizedResponse = normalizeInterviewAnswer(fullResponse)
-        this.emit('complete', normalizedResponse)
+        this.emit('complete', {
+          requestId,
+          answer: normalizedResponse
+        } satisfies OpenAICompleteEvent)
         return normalizedResponse
       }
 
@@ -604,7 +636,10 @@ export class OpenAIService extends EventEmitter {
         fullResponse = appendResult.nextResponse
 
         if (appendResult.emittedChunk) {
-          this.emit('stream', appendResult.emittedChunk)
+          this.emit('stream', {
+            requestId,
+            chunk: appendResult.emittedChunk
+          } satisfies OpenAIStreamEvent)
         }
 
         if (appendResult.reachedCap) {
@@ -615,6 +650,7 @@ export class OpenAIService extends EventEmitter {
 
       if (truncationReason) {
         this.emitTruncated({
+          requestId,
           reason: truncationReason,
           maxTokens,
           provider: 'chat_completions_vision'
@@ -622,10 +658,13 @@ export class OpenAIService extends EventEmitter {
       }
 
       const normalizedResponse = normalizeInterviewAnswer(fullResponse)
-      this.emit('complete', normalizedResponse)
+      this.emit('complete', {
+        requestId,
+        answer: normalizedResponse
+      } satisfies OpenAICompleteEvent)
       return normalizedResponse
     } catch (error) {
-      this.emit('error', error)
+      this.emit('error', { requestId, error } satisfies OpenAIErrorEvent)
       throw new Error(this.mapImageGenerationError(error))
     }
   }
@@ -644,7 +683,7 @@ export class OpenAIService extends EventEmitter {
 
   private async streamAnswerWithRetry(
     messages: Message[],
-    options?: { maxTokensCap?: number }
+    options?: { maxTokensCap?: number; requestId?: number }
   ): Promise<string> {
     let lastError: unknown = null
 
@@ -683,7 +722,7 @@ export class OpenAIService extends EventEmitter {
 
   private async streamAnswerWithChatCompletions(
     messages: Message[],
-    options?: { maxTokensCap?: number }
+    options?: { maxTokensCap?: number; requestId?: number }
   ): Promise<string> {
     let fullResponse = ''
     let truncationReason: TruncationReason | null = null
@@ -735,7 +774,10 @@ export class OpenAIService extends EventEmitter {
         if (OPENAI_VERBOSE_LOGS && fullResponse.length === appendResult.emittedChunk.length) {
           console.log('[OpenAIService] first stream chunk received')
         }
-        this.emit('stream', appendResult.emittedChunk)
+        this.emit('stream', {
+          requestId: options?.requestId ?? 0,
+          chunk: appendResult.emittedChunk
+        } satisfies OpenAIStreamEvent)
       }
 
       if (appendResult.reachedCap) {
@@ -746,6 +788,7 @@ export class OpenAIService extends EventEmitter {
 
     if (truncationReason) {
       this.emitTruncated({
+        requestId: options?.requestId ?? 0,
         reason: truncationReason,
         maxTokens,
         provider: 'chat_completions'
@@ -757,7 +800,7 @@ export class OpenAIService extends EventEmitter {
 
   private async streamAnswerWithResponsesApi(
     messages: Message[],
-    options?: { maxTokensCap?: number }
+    options?: { maxTokensCap?: number; requestId?: number }
   ): Promise<string> {
     let fullResponse = ''
     let truncationReason: TruncationReason | null = null
@@ -824,7 +867,10 @@ export class OpenAIService extends EventEmitter {
           console.log('[OpenAIService] first stream chunk received')
         }
         if (appendResult.emittedChunk) {
-          this.emit('stream', appendResult.emittedChunk)
+          this.emit('stream', {
+            requestId: options?.requestId ?? 0,
+            chunk: appendResult.emittedChunk
+          } satisfies OpenAIStreamEvent)
         }
         if (appendResult.reachedCap) {
           truncationReason = 'upper_cap'
@@ -835,6 +881,7 @@ export class OpenAIService extends EventEmitter {
 
     if (truncationReason) {
       this.emitTruncated({
+        requestId: options?.requestId ?? 0,
         reason: truncationReason,
         maxTokens,
         provider
@@ -844,7 +891,7 @@ export class OpenAIService extends EventEmitter {
     return fullResponse
   }
 
-  private emitTruncated(event: TruncationEvent): void {
+  private emitTruncated(event: OpenAITruncatedEvent): void {
     console.warn('[OpenAIService] response truncated:', event)
     this.emit('truncated', event)
   }

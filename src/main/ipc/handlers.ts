@@ -8,7 +8,13 @@ import {
 } from '../services/openaiOAuth'
 import { HistoryManager } from '../services/historyManager'
 import { createOpenAIClient } from '../services/openaiClient'
-import { OpenAIService } from '../services/openaiService'
+import {
+  OpenAICompleteEvent,
+  OpenAIErrorEvent,
+  OpenAIService,
+  OpenAIStreamEvent,
+  OpenAITruncatedEvent
+} from '../services/openaiService'
 import { QuestionDetector } from '../services/questionDetector'
 import { ScreenshotService } from '../services/screenshotService'
 import { AppSettings, SettingsManager } from '../services/settingsManager'
@@ -43,11 +49,19 @@ let pendingQuestionTimer: NodeJS.Timeout | null = null
 let pendingQuestionBase: string | null = null
 let pendingQuestionFragments: string[] = []
 let isWaylandSession = false
+let pipelineEpoch = 1
+let nextAnswerRequestId = 1
+let activeAnswerRequestId: number | null = null
+let activeAnswerEpoch: number | null = null
 const QUESTION_FOLLOW_UP_WINDOW_MS = 500
 const QUESTION_FINALIZE_AFTER_UTTERANCE_MS = 350
 const QUESTION_FINALIZE_AFTER_COMPOUND_UTTERANCE_MS = 700
-const UTTERANCE_DEBOUNCE_MS = 1000
 const SUPPRESS_STALE_NO_QUESTION_MS = 4000
+const DEFAULT_PAUSE_THRESHOLD_MS = 1500
+const MIN_PAUSE_THRESHOLD_MS = 500
+const MAX_PAUSE_THRESHOLD_MS = 3000
+const MIN_POST_UTTERANCE_DEBOUNCE_MS = 150
+const MAX_POST_UTTERANCE_DEBOUNCE_MS = 600
 let lastAnswerCompletedAt = 0
 
 interface AnswerTimingTrace {
@@ -78,6 +92,43 @@ const OPENAI_OAUTH_MODELS = [
   'gpt-5.1-codex-max',
   'gpt-5.1-codex-mini'
 ]
+const IPC_HANDLE_CHANNELS = [
+  'get-settings',
+  'update-settings',
+  'has-api-keys',
+  'get-avatar-profile',
+  'update-avatar-profile',
+  'open-avatar-memory-folder',
+  'get-avatar-index-status',
+  'reindex-avatar-sources',
+  'generate-answer-manually',
+  'get-window-capabilities',
+  'connect-openai-oauth',
+  'disconnect-openai-oauth',
+  'fetch-openai-models',
+  'fetch-ollama-embedding-models',
+  'test-provider-connection',
+  'test-transcription-connection',
+  'start-capture',
+  'stop-capture',
+  'get-capture-status',
+  'get-audio-sources',
+  'set-always-on-top',
+  'set-window-opacity',
+  'minimize-window',
+  'close-window',
+  'clear-history',
+  'get-history',
+  'save-history-entry',
+  'save-history-entries',
+  'clear-saved-history',
+  'delete-history-entry',
+  'write-to-clipboard',
+  'capture-screenshot',
+  'call-session-api',
+  'analyze-screenshot'
+] as const
+const IPC_EVENT_CHANNELS = ['audio-data'] as const
 
 const isNotFoundError = (error: unknown): boolean => {
   if (!error) return false
@@ -138,6 +189,37 @@ const logAnswerTimingSummary = (stage: 'complete' | 'error'): void => {
     )
   })
 }
+
+const unregisterIpcHandlers = (): void => {
+  for (const channel of IPC_HANDLE_CHANNELS) {
+    ipcMain.removeHandler(channel)
+  }
+
+  for (const channel of IPC_EVENT_CHANNELS) {
+    ipcMain.removeAllListeners(channel)
+  }
+}
+
+const normalizePauseThresholdMs = (value: number | undefined): number => {
+  const candidate = Number(value)
+  if (!Number.isFinite(candidate)) {
+    return DEFAULT_PAUSE_THRESHOLD_MS
+  }
+
+  return Math.max(MIN_PAUSE_THRESHOLD_MS, Math.min(MAX_PAUSE_THRESHOLD_MS, Math.round(candidate)))
+}
+
+const getConfiguredPauseThresholdMs = (): number =>
+  normalizePauseThresholdMs(settingsManager?.getSettings().pauseThreshold)
+
+const getPostUtteranceDebounceMs = (): number =>
+  Math.max(
+    MIN_POST_UTTERANCE_DEBOUNCE_MS,
+    Math.min(
+      MAX_POST_UTTERANCE_DEBOUNCE_MS,
+      Math.round(getConfiguredPauseThresholdMs() / 4)
+    )
+  )
 
 const getProviderConfig = (settings: AppSettings) => {
   const isOpenAICompatible =
@@ -356,6 +438,51 @@ const clearPendingQuestionState = (): void => {
   pendingQuestionFragments = []
 }
 
+const invalidatePipeline = (): void => {
+  pipelineEpoch += 1
+  activeAnswerRequestId = null
+  activeAnswerEpoch = null
+}
+
+const reserveAnswerRequest = (epoch = pipelineEpoch): number => {
+  const requestId = nextAnswerRequestId++
+  activeAnswerRequestId = requestId
+  activeAnswerEpoch = epoch
+  return requestId
+}
+
+const isCurrentAnswerRequest = (requestId: number): boolean =>
+  activeAnswerRequestId === requestId && activeAnswerEpoch === pipelineEpoch
+
+const releaseAnswerRequest = (requestId: number): boolean => {
+  const isCurrent = isCurrentAnswerRequest(requestId)
+
+  if (activeAnswerRequestId === requestId) {
+    activeAnswerRequestId = null
+    activeAnswerEpoch = null
+    isGeneratingAnswer = false
+  }
+
+  return isCurrent
+}
+
+const resetRuntimePipelineState = (): void => {
+  invalidatePipeline()
+  clearPendingQuestionState()
+
+  if (utteranceDebounceTimer) {
+    clearTimeout(utteranceDebounceTimer)
+    utteranceDebounceTimer = null
+  }
+
+  questionDetector?.clearBuffer()
+  resetAnswerTimingTrace()
+  isGeneratingAnswer = false
+  isClassifyingQuestion = false
+  lastAnswerCompletedAt = 0
+  lastTranscriptActivityAt = 0
+}
+
 const buildPendingQuestionText = (): string => {
   const parts = [pendingQuestionBase || '', ...pendingQuestionFragments]
   const normalized: string[] = []
@@ -374,12 +501,20 @@ const buildPendingQuestionText = (): string => {
   return normalized.join(' ')
 }
 
-const restartPendingQuestionTimer = (delayMs = QUESTION_FOLLOW_UP_WINDOW_MS): void => {
+const restartPendingQuestionTimer = (
+  epoch: number,
+  delayMs = QUESTION_FOLLOW_UP_WINDOW_MS
+): void => {
   if (pendingQuestionTimer) {
     clearTimeout(pendingQuestionTimer)
   }
 
   pendingQuestionTimer = setTimeout(() => {
+    if (epoch !== pipelineEpoch) {
+      clearPendingQuestionState()
+      return
+    }
+
     pendingQuestionTimer = null
     const fullQuestion = buildPendingQuestionText()
     clearPendingQuestionState()
@@ -388,8 +523,7 @@ const restartPendingQuestionTimer = (delayMs = QUESTION_FOLLOW_UP_WINDOW_MS): vo
       return
     }
 
-    void generateAnswerForQuestion(fullQuestion).catch((error) => {
-      isGeneratingAnswer = false
+    void generateAnswerForQuestion(fullQuestion, epoch).catch((error) => {
       console.error('[Pipeline] queued detector answer failed:', error)
       mainWindow?.webContents.send('answer-error', (error as Error).message)
     })
@@ -575,9 +709,16 @@ const classifyTurnWithModel = async (turnText: string): Promise<ModelClassifierR
   }
 }
 
-const generateAnswerForQuestion = async (questionText: string): Promise<void> => {
+const generateAnswerForQuestion = async (
+  questionText: string,
+  epoch = pipelineEpoch
+): Promise<void> => {
   if (!openaiService) {
     throw new Error('Answer generation is not available')
+  }
+
+  if (epoch !== pipelineEpoch) {
+    return
   }
 
   if (isGeneratingAnswer) {
@@ -591,6 +732,7 @@ const generateAnswerForQuestion = async (questionText: string): Promise<void> =>
 
   answerTimingTrace.answerRequestedAt = Date.now()
   isGeneratingAnswer = true
+  const requestId = reserveAnswerRequest(epoch)
   mainWindow?.webContents.send('question-detected', {
     text: trimmedQuestion,
     confidence: 1,
@@ -600,20 +742,79 @@ const generateAnswerForQuestion = async (questionText: string): Promise<void> =>
   try {
     const profile = avatarProfileManager?.getProfile()
     const avatarContext = await avatarKnowledgeService?.buildContextPack(trimmedQuestion)
+    if (epoch !== pipelineEpoch || !isCurrentAnswerRequest(requestId)) {
+      releaseAnswerRequest(requestId)
+      return
+    }
     answerTimingTrace.ragReadyAt = Date.now()
     logAvatarContext(trimmedQuestion, avatarContext)
     await openaiService.generateAnswer(trimmedQuestion, {
       identityBase: profile ? buildIdentityBase(profile) : '',
       interviewContext: profile ? buildInterviewContext(profile) : '',
       avatarContext: avatarContext?.promptContext
-    })
+    }, requestId)
   } catch (error) {
-    isGeneratingAnswer = false
+    releaseAnswerRequest(requestId)
     throw error
   }
 }
 
-const scheduleAnswerForDetectedQuestion = (questionText: string): void => {
+const attachOpenAIServiceListeners = (service: OpenAIService): void => {
+  service.removeAllListeners('stream')
+  service.removeAllListeners('complete')
+  service.removeAllListeners('truncated')
+  service.removeAllListeners('error')
+
+  service.on('stream', (event: OpenAIStreamEvent) => {
+    if (!isCurrentAnswerRequest(event.requestId)) {
+      return
+    }
+
+    if (!answerTimingTrace.firstStreamAt) {
+      answerTimingTrace.firstStreamAt = Date.now()
+    }
+
+    mainWindow?.webContents.send('answer-stream', event.chunk)
+  })
+
+  service.on('complete', (event: OpenAICompleteEvent) => {
+    const isCurrent = releaseAnswerRequest(event.requestId)
+    if (!isCurrent) {
+      return
+    }
+
+    lastAnswerCompletedAt = Date.now()
+    logAnswerTimingSummary('complete')
+    resetAnswerTimingTrace()
+    mainWindow?.webContents.send('answer-complete', event.answer)
+  })
+
+  service.on('truncated', (event: OpenAITruncatedEvent) => {
+    if (!isCurrentAnswerRequest(event.requestId)) {
+      return
+    }
+
+    console.warn('[Pipeline] answer truncated by max token limit')
+    mainWindow?.webContents.send('answer-truncated')
+  })
+
+  service.on('error', (event: OpenAIErrorEvent) => {
+    const isCurrent = releaseAnswerRequest(event.requestId)
+    if (!isCurrent) {
+      return
+    }
+
+    logAnswerTimingSummary('error')
+    resetAnswerTimingTrace()
+    console.error('[Pipeline] answer-error event:', event.error)
+  })
+}
+
+const scheduleAnswerForDetectedQuestion = (questionText: string, epoch = pipelineEpoch): void => {
+  if (epoch !== pipelineEpoch) {
+    return
+  }
+
   const trimmedQuestion = questionText.trim()
   if (trimmedQuestion && !pendingQuestionBase) {
     pendingQuestionBase = trimmedQuestion
@@ -625,10 +826,13 @@ const scheduleAnswerForDetectedQuestion = (questionText: string): void => {
     pendingQuestionFragments.push(trimmedQuestion)
   }
 
-  restartPendingQuestionTimer()
+  restartPendingQuestionTimer(epoch)
 }
 
 export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false): void {
+  unregisterIpcHandlers()
+  questionDetector?.removeAllListeners()
+  resetRuntimePipelineState()
   mainWindow = window
   isWaylandSession = waylandFlag
   settingsManager = new SettingsManager()
@@ -1108,6 +1312,8 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     }
 
     try {
+      resetRuntimePipelineState()
+
       // IMPORTANT: Clean up any existing services/listeners first to prevent duplicates
       if (whisperService) {
         whisperService.removeAllListeners()
@@ -1137,7 +1343,8 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         assemblyAiMinTurnSilence: settings.assemblyAiMinTurnSilence,
         assemblyAiMaxTurnSilence: settings.assemblyAiMaxTurnSilence,
         assemblyAiKeytermsPrompt: settings.assemblyAiKeytermsPrompt,
-        assemblyAiPrompt: settings.assemblyAiPrompt
+        assemblyAiPrompt: settings.assemblyAiPrompt,
+        silenceThresholdMs: settings.pauseThreshold
       })
 
       // Initialize OpenAI service for answer generation
@@ -1150,33 +1357,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         model: settings.llmModel
       })
 
-      // Set up OpenAI event listeners ONCE
-      openaiService.on('stream', (chunk) => {
-        if (!answerTimingTrace.firstStreamAt) {
-          answerTimingTrace.firstStreamAt = Date.now()
-        }
-        mainWindow?.webContents.send('answer-stream', chunk)
-      })
-
-      openaiService.on('complete', (answer) => {
-        isGeneratingAnswer = false
-        lastAnswerCompletedAt = Date.now()
-        logAnswerTimingSummary('complete')
-        resetAnswerTimingTrace()
-        mainWindow?.webContents.send('answer-complete', answer)
-      })
-
-      openaiService.on('truncated', () => {
-        console.warn('[Pipeline] answer truncated by max token limit')
-        mainWindow?.webContents.send('answer-truncated')
-      })
-
-      openaiService.on('error', (error) => {
-        isGeneratingAnswer = false
-        logAnswerTimingSummary('error')
-        resetAnswerTimingTrace()
-        console.error('[Pipeline] answer-error event:', error)
-      })
+      attachOpenAIServiceListeners(openaiService)
 
       // Set up Whisper event listeners
       whisperService.on('transcript', async (event) => {
@@ -1195,7 +1376,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           if (event.isFinal && event.text.trim()) {
             pendingQuestionFragments.push(event.text.trim())
           }
-          restartPendingQuestionTimer()
+          restartPendingQuestionTimer(pipelineEpoch)
           return
         }
 
@@ -1208,7 +1389,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
             if (isGeneratingAnswer) {
               return
             }
-            scheduleAnswerForDetectedQuestion(earlyDetection.text)
+            scheduleAnswerForDetectedQuestion(earlyDetection.text, pipelineEpoch)
           }
         }
       })
@@ -1219,15 +1400,19 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         }
         answerTimingTrace.utteranceEndAt = Date.now()
         if (pendingQuestionTimer) {
-          restartPendingQuestionTimer(getPendingFinalizeDelay())
+          restartPendingQuestionTimer(pipelineEpoch, getPendingFinalizeDelay())
           mainWindow?.webContents.send('utterance-end')
           return
         }
         if (utteranceDebounceTimer) {
           clearTimeout(utteranceDebounceTimer)
         }
+        const epochAtUtteranceEnd = pipelineEpoch
         utteranceDebounceTimer = setTimeout(() => {
           utteranceDebounceTimer = null
+          if (epochAtUtteranceEnd !== pipelineEpoch) {
+            return
+          }
           if (!questionDetector) return
 
           void (async () => {
@@ -1245,7 +1430,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
                 return
               }
 
-               if (lastTranscriptActivityAt > classifierStartedAt) {
+              if (lastTranscriptActivityAt > classifierStartedAt || epochAtUtteranceEnd !== pipelineEpoch) {
                 return
               }
 
@@ -1258,7 +1443,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
               }
 
               const classifierResult = await classifyTurnWithModel(turnText)
-              if (lastTranscriptActivityAt > classifierStartedAt) {
+              if (lastTranscriptActivityAt > classifierStartedAt || epochAtUtteranceEnd !== pipelineEpoch) {
                 return
               }
               lastModelQuestionClassificationAt = Date.now()
@@ -1281,7 +1466,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
               isClassifyingQuestion = false
             }
           })()
-        }, UTTERANCE_DEBOUNCE_MS)
+        }, getPostUtteranceDebounceMs())
         mainWindow?.webContents.send('utterance-end')
       })
 
@@ -1306,7 +1491,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         if (isGeneratingAnswer) {
           return
         }
-        scheduleAnswerForDetectedQuestion(detection.text)
+        scheduleAnswerForDetectedQuestion(detection.text, pipelineEpoch)
       })
 
       isCapturing = true
@@ -1326,14 +1511,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
   ipcMain.handle('stop-capture', async () => {
     isCapturing = false
-    lastAnswerCompletedAt = 0
-    resetAnswerTimingTrace()
-    isGeneratingAnswer = false
-    clearPendingQuestionState()
-    if (utteranceDebounceTimer) {
-      clearTimeout(utteranceDebounceTimer)
-      utteranceDebounceTimer = null
-    }
+    resetRuntimePipelineState()
 
     if (whisperService) {
       const service = whisperService
@@ -1415,6 +1593,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
   // Clear conversation history
   ipcMain.handle('clear-history', () => {
+    resetRuntimePipelineState()
     return { success: true }
   })
 
@@ -1581,19 +1760,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           useResponsesApi: shouldUseResponsesApi(settings),
           model: settings.llmModel
         })
-
-        // Set up OpenAI event listeners
-        openaiService.on('stream', (chunk) => {
-          mainWindow?.webContents.send('answer-stream', chunk)
-        })
-
-        openaiService.on('complete', (answer) => {
-          mainWindow?.webContents.send('answer-complete', answer)
-        })
-
-        openaiService.on('truncated', () => {
-          mainWindow?.webContents.send('answer-truncated')
-        })
+        attachOpenAIServiceListeners(openaiService)
       } else {
         openaiService.updateConfig({
           apiKey: providerConfig.apiKey,
@@ -1604,6 +1771,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           model: settings.llmModel
         })
       }
+      attachOpenAIServiceListeners(openaiService)
 
       // Analyze screenshot for interview question
       console.log('Analyzing screenshot for interview question...')
@@ -1636,6 +1804,8 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
         // Generate solution - pass questionText only if we have it, otherwise let the model extract from image
         try {
+          const requestId = reserveAnswerRequest(pipelineEpoch)
+          isGeneratingAnswer = true
           await openaiService.generateSolutionFromImage(
             imageData,
             analysis.questionText && analysis.questionText.trim().length > 10
@@ -1646,7 +1816,8 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
               identityBase: profile ? buildIdentityBase(profile) : '',
               interviewContext: profile ? buildInterviewContext(profile) : '',
               avatarContext: avatarContext?.promptContext
-            }
+            },
+            requestId
           )
         } catch (error) {
           console.error('Solution generation error:', error)
@@ -1683,6 +1854,8 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           })
 
           try {
+            const requestId = reserveAnswerRequest(pipelineEpoch)
+            isGeneratingAnswer = true
             await openaiService.generateSolutionFromImage(
               imageData,
               analysis.questionText && analysis.questionText.trim().length > 10
@@ -1693,7 +1866,8 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
                 identityBase: profile ? buildIdentityBase(profile) : '',
                 interviewContext: profile ? buildInterviewContext(profile) : '',
                 avatarContext: avatarContext?.promptContext
-              }
+              },
+              requestId
             )
 
             return {
@@ -1737,18 +1911,23 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 }
 
 export async function cleanupIpcHandlers(): Promise<void> {
+  unregisterIpcHandlers()
+  resetRuntimePipelineState()
   avatarKnowledgeService?.dispose()
   avatarKnowledgeService = null
   avatarProfileManager = null
-  isGeneratingAnswer = false
   if (whisperService) {
-    await whisperService.stop()
+    const service = whisperService
     whisperService = null
+    service.removeAllListeners()
+    await service.stop()
   }
   if (openaiService) {
-    openaiService.removeAllListeners()
+    const service = openaiService
     openaiService = null
+    service.removeAllListeners()
   }
+  questionDetector?.removeAllListeners()
   questionDetector = null
   settingsManager = null
   historyManager = null

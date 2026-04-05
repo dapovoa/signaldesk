@@ -438,7 +438,8 @@ export class SettingsManager {
 
   hasApiKeys(): boolean {
     const hasLlmCredential =
-      this.settings.llmProvider === 'openai' && this.settings.llmAuthMode === 'oauth-token'
+      this.settings.llmProvider === 'openai-oauth' ||
+      (this.settings.llmProvider === 'openai' && this.settings.llmAuthMode === 'oauth-token')
         ? Boolean(this.settings.llmOauthToken)
         : Boolean(this.settings.llmApiKey)
     const hasTranscriptionCredential =

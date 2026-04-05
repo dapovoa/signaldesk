@@ -12,6 +12,8 @@ import { AvatarStore } from './avatarStore'
 import { AvatarContextPack } from './avatarTypes'
 
 const REFRESH_INTERVAL_MS = 60_000
+const SIGNALDESK_VERBOSE = process.env.SIGNALDESK_VERBOSE === '1'
+const AVATAR_VERBOSE_LOGS = SIGNALDESK_VERBOSE || process.env.SIGNALDESK_AVATAR_VERBOSE === '1'
 
 export class AvatarKnowledgeService {
   private store: AvatarStore | null
@@ -74,7 +76,7 @@ export class AvatarKnowledgeService {
   }
 
   updateProfile(profile: AvatarProfile, options?: { silentLog?: boolean }): void {
-    if (!options?.silentLog) {
+    if (AVATAR_VERBOSE_LOGS && !options?.silentLog) {
       console.log('[AvatarKnowledge] updating profile for RAG:', {
         embeddingModel: profile.embeddingModel,
         sourceDirectory: profile.sourceDirectory
@@ -97,10 +99,12 @@ export class AvatarKnowledgeService {
     }) => void
   ): Promise<AvatarIndexStatus> {
     const startedAt = Date.now()
-    console.log('[AvatarKnowledge] reindex requested:', {
-      embeddingModel: profile.embeddingModel,
-      sourceDirectory: profile.sourceDirectory
-    })
+    if (AVATAR_VERBOSE_LOGS) {
+      console.log('[AvatarKnowledge] reindex requested:', {
+        embeddingModel: profile.embeddingModel,
+        sourceDirectory: profile.sourceDirectory
+      })
+    }
     this.updateProfile(profile, { silentLog: true })
 
     if (this.ingestion) {
@@ -117,15 +121,17 @@ export class AvatarKnowledgeService {
       this.lastError = null
       const status = this.getStatus(profile)
       const durationMs = Date.now() - startedAt
-      console.log('[AvatarKnowledge] reindex completed:', {
-        embeddingModel: profile.embeddingModel,
-        documentCount: status.documentCount,
-        chunkCount: status.chunkCount,
-        durationMs
-      })
-      console.log(
-        `[AvatarKnowledge] summary: reindex finished in ${durationMs}ms, documents=${status.documentCount}, chunks=${status.chunkCount}, model=${profile.embeddingModel}`
-      )
+      if (AVATAR_VERBOSE_LOGS) {
+        console.log('[AvatarKnowledge] reindex completed:', {
+          embeddingModel: profile.embeddingModel,
+          documentCount: status.documentCount,
+          chunkCount: status.chunkCount,
+          durationMs
+        })
+        console.log(
+          `[AvatarKnowledge] summary: reindex finished in ${durationMs}ms, documents=${status.documentCount}, chunks=${status.chunkCount}, model=${profile.embeddingModel}`
+        )
+      }
       return status
     }
 

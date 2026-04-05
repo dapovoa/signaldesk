@@ -194,13 +194,15 @@ export class AvatarStore {
       return
     }
 
-    console.log('[AvatarStore] rebuilding vector table:', {
-      previousModel: currentModel || null,
-      previousDimensions: currentDimensions || null,
-      nextModel: model,
-      nextDimensions: dimensions,
-      hadExistingTable: tableExists
-    })
+    if (AVATAR_VERBOSE_LOGS) {
+      console.log('[AvatarStore] rebuilding vector table:', {
+        previousModel: currentModel || null,
+        previousDimensions: currentDimensions || null,
+        nextModel: model,
+        nextDimensions: dimensions,
+        hadExistingTable: tableExists
+      })
+    }
 
     this.db.exec(`DROP TABLE IF EXISTS ${VECTOR_TABLE}`)
     this.db.exec(
@@ -321,12 +323,14 @@ export class AvatarStore {
     const previousModel = this.getMetadata('embedding_model') || null
     const previousDimensions = Number(this.getMetadata('embedding_dimensions') || '0') || null
 
-    console.log('[AvatarStore] nuking avatar index:', {
-      profileId,
-      hadExistingTable: tableExists,
-      previousModel,
-      previousDimensions
-    })
+    if (AVATAR_VERBOSE_LOGS) {
+      console.log('[AvatarStore] nuking avatar index:', {
+        profileId,
+        hadExistingTable: tableExists,
+        previousModel,
+        previousDimensions
+      })
+    }
 
     const transaction = this.db.transaction(() => {
       this.db.prepare(`DELETE FROM chunks`).run()

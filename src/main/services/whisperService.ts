@@ -28,6 +28,7 @@ export interface WhisperConfig {
   assemblyAiMaxTurnSilence?: number
   assemblyAiKeytermsPrompt?: string
   assemblyAiPrompt?: string
+  silenceThresholdMs?: number
 }
 
 export class WhisperService extends EventEmitter {
@@ -42,7 +43,7 @@ export class WhisperService extends EventEmitter {
   private readonly SAMPLE_RATE = 16000
   private readonly BYTES_PER_SAMPLE = 2 // 16-bit audio
   private readonly MIN_AUDIO_DURATION_MS = 1000
-  private readonly SILENCE_THRESHOLD_MS = 1000
+  private readonly DEFAULT_SILENCE_THRESHOLD_MS = 1000
   private readonly MAX_BUFFER_DURATION_MS = 20000
   private readonly MAX_TRANSCRIPTION_RETRIES = 2
 
@@ -161,6 +162,15 @@ export class WhisperService extends EventEmitter {
     return (samples / this.SAMPLE_RATE) * 1000
   }
 
+  private getSilenceThresholdMs(): number {
+    const configured = Number(this.config.silenceThresholdMs)
+    if (!Number.isFinite(configured) || configured <= 0) {
+      return this.DEFAULT_SILENCE_THRESHOLD_MS
+    }
+
+    return Math.round(configured)
+  }
+
   private checkAndProcess(): void {
     if (this.isProcessing || !this.isRunning) return
 
@@ -171,7 +181,7 @@ export class WhisperService extends EventEmitter {
     // 1. We have enough audio AND enough silence has passed
     // 2. OR buffer is getting too large (force process)
     const hasEnoughAudio = bufferDuration >= this.MIN_AUDIO_DURATION_MS
-    const hasSilence = timeSinceLastAudio >= this.SILENCE_THRESHOLD_MS
+    const hasSilence = timeSinceLastAudio >= this.getSilenceThresholdMs()
     const bufferTooLarge = bufferDuration >= this.MAX_BUFFER_DURATION_MS
 
     if ((hasEnoughAudio && hasSilence) || bufferTooLarge) {
