@@ -2,6 +2,11 @@ import { BrowserWindow, clipboard, desktopCapturer, ipcMain, shell } from 'elect
 import * as fs from 'fs'
 import type { AnswerEntry } from '../../shared/contracts'
 import {
+  OPENAI_OAUTH_MODEL_OPTIONS,
+  resolveLlmCredential,
+  usesOAuthCredential
+} from '../../shared/llmSettings'
+import {
   CHATGPT_CODEX_BASE_URL,
   refreshOpenAIOAuthTokens,
   startOpenAIOAuthFlow
@@ -73,6 +78,23 @@ interface AnswerTimingTrace {
   firstStreamAt: number | null
 }
 
+interface ProviderConfig {
+  apiKey: string
+  baseURL?: string
+  customHeaders?: string
+}
+
+interface TranscriptionConfig {
+  provider: 'openai' | 'assemblyai'
+  apiKey: string
+}
+
+interface ProviderPayloadState {
+  provider: 'openai' | 'openai-oauth' | 'openai-compatible'
+  usesOAuthCredential: boolean
+  credential?: string
+}
+
 let answerTimingTrace: AnswerTimingTrace = {
   utteranceEndAt: null,
   debounceElapsedAt: null,
@@ -83,19 +105,9 @@ let answerTimingTrace: AnswerTimingTrace = {
 }
 const PIPELINE_VERBOSE =
   process.env.SIGNALDESK_VERBOSE === '1' || process.env.SIGNALDESK_PIPELINE_VERBOSE === '1'
-const OPENAI_OAUTH_MODELS = [
-  'gpt-5.4',
-  'gpt-5.4-mini',
-  'gpt-5.3-codex',
-  'gpt-5.2-codex',
-  'gpt-5.2',
-  'gpt-5.1-codex-max',
-  'gpt-5.1-codex-mini'
-]
 const IPC_HANDLE_CHANNELS = [
   'get-settings',
   'update-settings',
-  'has-api-keys',
   'get-avatar-profile',
   'update-avatar-profile',
   'open-avatar-memory-folder',
@@ -111,7 +123,6 @@ const IPC_HANDLE_CHANNELS = [
   'test-transcription-connection',
   'start-capture',
   'stop-capture',
-  'get-capture-status',
   'get-audio-sources',
   'set-always-on-top',
   'set-window-opacity',
@@ -233,37 +244,29 @@ const getConfiguredPauseThresholdMs = (): number =>
 const getPostUtteranceDebounceMs = (): number =>
   Math.max(
     MIN_POST_UTTERANCE_DEBOUNCE_MS,
-    Math.min(
-      MAX_POST_UTTERANCE_DEBOUNCE_MS,
-      Math.round(getConfiguredPauseThresholdMs() / 4)
-    )
+    Math.min(MAX_POST_UTTERANCE_DEBOUNCE_MS, Math.round(getConfiguredPauseThresholdMs() / 4))
   )
 
-const getProviderConfig = (settings: AppSettings) => {
+const getProviderConfig = (settings: AppSettings): ProviderConfig => {
   const isOpenAICompatible =
     settings.llmProvider === 'openai-compatible' || settings.llmProvider === 'openai-oauth'
-  const credential =
-    settings.llmProvider === 'openai-oauth' ||
-    (settings.llmProvider === 'openai' && settings.llmAuthMode === 'oauth-token')
-      ? settings.llmOauthToken
-      : settings.llmApiKey
 
   return {
-    apiKey: credential,
+    apiKey: resolveLlmCredential(settings),
     baseURL:
       settings.llmProvider === 'openai-oauth'
         ? CHATGPT_CODEX_BASE_URL
         : isOpenAICompatible
-        ? settings.llmBaseUrl
-        : undefined,
+          ? settings.llmBaseUrl
+          : undefined,
     customHeaders:
       settings.llmProvider === 'openai-oauth'
         ? settings.llmOauthAccountId
           ? `ChatGPT-Account-Id: ${settings.llmOauthAccountId}`
           : undefined
         : isOpenAICompatible
-        ? settings.llmCustomHeaders
-        : undefined
+          ? settings.llmCustomHeaders
+          : undefined
   }
 }
 
@@ -277,7 +280,7 @@ const shouldUseResponsesApi = (settings: AppSettings): boolean => {
     return true
   }
 
-  return settings.llmProvider === 'openai' && settings.llmAuthMode !== 'oauth-token'
+  return settings.llmProvider === 'openai' && !usesOAuthCredential(settings)
 }
 
 const isOpenAIOAuthExpired = (settings: AppSettings): boolean =>
@@ -319,7 +322,7 @@ const ensureOpenAIOAuthToken = async (): Promise<string | null> => {
   return refreshed.accessToken
 }
 
-const getTranscriptionConfig = (settings: AppSettings) => {
+const getTranscriptionConfig = (settings: AppSettings): TranscriptionConfig => {
   if (settings.transcriptionProvider === 'assemblyai') {
     return {
       provider: 'assemblyai' as const,
@@ -334,18 +337,14 @@ const getTranscriptionConfig = (settings: AppSettings) => {
 }
 
 const validateProviderSettings = (settings: AppSettings): string | null => {
-  const hasCredential =
-    settings.llmProvider === 'openai-oauth' ||
-    (settings.llmProvider === 'openai' && settings.llmAuthMode === 'oauth-token')
-      ? Boolean(settings.llmOauthToken?.trim())
-      : Boolean(settings.llmApiKey?.trim())
+  const hasCredential = Boolean(resolveLlmCredential(settings))
 
   if (!hasCredential) {
     return settings.llmProvider === 'openai-oauth'
       ? 'OpenAI OAuth token not configured. Please sign in in Settings.'
-      : settings.llmProvider === 'openai' && settings.llmAuthMode === 'oauth-token'
-      ? 'OpenAI OAuth token not configured. Please add it in Settings.'
-      : 'LLM API key not configured. Please add it in Settings.'
+      : usesOAuthCredential(settings)
+        ? 'OpenAI OAuth token not configured. Please add it in Settings.'
+        : 'LLM API key not configured. Please add it in Settings.'
   }
 
   if (settings.llmProvider === 'openai-oauth' && !settings.llmOauthAccountId?.trim()) {
@@ -391,13 +390,19 @@ const ensureDirectory = (directory: string): void => {
   fs.mkdirSync(directory, { recursive: true })
 }
 
-const logAvatarContext = (question: string, avatarContext?: { snippets: Array<{
-  title: string
-  sectionTitle: string
-  kind: string
-  tags: string[]
-  distance: number
-}>; promptContext: string } | null): void => {
+const logAvatarContext = (
+  question: string,
+  avatarContext?: {
+    snippets: Array<{
+      title: string
+      sectionTitle: string
+      kind: string
+      tags: string[]
+      distance: number
+    }>
+    promptContext: string
+  } | null
+): void => {
   if (!AVATAR_VERBOSE_LOGS) {
     return
   }
@@ -430,7 +435,11 @@ interface ModelQuestionClassification {
 
 interface ModelClassifierResult {
   supported: boolean
-  detection: { text: string; confidence: number; questionType: 'direct' | 'indirect' | 'scenario' } | null
+  detection: {
+    text: string
+    confidence: number
+    questionType: 'direct' | 'indirect' | 'scenario'
+  } | null
 }
 
 const MODEL_CLASSIFIER_THRESHOLD = 0.62
@@ -729,7 +738,10 @@ const classifyTurnWithModel = async (turnText: string): Promise<ModelClassifierR
     }
   } catch (error) {
     if (PIPELINE_VERBOSE) {
-      console.warn('[QuestionClassifier] model classifier unavailable, using heuristic fallback:', error)
+      console.warn(
+        '[QuestionClassifier] model classifier unavailable, using heuristic fallback:',
+        error
+      )
     }
     return { supported: false, detection: null }
   }
@@ -774,11 +786,15 @@ const generateAnswerForQuestion = async (
     }
     answerTimingTrace.ragReadyAt = Date.now()
     logAvatarContext(trimmedQuestion, avatarContext)
-    await openaiService.generateAnswer(trimmedQuestion, {
-      identityBase: profile ? buildIdentityBase(profile) : '',
-      interviewContext: profile ? buildInterviewContext(profile) : '',
-      avatarContext: avatarContext?.promptContext
-    }, requestId)
+    await openaiService.generateAnswer(
+      trimmedQuestion,
+      {
+        identityBase: profile ? buildIdentityBase(profile) : '',
+        interviewContext: profile ? buildInterviewContext(profile) : '',
+        avatarContext: avatarContext?.promptContext
+      },
+      requestId
+    )
   } catch (error) {
     releaseAnswerRequest(requestId)
     throw error
@@ -870,7 +886,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
   settingsManager.flushPendingMigrations()
   avatarKnowledgeService = new AvatarKnowledgeService(avatarProfileManager.getProfile())
 
-  // Settings handlers
   ipcMain.handle('get-settings', () => {
     return settingsManager?.getSettings()
   })
@@ -878,7 +893,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
   ipcMain.handle('update-settings', (_event, updates: Partial<AppSettings>) => {
     settingsManager?.updateSettings(updates)
 
-    // Apply window settings immediately
     if (updates.alwaysOnTop !== undefined && mainWindow && !isWaylandSession) {
       mainWindow.setAlwaysOnTop(updates.alwaysOnTop)
     }
@@ -887,10 +901,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     }
 
     return settingsManager?.getSettings()
-  })
-
-  ipcMain.handle('has-api-keys', () => {
-    return settingsManager?.hasApiKeys()
   })
 
   ipcMain.handle('get-avatar-profile', () => {
@@ -947,9 +957,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       isWayland: isWaylandSession,
       supportsAlwaysOnTop: !isWaylandSession,
       supportsWindowOpacity: !isWaylandSession,
-      warning: isWaylandSession
-        ? 'Unavailable on GNOME Wayland.'
-        : ''
+      warning: isWaylandSession ? 'Unavailable on GNOME Wayland.' : ''
     }
   })
 
@@ -991,20 +999,26 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     }
   })
 
-  const resolveCredentialFromPayload = (payload: {
+  const getProviderPayloadState = (payload: {
     apiKey?: string
     oauthToken?: string
     provider?: 'openai' | 'openai-oauth' | 'openai-compatible'
     authMode?: 'api-key' | 'oauth-token'
-  }): string | undefined => {
+  }): ProviderPayloadState => {
     const provider = payload?.provider || 'openai'
     const authMode = payload?.authMode || 'api-key'
-    return provider === 'openai-oauth' || (provider === 'openai' && authMode === 'oauth-token')
-      ? payload?.oauthToken?.trim()
-      : payload?.apiKey?.trim()
+    const oauthCredential = usesOAuthCredential({
+      llmProvider: provider,
+      llmAuthMode: authMode
+    })
+
+    return {
+      provider,
+      usesOAuthCredential: oauthCredential,
+      credential: oauthCredential ? payload?.oauthToken?.trim() : payload?.apiKey?.trim()
+    }
   }
 
-  // Fetch models from selected provider
   ipcMain.handle(
     'fetch-openai-models',
     async (
@@ -1018,23 +1032,21 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         customHeaders?: string
       }
     ) => {
-      const provider = payload?.provider || 'openai'
-      const authMode = payload?.authMode || 'api-key'
+      const { provider, usesOAuthCredential, credential } = getProviderPayloadState(payload)
 
       if (provider === 'openai-oauth') {
         return {
           success: true,
-          models: OPENAI_OAUTH_MODELS.map((id) => ({ id, name: id }))
+          models: OPENAI_OAUTH_MODEL_OPTIONS.map((id) => ({ id, name: id }))
         }
       }
 
-      const credential = resolveCredentialFromPayload(payload)
       const baseURL = provider === 'openai-compatible' ? payload?.baseURL?.trim() : undefined
 
       if (!credential) {
         return {
           success: false,
-          error: provider === 'openai' && authMode === 'oauth-token' ? 'OAuth token is required' : 'API key is required',
+          error: usesOAuthCredential ? 'OAuth token is required' : 'API key is required',
           models: []
         }
       }
@@ -1080,7 +1092,11 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
   ipcMain.handle(
     'fetch-ollama-embedding-models',
     async (_event, payload?: { baseURL?: string }) => {
-      const normalizedBaseUrl = (payload?.baseURL?.trim() || process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434').replace(/\/+$/, '')
+      const normalizedBaseUrl = (
+        payload?.baseURL?.trim() ||
+        process.env.OLLAMA_BASE_URL ||
+        'http://127.0.0.1:11434'
+      ).replace(/\/+$/, '')
 
       try {
         const response = await fetch(`${normalizedBaseUrl}/api/tags`, {
@@ -1121,8 +1137,13 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
         return { success: true, models }
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Failed to fetch Ollama models'
-        return { success: false, error: errorMessage, models: [] as Array<{ id: string; name: string }> }
+        const errorMessage =
+          error instanceof Error ? error.message : 'Failed to fetch Ollama models'
+        return {
+          success: false,
+          error: errorMessage,
+          models: [] as Array<{ id: string; name: string }>
+        }
       }
     }
   )
@@ -1141,28 +1162,28 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         model?: string
       }
     ) => {
-      const provider = payload?.provider || 'openai'
-      const authMode = payload?.authMode || 'api-key'
+      const {
+        provider,
+        usesOAuthCredential,
+        credential: payloadCredential
+      } = getProviderPayloadState(payload)
       const credential =
         provider === 'openai-oauth' && !payload?.oauthToken?.trim()
           ? await ensureOpenAIOAuthToken()
-          : resolveCredentialFromPayload(payload)
+          : payloadCredential
       const storedSettings = settingsManager?.getSettings()
       const baseURL =
         provider === 'openai-oauth'
           ? CHATGPT_CODEX_BASE_URL
           : provider === 'openai-compatible'
-          ? payload?.baseURL?.trim()
-          : undefined
+            ? payload?.baseURL?.trim()
+            : undefined
       const preferredModel = payload?.model?.trim()
 
       if (!credential) {
         return {
           success: false,
-          message:
-            provider === 'openai-oauth' || (provider === 'openai' && authMode === 'oauth-token')
-              ? 'OAuth token is required'
-              : 'API key is required'
+          message: usesOAuthCredential ? 'OAuth token is required' : 'API key is required'
         }
       }
 
@@ -1192,7 +1213,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
               : payload?.customHeaders
         })
 
-        if (payload?.provider === 'openai-oauth') {
+        if (provider === 'openai-oauth') {
           const oauthModel = preferredModel || 'gpt-5.4'
           const stream = streamChatGPTCodexResponse({
             accessToken: credential,
@@ -1319,7 +1340,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     }
   )
 
-  // Audio capture handlers
   ipcMain.handle('start-capture', async () => {
     const settings = settingsManager?.getSettings()
 
@@ -1339,8 +1359,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
     try {
       resetRuntimePipelineState()
-
-      // IMPORTANT: Clean up any existing services/listeners first to prevent duplicates
       if (whisperService) {
         whisperService.removeAllListeners()
         whisperService = null
@@ -1357,7 +1375,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       }
       const transcriptionConfig = getTranscriptionConfig(settings)
 
-      // Initialize Whisper service for transcription
       whisperService = new WhisperService({
         provider: transcriptionConfig.provider,
         apiKey: transcriptionConfig.apiKey,
@@ -1373,7 +1390,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         silenceThresholdMs: settings.pauseThreshold
       })
 
-      // Initialize OpenAI service for answer generation
       openaiService = new OpenAIService({
         apiKey: providerConfig.apiKey,
         baseURL: providerConfig.baseURL,
@@ -1385,7 +1401,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
       attachOpenAIServiceListeners(openaiService)
 
-      // Set up Whisper event listeners
       whisperService.on('transcript', async (event) => {
         if (!isCapturing) {
           return
@@ -1407,17 +1422,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         }
 
         questionDetector?.addTranscript(event.text, event.isFinal)
-
-        // Try early detection for faster response on high-confidence questions
-        if (event.isFinal && questionDetector && openaiService) {
-          const earlyDetection = questionDetector.checkEarlyDetection(event.text)
-          if (earlyDetection) {
-            if (isGeneratingAnswer) {
-              return
-            }
-            scheduleAnswerForDetectedQuestion(earlyDetection.text, pipelineEpoch)
-          }
-        }
       })
 
       whisperService.on('utteranceEnd', () => {
@@ -1456,7 +1460,10 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
                 return
               }
 
-              if (lastTranscriptActivityAt > classifierStartedAt || epochAtUtteranceEnd !== pipelineEpoch) {
+              if (
+                lastTranscriptActivityAt > classifierStartedAt ||
+                epochAtUtteranceEnd !== pipelineEpoch
+              ) {
                 return
               }
 
@@ -1469,7 +1476,10 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
               }
 
               const classifierResult = await classifyTurnWithModel(turnText)
-              if (lastTranscriptActivityAt > classifierStartedAt || epochAtUtteranceEnd !== pipelineEpoch) {
+              if (
+                lastTranscriptActivityAt > classifierStartedAt ||
+                epochAtUtteranceEnd !== pipelineEpoch
+              ) {
                 return
               }
               lastModelQuestionClassificationAt = Date.now()
@@ -1509,7 +1519,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         mainWindow?.webContents.send('capture-error', errorMessage)
       })
 
-      // Set up question detector listener ONCE
       questionDetector?.on('questionDetected', async (detection) => {
         if (!isCapturing) {
           return
@@ -1521,7 +1530,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       })
 
       isCapturing = true
-      // Start Whisper service
       await whisperService.start()
       if (PIPELINE_VERBOSE) {
         console.log('Audio capture started successfully')
@@ -1552,7 +1560,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       service.removeAllListeners()
     }
 
-    // Remove question detector listeners to prevent duplicates on next start
     questionDetector?.removeAllListeners()
     questionDetector?.clearBuffer()
     if (PIPELINE_VERBOSE) {
@@ -1562,18 +1569,12 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     return { success: true }
   })
 
-  ipcMain.handle('get-capture-status', () => {
-    return isCapturing
-  })
-
-  // Audio data from renderer
   ipcMain.on('audio-data', (_event, audioData: ArrayBuffer) => {
     if (whisperService && isCapturing) {
       whisperService.addAudioData(audioData)
     }
   })
 
-  // Get audio sources for system audio capture
   ipcMain.handle('get-audio-sources', async () => {
     try {
       const sources = await desktopCapturer.getSources({
@@ -1602,7 +1603,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     }
   })
 
-  // Window control handlers
   ipcMain.handle('set-always-on-top', (_event, value: boolean) => {
     if (!isWaylandSession) {
       mainWindow?.setAlwaysOnTop(value)
@@ -1627,13 +1627,11 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     mainWindow?.close()
   })
 
-  // Clear conversation history
   ipcMain.handle('clear-history', () => {
     resetRuntimePipelineState()
     return { success: true }
   })
 
-  // History handlers
   ipcMain.handle('get-history', () => {
     return historyManager?.getHistory() || []
   })
@@ -1658,7 +1656,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     return { success: true }
   })
 
-  // Clipboard handlers
   ipcMain.handle('write-to-clipboard', (_event, text: string) => {
     try {
       clipboard.writeText(text)
@@ -1669,7 +1666,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     }
   })
 
-  // Screenshot handlers
   ipcMain.handle('capture-screenshot', async () => {
     try {
       if (!screenshotService) {
@@ -1711,7 +1707,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     }
   })
 
-  // Session API handler
   ipcMain.handle(
     'call-session-api',
     async (
@@ -1777,7 +1772,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     }
 
     try {
-      // Recreate vision service with latest provider settings
       visionService = new VisionService({
         apiKey: providerConfig.apiKey,
         baseURL: providerConfig.baseURL,
@@ -1810,21 +1804,17 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
       const analysis = await visionService.analyzeScreenshot(imageData)
 
-      // Check if question is detected - be more lenient
       if (analysis.isQuestion) {
-        // If we have question text, use it. Otherwise, we'll extract from image directly
         const questionText = analysis.questionText?.trim() || 'Interview question from screenshot'
         const profile = avatarProfileManager?.getProfile()
         const avatarContext = await avatarKnowledgeService?.buildContextPack(questionText)
 
-        // Send question detected event
         mainWindow?.webContents.send('question-detected-from-image', {
           text: questionText,
           questionType: analysis.questionType,
           confidence: analysis.confidence
         })
 
-        // Generate solution - pass questionText only if we have it, otherwise let the model extract from image
         try {
           const requestId = reserveAnswerRequest(pipelineEpoch)
           isGeneratingAnswer = true
@@ -1857,7 +1847,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           questionType: analysis.questionType
         }
       } else {
-        // Only force a generation pass when extraction is still fairly strong.
         if (
           analysis.confidence &&
           analysis.confidence >= 0.65 &&
@@ -1899,7 +1888,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
             }
           } catch (error) {
             console.error('Solution generation error:', error)
-            // Fall through to no question message
           }
         }
 

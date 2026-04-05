@@ -3,58 +3,10 @@ import { app, safeStorage } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
 import type { AppSettings } from '../../shared/contracts'
+import { normalizeLlmSettings } from '../../shared/llmSettings'
 export type { AppSettings } from '../../shared/contracts'
 
-// Load environment variables from .env file
 config()
-
-const OPENAI_OAUTH_MODEL_OPTIONS = [
-  'gpt-5.4',
-  'gpt-5.4-mini',
-  'gpt-5.3-codex',
-  'gpt-5.2-codex',
-  'gpt-5.2',
-  'gpt-5.1-codex-max',
-  'gpt-5.1-codex-mini'
-]
-
-const getSuggestedModels = (settings: Pick<AppSettings, 'llmProvider' | 'llmBaseUrl'>): string[] => {
-  if (settings.llmProvider === 'openai-oauth') {
-    return OPENAI_OAUTH_MODEL_OPTIONS
-  }
-
-  if (settings.llmProvider !== 'openai-compatible') {
-    return []
-  }
-
-  const baseURL = settings.llmBaseUrl.toLowerCase()
-  if (baseURL.includes('deepseek')) {
-    return ['deepseek-chat', 'deepseek-reasoner']
-  }
-
-  if (baseURL.includes('minimax')) {
-    return ['MiniMax-M2.5', 'MiniMax-Text-01']
-  }
-
-  if (baseURL.includes('aliyuncs') || baseURL.includes('dashscope')) {
-    return ['qwen3.5-plus', 'qwen-plus', 'qwen-max', 'qwen3-vl-plus']
-  }
-
-  return []
-}
-
-const getDefaultModelForSettings = (settings: Pick<AppSettings, 'llmProvider' | 'llmBaseUrl'>): string => {
-  const suggestedModels = getSuggestedModels(settings)
-  if (suggestedModels.length > 0) {
-    return suggestedModels[0]
-  }
-
-  if (settings.llmProvider === 'openai') {
-    return 'gpt-4o-mini'
-  }
-
-  return ''
-}
 
 const hydrateStoredSettings = (savedSettings: Record<string, unknown>): AppSettings => {
   const hydratedSettings = { ...DEFAULT_SETTINGS }
@@ -68,39 +20,6 @@ const hydrateStoredSettings = (savedSettings: Record<string, unknown>): AppSetti
   return hydratedSettings
 }
 
-const normalizeSettings = (settings: AppSettings): AppSettings => {
-  let llmModel = settings.llmModel
-  let llmAuthMode = settings.llmAuthMode
-
-  if (settings.llmProvider === 'openai-oauth') {
-    llmAuthMode = 'oauth-token'
-    if (!OPENAI_OAUTH_MODEL_OPTIONS.includes(llmModel)) {
-      llmModel = OPENAI_OAUTH_MODEL_OPTIONS[0]
-    }
-  } else if (settings.llmProvider === 'openai-compatible') {
-    llmAuthMode = 'api-key'
-    if (llmModel && OPENAI_OAUTH_MODEL_OPTIONS.includes(llmModel)) {
-      llmModel = getDefaultModelForSettings(settings)
-    }
-  } else if (
-    settings.llmProvider === 'openai' &&
-    (!llmModel ||
-      llmModel.startsWith('deepseek-') ||
-      llmModel.startsWith('qwen') ||
-      llmModel.startsWith('MiniMax-') ||
-      llmModel.startsWith('glm-'))
-  ) {
-    llmModel = getDefaultModelForSettings(settings)
-  }
-
-  return {
-    ...settings,
-    llmAuthMode,
-    llmModel
-  }
-}
-
-// Load from environment variables if available
 const getEnvApiKey = (key: string): string => {
   return process.env[key] || process.env[`VITE_${key}`] || ''
 }
@@ -111,8 +30,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     process.env.VITE_TRANSCRIPTION_PROVIDER === 'assemblyai'
       ? 'assemblyai'
       : 'openai',
-  transcriptionApiKey:
-    process.env.ASSEMBLYAI_API_KEY || process.env.VITE_ASSEMBLYAI_API_KEY || '',
+  transcriptionApiKey: process.env.ASSEMBLYAI_API_KEY || process.env.VITE_ASSEMBLYAI_API_KEY || '',
   assemblyAiSpeechModel:
     process.env.ASSEMBLYAI_SPEECH_MODEL === 'universal-streaming-english'
       ? 'universal-streaming-english'
@@ -126,8 +44,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   assemblyAiMaxTurnSilence: Number(process.env.ASSEMBLYAI_MAX_TURN_SILENCE || 1280),
   assemblyAiKeytermsPrompt:
     process.env.ASSEMBLYAI_KEYTERMS_PROMPT || process.env.VITE_ASSEMBLYAI_KEYTERMS_PROMPT || '',
-  assemblyAiPrompt:
-    process.env.ASSEMBLYAI_PROMPT || process.env.VITE_ASSEMBLYAI_PROMPT || '',
+  assemblyAiPrompt: process.env.ASSEMBLYAI_PROMPT || process.env.VITE_ASSEMBLYAI_PROMPT || '',
   llmProvider:
     process.env.LLM_PROVIDER === 'openai-compatible' ||
     process.env.VITE_LLM_PROVIDER === 'openai-compatible'
@@ -135,7 +52,7 @@ const DEFAULT_SETTINGS: AppSettings = {
       : process.env.LLM_PROVIDER === 'openai-oauth' ||
           process.env.VITE_LLM_PROVIDER === 'openai-oauth'
         ? 'openai-oauth'
-      : 'openai',
+        : 'openai',
   llmAuthMode:
     process.env.LLM_AUTH_MODE === 'oauth-token' || process.env.VITE_LLM_AUTH_MODE === 'oauth-token'
       ? 'oauth-token'
@@ -178,7 +95,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   alwaysOnTop: true,
   windowOpacity: 1.0,
   pauseThreshold: 1500,
-  autoStart: false,
   captureSourceId: '',
   captureSourceType: 'auto'
 }
@@ -321,7 +237,7 @@ export class SettingsManager {
         }
 
         const hydratedSettings = hydrateStoredSettings(savedSettings)
-        const normalizedSettings = normalizeSettings(hydratedSettings)
+        const normalizedSettings = normalizeLlmSettings(hydratedSettings)
 
         if (JSON.stringify(hydratedSettings) !== JSON.stringify(normalizedSettings)) {
           needsSave = true
@@ -332,12 +248,12 @@ export class SettingsManager {
     } catch (error) {
       console.error('Failed to load settings:', error)
     }
-    return { settings: normalizeSettings({ ...DEFAULT_SETTINGS }), needsSave: false }
+    return { settings: normalizeLlmSettings({ ...DEFAULT_SETTINGS }), needsSave: false }
   }
 
   private saveSettings(): void {
     try {
-      const settingsToSave = { ...normalizeSettings(this.settings) }
+      const settingsToSave = { ...normalizeLlmSettings(this.settings) }
 
       // Encrypt API keys if encryption is available
       if (safeStorage.isEncryptionAvailable()) {
@@ -383,7 +299,7 @@ export class SettingsManager {
   }
 
   getSettings(): AppSettings {
-    this.settings = normalizeSettings(this.settings)
+    this.settings = normalizeLlmSettings(this.settings)
     return { ...this.settings }
   }
 
@@ -392,35 +308,21 @@ export class SettingsManager {
   }
 
   updateSettings(updates: Partial<AppSettings>): void {
-    this.settings = normalizeSettings({ ...this.settings, ...updates })
+    this.settings = normalizeLlmSettings({ ...this.settings, ...updates })
     this.pendingMigrationSave = false
     this.saveSettings()
   }
 
   setSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]): void {
     this.settings[key] = value
-    this.settings = normalizeSettings(this.settings)
+    this.settings = normalizeLlmSettings(this.settings)
     this.pendingMigrationSave = false
     this.saveSettings()
   }
 
   resetToDefaults(): void {
-    this.settings = normalizeSettings({ ...DEFAULT_SETTINGS })
+    this.settings = normalizeLlmSettings({ ...DEFAULT_SETTINGS })
     this.pendingMigrationSave = false
     this.saveSettings()
-  }
-
-  hasApiKeys(): boolean {
-    const hasLlmCredential =
-      this.settings.llmProvider === 'openai-oauth' ||
-      (this.settings.llmProvider === 'openai' && this.settings.llmAuthMode === 'oauth-token')
-        ? Boolean(this.settings.llmOauthToken)
-        : Boolean(this.settings.llmApiKey)
-    const hasTranscriptionCredential =
-      this.settings.transcriptionProvider === 'assemblyai'
-        ? Boolean(this.settings.transcriptionApiKey)
-        : Boolean(this.settings.llmApiKey)
-
-    return hasLlmCredential && hasTranscriptionCredential
   }
 }

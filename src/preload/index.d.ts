@@ -2,7 +2,6 @@ import { ElectronAPI } from '@electron-toolkit/preload'
 import type {
   AnswerEntry,
   AppSettings,
-  AudioSource,
   AudioSourceSelectionResult,
   AvatarIndexStatus,
   AvatarProfile,
@@ -27,21 +26,17 @@ export type {
 } from '../shared/contracts'
 
 export interface Api {
-  // Settings
   getSettings: () => Promise<AppSettings>
   updateSettings: (updates: Partial<AppSettings>) => Promise<AppSettings>
-  hasApiKeys: () => Promise<boolean>
   getWindowCapabilities: () => Promise<WindowCapabilities>
-  fetchOpenAIModels: (
-    payload: {
-      apiKey?: string
-      oauthToken?: string
-      provider?: 'openai' | 'openai-oauth' | 'openai-compatible'
-      authMode?: 'api-key' | 'oauth-token'
-      baseURL?: string
-      customHeaders?: string
-    }
-  ) => Promise<{ success: boolean; models: Array<{ id: string; name: string }>; error?: string }>
+  fetchOpenAIModels: (payload: {
+    apiKey?: string
+    oauthToken?: string
+    provider?: 'openai' | 'openai-oauth' | 'openai-compatible'
+    authMode?: 'api-key' | 'oauth-token'
+    baseURL?: string
+    customHeaders?: string
+  }) => Promise<{ success: boolean; models: Array<{ id: string; name: string }>; error?: string }>
   fetchOllamaEmbeddingModels: (payload?: {
     baseURL?: string
   }) => Promise<{ success: boolean; models: Array<{ id: string; name: string }>; error?: string }>
@@ -53,7 +48,12 @@ export interface Api {
     baseURL?: string
     customHeaders?: string
     model?: string
-  }) => Promise<{ success: boolean; message: string; modelCount?: number; hasPreferredModel?: boolean }>
+  }) => Promise<{
+    success: boolean
+    message: string
+    modelCount?: number
+    hasPreferredModel?: boolean
+  }>
   testTranscriptionConnection: (payload: {
     provider?: 'openai' | 'assemblyai'
     apiKey?: string
@@ -67,42 +67,27 @@ export interface Api {
   }) => Promise<{ success: boolean; message: string }>
   connectOpenAIOAuth: () => Promise<{ success: boolean; settings?: AppSettings; error?: string }>
   disconnectOpenAIOAuth: () => Promise<{ success: boolean; settings?: AppSettings; error?: string }>
-
-  // Avatar
   getAvatarProfile: () => Promise<AvatarProfile>
   updateAvatarProfile: (updates: Partial<AvatarProfile>) => Promise<AvatarProfile>
   openAvatarMemoryFolder: () => Promise<{ success: boolean; path: string; error?: string }>
   getAvatarIndexStatus: () => Promise<AvatarIndexStatus>
   reindexAvatarSources: () => Promise<AvatarIndexStatus>
-
-  // Audio capture
   startCapture: () => Promise<{ success: boolean }>
   stopCapture: () => Promise<{ success: boolean }>
-  getCaptureStatus: () => Promise<boolean>
   sendAudioData: (audioData: ArrayBuffer) => void
   getAudioSources: () => Promise<AudioSourceSelectionResult>
-
-  // Window controls
   setAlwaysOnTop: (value: boolean) => Promise<boolean>
   setWindowOpacity: (value: number) => Promise<number>
   minimizeWindow: () => Promise<void>
   closeWindow: () => Promise<void>
-
-  // Conversation
   clearHistory: () => Promise<{ success: boolean }>
   generateAnswerManually: (questionText: string) => Promise<{ success: boolean }>
-
-  // History
   getHistory: () => Promise<AnswerEntry[]>
   saveHistoryEntry: (entry: AnswerEntry) => Promise<{ success: boolean }>
   saveHistoryEntries: (entries: AnswerEntry[]) => Promise<{ success: boolean }>
   clearSavedHistory: () => Promise<{ success: boolean }>
   deleteHistoryEntry: (id: string) => Promise<{ success: boolean }>
-
-  // Clipboard
   writeToClipboard: (text: string) => Promise<{ success: boolean; error?: string }>
-
-  // Screenshot
   captureScreenshot: () => Promise<{ success: boolean; imageData?: string; error?: string }>
   analyzeScreenshot: (imageData: string) => Promise<{
     success: boolean
@@ -112,15 +97,11 @@ export interface Api {
     error?: string
     message?: string
   }>
-
-  // Session API
   callSessionApi: (payload: {
     sessionDuration: number
     timestamp: number
     [key: string]: unknown
   }) => Promise<{ success: boolean; data?: unknown; error?: string; skipped?: boolean }>
-
-  // Event listeners
   onTranscript: (callback: (event: TranscriptEvent) => void) => () => void
   onUtteranceEnd: (callback: () => void) => () => void
   onSpeechStarted: (callback: () => void) => () => void

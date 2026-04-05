@@ -1,11 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useInterviewStore } from '../store/interviewStore'
 
-/**
- * This hook sets up IPC event listeners ONCE.
- * It should only be called from App.tsx to prevent duplicate listeners.
- */
-export function useInterviewEvents() {
+export function useInterviewEvents(): void {
   const {
     addTranscript,
     setCurrentTranscript,
@@ -23,12 +19,10 @@ export function useInterviewEvents() {
     setAvatarReindexProgress
   } = useInterviewStore()
 
-  // Use ref to ensure listeners are only set up once
   const listenersSetUp = useRef(false)
 
-  // Load settings on mount
   useEffect(() => {
-    const loadSettings = async () => {
+    const loadSettings = async (): Promise<void> => {
       try {
         const [savedSettings, avatarProfile, avatarIndexStatus] = await Promise.all([
           window.api.getSettings(),
@@ -45,9 +39,7 @@ export function useInterviewEvents() {
     loadSettings()
   }, [setAvatarIndexStatus, setAvatarProfile, setSettings])
 
-  // Set up event listeners ONCE
   useEffect(() => {
-    // Prevent setting up listeners multiple times
     if (listenersSetUp.current) {
       return
     }

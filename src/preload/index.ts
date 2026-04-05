@@ -26,42 +26,39 @@ export type {
   WindowCapabilities
 } from '../shared/contracts'
 
-// Custom APIs for renderer
 const api = {
-  // Settings
   getSettings: (): Promise<AppSettings> => ipcRenderer.invoke('get-settings'),
   updateSettings: (updates: Partial<AppSettings>): Promise<AppSettings> =>
     ipcRenderer.invoke('update-settings', updates),
-  hasApiKeys: (): Promise<boolean> => ipcRenderer.invoke('has-api-keys'),
   getWindowCapabilities: (): Promise<WindowCapabilities> =>
     ipcRenderer.invoke('get-window-capabilities'),
-  fetchOpenAIModels: (
-    payload: {
-      apiKey?: string
-      oauthToken?: string
-      provider?: 'openai' | 'openai-oauth' | 'openai-compatible'
-      authMode?: 'api-key' | 'oauth-token'
-      baseURL?: string
-      customHeaders?: string
-    }
-  ): Promise<{ success: boolean; models: Array<{ id: string; name: string }>; error?: string }> =>
+  fetchOpenAIModels: (payload: {
+    apiKey?: string
+    oauthToken?: string
+    provider?: 'openai' | 'openai-oauth' | 'openai-compatible'
+    authMode?: 'api-key' | 'oauth-token'
+    baseURL?: string
+    customHeaders?: string
+  }): Promise<{ success: boolean; models: Array<{ id: string; name: string }>; error?: string }> =>
     ipcRenderer.invoke('fetch-openai-models', payload),
   fetchOllamaEmbeddingModels: (payload?: {
     baseURL?: string
   }): Promise<{ success: boolean; models: Array<{ id: string; name: string }>; error?: string }> =>
     ipcRenderer.invoke('fetch-ollama-embedding-models', payload),
-  testProviderConnection: (
-    payload: {
-      apiKey?: string
-      oauthToken?: string
-      provider?: 'openai' | 'openai-oauth' | 'openai-compatible'
-      authMode?: 'api-key' | 'oauth-token'
-      baseURL?: string
-      customHeaders?: string
-      model?: string
-    }
-  ): Promise<{ success: boolean; message: string; modelCount?: number; hasPreferredModel?: boolean }> =>
-    ipcRenderer.invoke('test-provider-connection', payload),
+  testProviderConnection: (payload: {
+    apiKey?: string
+    oauthToken?: string
+    provider?: 'openai' | 'openai-oauth' | 'openai-compatible'
+    authMode?: 'api-key' | 'oauth-token'
+    baseURL?: string
+    customHeaders?: string
+    model?: string
+  }): Promise<{
+    success: boolean
+    message: string
+    modelCount?: number
+    hasPreferredModel?: boolean
+  }> => ipcRenderer.invoke('test-provider-connection', payload),
   testTranscriptionConnection: (payload: {
     provider?: 'openai' | 'assemblyai'
     apiKey?: string
@@ -76,10 +73,11 @@ const api = {
     ipcRenderer.invoke('test-transcription-connection', payload),
   connectOpenAIOAuth: (): Promise<{ success: boolean; settings?: AppSettings; error?: string }> =>
     ipcRenderer.invoke('connect-openai-oauth'),
-  disconnectOpenAIOAuth: (): Promise<{ success: boolean; settings?: AppSettings; error?: string }> =>
-    ipcRenderer.invoke('disconnect-openai-oauth'),
-
-  // Avatar
+  disconnectOpenAIOAuth: (): Promise<{
+    success: boolean
+    settings?: AppSettings
+    error?: string
+  }> => ipcRenderer.invoke('disconnect-openai-oauth'),
   getAvatarProfile: (): Promise<AvatarProfile> => ipcRenderer.invoke('get-avatar-profile'),
   updateAvatarProfile: (updates: Partial<AvatarProfile>): Promise<AvatarProfile> =>
     ipcRenderer.invoke('update-avatar-profile', updates),
@@ -87,29 +85,22 @@ const api = {
     ipcRenderer.invoke('open-avatar-memory-folder'),
   getAvatarIndexStatus: (): Promise<AvatarIndexStatus> =>
     ipcRenderer.invoke('get-avatar-index-status'),
-  reindexAvatarSources: (): Promise<AvatarIndexStatus> => ipcRenderer.invoke('reindex-avatar-sources'),
-
-  // Audio capture
+  reindexAvatarSources: (): Promise<AvatarIndexStatus> =>
+    ipcRenderer.invoke('reindex-avatar-sources'),
   startCapture: (): Promise<{ success: boolean }> => ipcRenderer.invoke('start-capture'),
   stopCapture: (): Promise<{ success: boolean }> => ipcRenderer.invoke('stop-capture'),
-  getCaptureStatus: (): Promise<boolean> => ipcRenderer.invoke('get-capture-status'),
   sendAudioData: (audioData: ArrayBuffer): void => ipcRenderer.send('audio-data', audioData),
-  getAudioSources: (): Promise<AudioSourceSelectionResult> => ipcRenderer.invoke('get-audio-sources'),
-
-  // Window controls
+  getAudioSources: (): Promise<AudioSourceSelectionResult> =>
+    ipcRenderer.invoke('get-audio-sources'),
   setAlwaysOnTop: (value: boolean): Promise<boolean> =>
     ipcRenderer.invoke('set-always-on-top', value),
   setWindowOpacity: (value: number): Promise<number> =>
     ipcRenderer.invoke('set-window-opacity', value),
   minimizeWindow: (): Promise<void> => ipcRenderer.invoke('minimize-window'),
   closeWindow: (): Promise<void> => ipcRenderer.invoke('close-window'),
-
-  // Conversation
   clearHistory: (): Promise<{ success: boolean }> => ipcRenderer.invoke('clear-history'),
   generateAnswerManually: (questionText: string): Promise<{ success: boolean }> =>
     ipcRenderer.invoke('generate-answer-manually', questionText),
-
-  // History
   getHistory: (): Promise<AnswerEntry[]> => ipcRenderer.invoke('get-history'),
   saveHistoryEntry: (entry: AnswerEntry): Promise<{ success: boolean }> =>
     ipcRenderer.invoke('save-history-entry', entry),
@@ -118,12 +109,8 @@ const api = {
   clearSavedHistory: (): Promise<{ success: boolean }> => ipcRenderer.invoke('clear-saved-history'),
   deleteHistoryEntry: (id: string): Promise<{ success: boolean }> =>
     ipcRenderer.invoke('delete-history-entry', id),
-
-  // Clipboard
   writeToClipboard: (text: string): Promise<{ success: boolean; error?: string }> =>
     ipcRenderer.invoke('write-to-clipboard', text),
-
-  // Screenshot
   captureScreenshot: (): Promise<{ success: boolean; imageData?: string; error?: string }> =>
     ipcRenderer.invoke('capture-screenshot'),
   analyzeScreenshot: (
@@ -136,16 +123,12 @@ const api = {
     error?: string
     message?: string
   }> => ipcRenderer.invoke('analyze-screenshot', imageData),
-
-  // Session API
   callSessionApi: (payload: {
     sessionDuration: number
     timestamp: number
     [key: string]: unknown
   }): Promise<{ success: boolean; data?: unknown; error?: string; skipped?: boolean }> =>
     ipcRenderer.invoke('call-session-api', payload),
-
-  // Event listeners
   onTranscript: (callback: (event: TranscriptEvent) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, data: TranscriptEvent): void =>
       callback(data)
@@ -242,9 +225,6 @@ const api = {
   }
 }
 
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)

@@ -2,11 +2,33 @@ import { useCallback } from 'react'
 import { useInterviewStore } from '../store/interviewStore'
 import { useAudioCapture } from './useAudioCapture'
 
-/**
- * Hook for interview state and actions.
- * NOTE: IPC listeners are set up separately in useInterviewEvents (called from App.tsx)
- */
-export function useInterview() {
+type InterviewStateSnapshot = ReturnType<typeof useInterviewStore.getState>
+type AudioCaptureSnapshot = ReturnType<typeof useAudioCapture>
+
+interface UseInterviewResult {
+  isCapturing: boolean
+  isGenerating: boolean
+  isSpeaking: boolean
+  isProcessingScreenshot: boolean
+  transcripts: InterviewStateSnapshot['transcripts']
+  currentTranscript: string
+  answers: InterviewStateSnapshot['answers']
+  currentAnswer: string
+  currentQuestion: string
+  currentAnswerTruncated: boolean
+  manualAssistSuggested: boolean
+  settings: InterviewStateSnapshot['settings']
+  error: string | null
+  audioSource: AudioCaptureSnapshot['audioSource']
+  isSessionActive: boolean
+  startInterview: () => Promise<void>
+  stopInterview: () => Promise<void>
+  clearHistory: () => Promise<void>
+  captureAndAnalyzeScreenshot: () => Promise<void>
+  generateAnswerManually: () => Promise<void>
+}
+
+export function useInterview(): UseInterviewResult {
   const {
     isCapturing: storeCapturing,
     isGenerating,
@@ -37,27 +59,22 @@ export function useInterview() {
     stopCapture: stopAudioCapture
   } = useAudioCapture()
 
-  // Sync audio capture state with store
-  // This is handled in the component that calls startInterview
-  const startInterview = useCallback(
-    async () => {
-      setError(null)
-      try {
-        const started = await startAudioCapture()
-        if (!started) {
-          setCapturing(false)
-          return
-        }
-
-        clearAll()
-        setCapturing(true)
-      } catch (err) {
+  const startInterview = useCallback(async () => {
+    setError(null)
+    try {
+      const started = await startAudioCapture()
+      if (!started) {
         setCapturing(false)
-        throw err
+        return
       }
-    },
-    [startAudioCapture, setError, clearAll, setCapturing]
-  )
+
+      clearAll()
+      setCapturing(true)
+    } catch (err) {
+      setCapturing(false)
+      throw err
+    }
+  }, [startAudioCapture, setError, clearAll, setCapturing])
 
   const stopInterview = useCallback(async () => {
     await stopAudioCapture()
@@ -104,7 +121,6 @@ export function useInterview() {
       setError(null)
       setProcessingScreenshot(true)
 
-      // Capture screenshot
       const captureResult = await window.api.captureScreenshot()
 
       if (!captureResult.success || !captureResult.imageData) {
@@ -114,7 +130,6 @@ export function useInterview() {
         throw new Error(captureResult.error || 'Failed to capture screenshot')
       }
 
-      // Analyze screenshot
       const analysisResult = await window.api.analyzeScreenshot(captureResult.imageData)
 
       if (!analysisResult.success) {
@@ -124,7 +139,6 @@ export function useInterview() {
       if (!analysisResult.isQuestion) {
         setError(analysisResult.message || 'No interview question detected in the screenshot')
       }
-      // If question is detected, the answer generation will be handled by event listeners
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to process screenshot'
       if (errorMessage === 'Screenshot canceled') {
@@ -138,7 +152,6 @@ export function useInterview() {
   }, [setError, setProcessingScreenshot])
 
   return {
-    // State
     isCapturing: storeCapturing || audioCapturing,
     isGenerating,
     isSpeaking,
@@ -154,8 +167,6 @@ export function useInterview() {
     error: error || audioError,
     audioSource,
     isSessionActive,
-
-    // Actions
     startInterview,
     stopInterview,
     clearHistory,

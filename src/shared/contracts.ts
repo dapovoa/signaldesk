@@ -39,7 +39,6 @@ export interface AppSettings {
   alwaysOnTop: boolean
   windowOpacity: number
   pauseThreshold: number
-  autoStart: boolean
   captureSourceId: string
   captureSourceType: 'window' | 'screen' | 'auto'
 }

@@ -55,16 +55,16 @@ export class QuestionDetector extends EventEmitter {
     'next question',
     'no worries',
     'take it easy',
-    'let\'s keep the conversation going',
-    'if you\'d like to',
+    "let's keep the conversation going",
+    "if you'd like to",
     'would you like to focus on first',
     'what part of the',
     'maybe automation',
     'maybe cloud',
     'maybe troubleshooting',
     'welcome to your',
-    'let\'s get started',
-    'great, let\'s dive in',
+    "let's get started",
+    "great, let's dive in",
     'great tracking',
     'remember to',
     'nice start',
@@ -82,10 +82,6 @@ export class QuestionDetector extends EventEmitter {
     if (isFinal && text.trim()) {
       this.transcriptBuffer.push(text.trim())
     }
-  }
-
-  checkEarlyDetection(_text: string): DetectedQuestion | null {
-    return null
   }
 
   onUtteranceEnd(): boolean {
@@ -178,7 +174,8 @@ export class QuestionDetector extends EventEmitter {
     const firstWord = words[0] || ''
     const hasQuestionMark = text.trim().endsWith('?')
     const hasDirectStarter =
-      this.strongStarters.has(firstWord) || this.startsWithMultiWordStarter(lower, this.strongStarters)
+      this.strongStarters.has(firstWord) ||
+      this.startsWithMultiWordStarter(lower, this.strongStarters)
     const hasInterviewStarter = this.startsWithMultiWordStarter(lower, this.interviewPromptStarters)
     let confidence = 0.4
 

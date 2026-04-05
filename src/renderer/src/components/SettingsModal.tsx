@@ -1,70 +1,28 @@
 import { AlertCircle, CheckCircle, Eye, EyeOff, Loader2, Save, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { AppSettings, useInterviewStore } from '../store/interviewStore'
+import {
+  getDefaultLlmModel,
+  getSuggestedLlmModels,
+  normalizeLlmSettings,
+  usesOAuthCredential
+} from '../../../shared/llmSettings'
 
 interface ModelOption {
   id: string
   name: string
 }
 
-const OPENAI_OAUTH_MODEL_OPTIONS: ModelOption[] = [
-  { id: 'gpt-5.4', name: 'gpt-5.4' },
-  { id: 'gpt-5.4-mini', name: 'gpt-5.4-mini' },
-  { id: 'gpt-5.3-codex', name: 'gpt-5.3-codex' },
-  { id: 'gpt-5.2-codex', name: 'gpt-5.2-codex' },
-  { id: 'gpt-5.2', name: 'gpt-5.2' },
-  { id: 'gpt-5.1-codex-max', name: 'gpt-5.1-codex-max' },
-  { id: 'gpt-5.1-codex-mini', name: 'gpt-5.1-codex-mini' }
-]
-
-const getSuggestedModels = (settings: AppSettings): ModelOption[] => {
-  if (settings.llmProvider === 'openai-oauth') {
-    return OPENAI_OAUTH_MODEL_OPTIONS
-  }
-
-  if (settings.llmProvider !== 'openai-compatible') {
-    return []
-  }
-
-  const baseURL = settings.llmBaseUrl.toLowerCase()
-  if (baseURL.includes('deepseek')) {
-    return [
-      { id: 'deepseek-chat', name: 'deepseek-chat' },
-      { id: 'deepseek-reasoner', name: 'deepseek-reasoner' }
-    ]
-  }
-
-  if (baseURL.includes('minimax')) {
-    return [
-      { id: 'MiniMax-M2.5', name: 'MiniMax-M2.5' },
-      { id: 'MiniMax-Text-01', name: 'MiniMax-Text-01' }
-    ]
-  }
-
-  if (baseURL.includes('aliyuncs') || baseURL.includes('dashscope')) {
-    return [
-      { id: 'qwen3.5-plus', name: 'qwen3.5-plus' },
-      { id: 'qwen-plus', name: 'qwen-plus' },
-      { id: 'qwen-max', name: 'qwen-max' },
-      { id: 'qwen3-vl-plus', name: 'qwen3-vl-plus' }
-    ]
-  }
-
-  return []
+interface LlmFormState {
+  provider: AppSettings['llmProvider']
+  authMode: AppSettings['llmAuthMode']
+  usesOAuth: boolean
+  credential: string
+  baseURL: string
 }
 
-const getDefaultModelForSettings = (settings: AppSettings): string => {
-  const suggestedModels = getSuggestedModels(settings)
-  if (suggestedModels.length > 0) {
-    return suggestedModels[0].id
-  }
-
-  if (settings.llmProvider === 'openai') {
-    return 'gpt-4o-mini'
-  }
-
-  return ''
-}
+const toModelOptions = (modelIds: string[]): ModelOption[] =>
+  modelIds.map((id) => ({ id, name: id }))
 
 function SectionDivider({ label }: { label: string }): React.ReactNode {
   return (
@@ -76,36 +34,22 @@ function SectionDivider({ label }: { label: string }): React.ReactNode {
   )
 }
 
-const normalizeSettingsForUi = (settings: AppSettings): AppSettings => {
-  const suggestedModels = getSuggestedModels(settings)
-  let llmModel = settings.llmModel
-  let llmAuthMode = settings.llmAuthMode
+const normalizeSettingsForUi = normalizeLlmSettings
 
-  if (settings.llmProvider === 'openai-oauth') {
-    llmAuthMode = 'oauth-token'
-    if (!suggestedModels.some((model) => model.id === llmModel)) {
-      llmModel = suggestedModels[0]?.id || 'gpt-5.4'
-    }
-  } else if (settings.llmProvider === 'openai-compatible') {
-    llmAuthMode = 'api-key'
-    if (OPENAI_OAUTH_MODEL_OPTIONS.some((model) => model.id === llmModel)) {
-      llmModel = getDefaultModelForSettings(settings)
-    }
-  } else if (
-    settings.llmProvider === 'openai' &&
-    (!llmModel ||
-      llmModel.startsWith('deepseek-') ||
-      llmModel.startsWith('qwen') ||
-      llmModel.startsWith('MiniMax-') ||
-      llmModel.startsWith('glm-'))
-  ) {
-    llmModel = getDefaultModelForSettings(settings)
-  }
+const getLlmFormState = (settings: AppSettings): LlmFormState => {
+  const provider = settings.llmProvider
+  const authMode = settings.llmAuthMode
+  const usesOAuth = usesOAuthCredential({
+    llmProvider: provider,
+    llmAuthMode: authMode
+  })
 
   return {
-    ...settings,
-    llmAuthMode,
-    llmModel
+    provider,
+    authMode,
+    usesOAuth,
+    credential: usesOAuth ? settings.llmOauthToken.trim() : settings.llmApiKey.trim(),
+    baseURL: settings.llmBaseUrl.trim()
   }
 }
 
@@ -135,6 +79,8 @@ export function SettingsModal(): React.ReactNode | null {
     warning: ''
   })
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const { llmProvider, llmAuthMode, llmApiKey, llmOauthToken, llmBaseUrl, llmCustomHeaders } =
+    localSettings
 
   useEffect(() => {
     setLocalSettings(normalizeSettingsForUi(settings))
@@ -175,13 +121,14 @@ export function SettingsModal(): React.ReactNode | null {
     setConnectionStatus('idle')
     setConnectionMessage('')
 
-    const provider = localSettings.llmProvider
-    const authMode = localSettings.llmAuthMode
-    const credential =
-      provider === 'openai-oauth' || (provider === 'openai' && authMode === 'oauth-token')
-        ? localSettings.llmOauthToken?.trim()
-        : localSettings.llmApiKey?.trim()
-    const baseURL = localSettings.llmBaseUrl?.trim()
+    const provider = llmProvider
+    const authMode = llmAuthMode
+    const usesOAuth = usesOAuthCredential({
+      llmProvider,
+      llmAuthMode
+    })
+    const credential = usesOAuth ? llmOauthToken.trim() : llmApiKey.trim()
+    const baseURL = llmBaseUrl.trim()
     if (!credential) {
       setModels([])
       setModelsError(null)
@@ -209,17 +156,12 @@ export function SettingsModal(): React.ReactNode | null {
     fetchTimeoutRef.current = setTimeout(async () => {
       try {
         const result = await window.api.fetchOpenAIModels({
-          apiKey:
-            provider === 'openai-compatible' || (provider === 'openai' && authMode === 'api-key')
-              ? credential
-              : undefined,
-          oauthToken:
-            provider === 'openai' && authMode === 'oauth-token' ? credential : undefined,
+          apiKey: usesOAuth ? undefined : credential,
+          oauthToken: usesOAuth ? credential : undefined,
           provider,
           authMode,
           baseURL: provider === 'openai-compatible' ? baseURL : undefined,
-          customHeaders:
-            provider === 'openai-compatible' ? localSettings.llmCustomHeaders : undefined
+          customHeaders: provider === 'openai-compatible' ? llmCustomHeaders : undefined
         })
 
         if (result.success) {
@@ -243,14 +185,7 @@ export function SettingsModal(): React.ReactNode | null {
         clearTimeout(fetchTimeoutRef.current)
       }
     }
-  }, [
-    localSettings.llmApiKey,
-    localSettings.llmOauthToken,
-    localSettings.llmProvider,
-    localSettings.llmAuthMode,
-    localSettings.llmBaseUrl,
-    localSettings.llmCustomHeaders
-  ])
+  }, [llmApiKey, llmOauthToken, llmProvider, llmAuthMode, llmBaseUrl, llmCustomHeaders])
 
   if (!showSettings) return null
 
@@ -301,13 +236,7 @@ export function SettingsModal(): React.ReactNode | null {
   }
 
   const handleTestConnection = async (): Promise<void> => {
-    const provider = localSettings.llmProvider
-    const authMode = localSettings.llmAuthMode
-    const credential =
-      provider === 'openai-oauth' || (provider === 'openai' && authMode === 'oauth-token')
-        ? localSettings.llmOauthToken?.trim()
-        : localSettings.llmApiKey?.trim()
-    const baseURL = localSettings.llmBaseUrl?.trim()
+    const { provider, authMode, credential, baseURL, usesOAuth } = getLlmFormState(localSettings)
 
     if (provider === 'openai-oauth' && oauthStatus === 'ok') {
       setOauthStatus('idle')
@@ -335,14 +264,8 @@ export function SettingsModal(): React.ReactNode | null {
       setConnectionMessage('')
 
       const result = await window.api.testProviderConnection({
-        apiKey:
-          provider === 'openai-compatible' || (provider === 'openai' && authMode === 'api-key')
-            ? credential
-            : undefined,
-        oauthToken:
-          provider === 'openai-oauth' || (provider === 'openai' && authMode === 'oauth-token')
-            ? credential
-            : undefined,
+        apiKey: usesOAuth ? undefined : credential,
+        oauthToken: usesOAuth ? credential : undefined,
         provider,
         authMode,
         baseURL: provider === 'openai-compatible' ? baseURL : undefined,
@@ -405,14 +328,12 @@ export function SettingsModal(): React.ReactNode | null {
     setShowSettings(false)
   }
 
-  const suggestedModels = getSuggestedModels(localSettings)
+  const suggestedModels = toModelOptions(getSuggestedLlmModels(localSettings))
   const hasStoredOAuthSession = Boolean(
     localSettings.llmOauthToken || localSettings.llmOauthRefreshToken
   )
   const usesManualCredentialInput = localSettings.llmProvider !== 'openai-oauth'
-  const usesOAuthCredential =
-    localSettings.llmProvider === 'openai-oauth' ||
-    (localSettings.llmProvider === 'openai' && localSettings.llmAuthMode === 'oauth-token')
+  const usesOAuthCredentialForInput = usesOAuthCredential(localSettings)
 
   const handleConnectOpenAI = async (): Promise<void> => {
     try {
@@ -483,7 +404,9 @@ export function SettingsModal(): React.ReactNode | null {
 
         <div className="settings-stack custom-scrollbar max-h-[32rem] space-y-4 overflow-y-auto px-6 py-4">
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-dark-200">Transcription Provider</label>
+            <label className="block text-sm font-medium text-dark-200">
+              Transcription Provider
+            </label>
             <select
               value={localSettings.transcriptionProvider}
               onChange={(e) =>
@@ -534,7 +457,9 @@ export function SettingsModal(): React.ReactNode | null {
               </div>
 
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-dark-200">AssemblyAI Speech Model</label>
+                <label className="block text-sm font-medium text-dark-200">
+                  AssemblyAI Speech Model
+                </label>
                 <select
                   value={localSettings.assemblyAiSpeechModel}
                   onChange={(e) =>
@@ -545,13 +470,17 @@ export function SettingsModal(): React.ReactNode | null {
                   }
                   className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors"
                 >
-                  <option value="universal-streaming-multilingual">Universal Streaming Multilingual</option>
+                  <option value="universal-streaming-multilingual">
+                    Universal Streaming Multilingual
+                  </option>
                   <option value="universal-streaming-english">Universal Streaming English</option>
                 </select>
               </div>
 
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-dark-200">Language Detection</label>
+                <label className="block text-sm font-medium text-dark-200">
+                  Language Detection
+                </label>
                 <select
                   value={localSettings.assemblyAiLanguageDetection ? 'on' : 'off'}
                   onChange={(e) =>
@@ -570,7 +499,9 @@ export function SettingsModal(): React.ReactNode | null {
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-dark-200">
                   Min Turn Silence
-                  <span className="ml-2 text-xs text-dark-400">{localSettings.assemblyAiMinTurnSilence}ms</span>
+                  <span className="ml-2 text-xs text-dark-400">
+                    {localSettings.assemblyAiMinTurnSilence}ms
+                  </span>
                 </label>
                 <input
                   type="range"
@@ -591,7 +522,9 @@ export function SettingsModal(): React.ReactNode | null {
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-dark-200">
                   Max Turn Silence
-                  <span className="ml-2 text-xs text-dark-400">{localSettings.assemblyAiMaxTurnSilence}ms</span>
+                  <span className="ml-2 text-xs text-dark-400">
+                    {localSettings.assemblyAiMaxTurnSilence}ms
+                  </span>
                 </label>
                 <input
                   type="range"
@@ -629,7 +562,9 @@ export function SettingsModal(): React.ReactNode | null {
                   onChange={(e) =>
                     setLocalSettings({ ...localSettings, assemblyAiPrompt: e.target.value })
                   }
-                  placeholder={'Transcribe verbatim.\nAlways include punctuation in output.\nUse period/question mark only for complete sentences.'}
+                  placeholder={
+                    'Transcribe verbatim.\nAlways include punctuation in output.\nUse period/question mark only for complete sentences.'
+                  }
                   rows={4}
                   className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors resize-y"
                 />
@@ -673,11 +608,11 @@ export function SettingsModal(): React.ReactNode | null {
                     nextProvider === 'openai'
                       ? localSettings.llmAuthMode
                       : nextProvider === 'openai-compatible'
-                      ? 'api-key'
-                      : 'oauth-token'
+                        ? 'api-key'
+                        : 'oauth-token'
                 }
 
-                nextSettings.llmModel = getDefaultModelForSettings(nextSettings)
+                nextSettings.llmModel = getDefaultLlmModel(nextSettings)
                 setModels([])
                 setModelsError(null)
                 setConnectionStatus('idle')
@@ -717,9 +652,7 @@ export function SettingsModal(): React.ReactNode | null {
             {usesManualCredentialInput && (
               <>
                 <label className="block text-sm font-medium text-dark-200">
-                  {usesOAuthCredential
-                    ? 'OAuth Token'
-                    : 'API Key'}
+                  {usesOAuthCredentialForInput ? 'OAuth Token' : 'API Key'}
                   {localSettings.llmProvider === 'openai' &&
                     localSettings.llmAuthMode === 'api-key' && (
                       <a
@@ -735,16 +668,20 @@ export function SettingsModal(): React.ReactNode | null {
                 <div className="relative">
                   <input
                     type={showCredential ? 'text' : 'password'}
-                    value={usesOAuthCredential ? localSettings.llmOauthToken : localSettings.llmApiKey}
+                    value={
+                      usesOAuthCredentialForInput
+                        ? localSettings.llmOauthToken
+                        : localSettings.llmApiKey
+                    }
                     onChange={(e) =>
                       setLocalSettings(
-                        usesOAuthCredential
+                        usesOAuthCredentialForInput
                           ? { ...localSettings, llmOauthToken: e.target.value }
                           : { ...localSettings, llmApiKey: e.target.value }
                       )
                     }
                     placeholder={
-                      usesOAuthCredential
+                      usesOAuthCredentialForInput
                         ? 'Enter your OAuth access token'
                         : 'Enter your API key'
                     }
@@ -856,12 +793,13 @@ export function SettingsModal(): React.ReactNode | null {
                   className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
                 />
               </div>
-
             </>
           )}
 
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-dark-200">Answer Generation Model</label>
+            <label className="block text-sm font-medium text-dark-200">
+              Answer Generation Model
+            </label>
             <input
               type="text"
               value={localSettings.llmModel}
@@ -904,7 +842,9 @@ export function SettingsModal(): React.ReactNode | null {
           {localSettings.transcriptionProvider !== 'assemblyai' && (
             <>
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-dark-200">Transcription Language</label>
+                <label className="block text-sm font-medium text-dark-200">
+                  Transcription Language
+                </label>
                 <select
                   value={localSettings.transcriptionLanguage}
                   onChange={(e) =>
@@ -924,7 +864,9 @@ export function SettingsModal(): React.ReactNode | null {
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-dark-200">
                   Silence Detection
-                  <span className="ml-2 text-xs text-dark-400">{localSettings.pauseThreshold}ms</span>
+                  <span className="ml-2 text-xs text-dark-400">
+                    {localSettings.pauseThreshold}ms
+                  </span>
                 </label>
                 <input
                   type="range"
