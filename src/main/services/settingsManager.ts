@@ -2,37 +2,11 @@ import { config } from 'dotenv'
 import { app, safeStorage } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
+import type { AppSettings } from '../../shared/contracts'
+export type { AppSettings } from '../../shared/contracts'
 
 // Load environment variables from .env file
 config()
-
-export interface AppSettings {
-  transcriptionProvider: 'openai' | 'assemblyai'
-  transcriptionApiKey: string
-  assemblyAiSpeechModel: 'universal-streaming-multilingual' | 'universal-streaming-english'
-  assemblyAiLanguageDetection: boolean
-  assemblyAiMinTurnSilence: number
-  assemblyAiMaxTurnSilence: number
-  assemblyAiKeytermsPrompt: string
-  assemblyAiPrompt: string
-  llmProvider: 'openai' | 'openai-oauth' | 'openai-compatible'
-  llmAuthMode: 'api-key' | 'oauth-token'
-  llmApiKey: string
-  llmOauthToken: string
-  llmOauthRefreshToken: string
-  llmOauthExpiresAt: number
-  llmOauthAccountId: string
-  llmBaseUrl: string
-  llmCustomHeaders: string
-  llmModel: string
-  transcriptionLanguage: 'auto' | 'en' | 'pt'
-  alwaysOnTop: boolean
-  windowOpacity: number
-  pauseThreshold: number
-  autoStart: boolean
-  captureSourceId: string
-  captureSourceType: 'window' | 'screen' | 'auto'
-}
 
 const OPENAI_OAUTH_MODEL_OPTIONS = [
   'gpt-5.4',

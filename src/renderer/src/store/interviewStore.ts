@@ -1,76 +1,24 @@
 import { create } from 'zustand'
+import type {
+  AnswerEntry,
+  AppSettings,
+  AvatarIndexStatus,
+  AvatarProfile,
+  AvatarReindexProgress
+} from '../../../shared/contracts'
+export type {
+  AnswerEntry,
+  AppSettings,
+  AvatarIndexStatus,
+  AvatarProfile,
+  AvatarReindexProgress
+} from '../../../shared/contracts'
 
 export interface TranscriptEntry {
   id: string
   text: string
   timestamp: number
   isFinal: boolean
-}
-
-export interface AnswerEntry {
-  id: string
-  question: string
-  answer: string
-  timestamp: number
-  isStreaming: boolean
-  truncated?: boolean
-}
-
-export interface AppSettings {
-  transcriptionProvider: 'openai' | 'assemblyai'
-  transcriptionApiKey: string
-  assemblyAiSpeechModel: 'universal-streaming-multilingual' | 'universal-streaming-english'
-  assemblyAiLanguageDetection: boolean
-  assemblyAiMinTurnSilence: number
-  assemblyAiMaxTurnSilence: number
-  assemblyAiKeytermsPrompt: string
-  assemblyAiPrompt: string
-  llmProvider: 'openai' | 'openai-oauth' | 'openai-compatible'
-  llmAuthMode: 'api-key' | 'oauth-token'
-  llmApiKey: string
-  llmOauthToken: string
-  llmOauthRefreshToken: string
-  llmOauthExpiresAt: number
-  llmOauthAccountId: string
-  llmBaseUrl: string
-  llmCustomHeaders: string
-  llmModel: string
-  transcriptionLanguage: 'auto' | 'en' | 'pt'
-  alwaysOnTop: boolean
-  windowOpacity: number
-  pauseThreshold: number
-  autoStart: boolean
-}
-
-export interface AvatarProfile {
-  identityBase: string
-  cvSummary: string
-  jobTitle: string
-  companyName: string
-  jobDescription: string
-  companyContext: string
-  sourceDirectory: string
-  embeddingModel: string
-  updatedAt: number
-}
-
-export interface AvatarIndexStatus {
-  available: boolean
-  sourceDirectory: string
-  embeddingModel: string
-  documentCount: number
-  chunkCount: number
-  lastIndexedAt: number | null
-  databasePath: string
-  lastError: string | null
-}
-
-export interface AvatarReindexProgress {
-  totalDocuments: number
-  processedDocuments: number
-  embeddedChunks: number
-  embeddingModel: string
-  currentFile: string | null
 }
 
 interface InterviewState {
@@ -175,12 +123,15 @@ const DEFAULT_SETTINGS: AppSettings = {
   alwaysOnTop: true,
   windowOpacity: 1.0,
   pauseThreshold: 1500,
-  autoStart: false
+  autoStart: false,
+  captureSourceId: '',
+  captureSourceType: 'auto'
 }
 
 const DEFAULT_IDENTITY_BASE = ``
 
 const DEFAULT_AVATAR_PROFILE: AvatarProfile = {
+  id: 'default',
   identityBase: DEFAULT_IDENTITY_BASE,
   cvSummary: '',
   jobTitle: '',

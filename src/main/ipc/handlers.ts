@@ -1,6 +1,6 @@
 import { BrowserWindow, clipboard, desktopCapturer, ipcMain, shell } from 'electron'
 import * as fs from 'fs'
-import { AnswerEntry } from '../../preload/index'
+import type { AnswerEntry } from '../../shared/contracts'
 import {
   CHATGPT_CODEX_BASE_URL,
   refreshOpenAIOAuthTokens,

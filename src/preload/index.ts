@@ -1,110 +1,30 @@
 import { electronAPI } from '@electron-toolkit/preload'
 import { contextBridge, ipcRenderer } from 'electron'
-
-// Types for the API
-export interface TranscriptEvent {
-  text: string
-  isFinal: boolean
-  confidence: number
-}
-
-export interface DetectedQuestion {
-  text: string
-  confidence: number
-  questionType: 'direct' | 'indirect' | 'scenario' | 'unknown'
-}
-
-export interface DetectedQuestionFromImage {
-  text: string
-  questionType?: 'leetcode' | 'system-design' | 'other'
-  confidence?: number
-}
-
-export interface AppSettings {
-  transcriptionProvider: 'openai' | 'assemblyai'
-  transcriptionApiKey: string
-  assemblyAiSpeechModel: 'universal-streaming-multilingual' | 'universal-streaming-english'
-  assemblyAiLanguageDetection: boolean
-  assemblyAiMinTurnSilence: number
-  assemblyAiMaxTurnSilence: number
-  assemblyAiKeytermsPrompt: string
-  assemblyAiPrompt: string
-  llmProvider: 'openai' | 'openai-oauth' | 'openai-compatible'
-  llmAuthMode: 'api-key' | 'oauth-token'
-  llmApiKey: string
-  llmOauthToken: string
-  llmOauthRefreshToken: string
-  llmOauthExpiresAt: number
-  llmOauthAccountId: string
-  llmBaseUrl: string
-  llmCustomHeaders: string
-  llmModel: string
-  transcriptionLanguage: 'auto' | 'en' | 'pt'
-  alwaysOnTop: boolean
-  windowOpacity: number
-  pauseThreshold: number
-  autoStart: boolean
-  captureSourceId: string
-  captureSourceType: 'window' | 'screen' | 'auto'
-}
-
-export interface AvatarProfile {
-  identityBase: string
-  cvSummary: string
-  jobTitle: string
-  companyName: string
-  jobDescription: string
-  companyContext: string
-  sourceDirectory: string
-  embeddingModel: string
-  updatedAt: number
-}
-
-export interface AvatarIndexStatus {
-  available: boolean
-  sourceDirectory: string
-  embeddingModel: string
-  documentCount: number
-  chunkCount: number
-  lastIndexedAt: number | null
-  databasePath: string
-  lastError: string | null
-}
-
-export interface AvatarReindexProgress {
-  totalDocuments: number
-  processedDocuments: number
-  embeddedChunks: number
-  embeddingModel: string
-  currentFile: string | null
-}
-
-export interface AudioSource {
-  id: string
-  name: string
-  thumbnail: string
-}
-
-export interface AudioSourceSelectionResult {
-  sources: AudioSource[]
-  canceled: boolean
-}
-
-export interface AnswerEntry {
-  id: string
-  question: string
-  answer: string
-  timestamp: number
-  isStreaming: boolean
-  truncated?: boolean
-}
-
-export interface WindowCapabilities {
-  isWayland: boolean
-  supportsAlwaysOnTop: boolean
-  supportsWindowOpacity: boolean
-  warning: string
-}
+import type {
+  AnswerEntry,
+  AppSettings,
+  AudioSourceSelectionResult,
+  AvatarIndexStatus,
+  AvatarProfile,
+  AvatarReindexProgress,
+  DetectedQuestion,
+  DetectedQuestionFromImage,
+  TranscriptEvent,
+  WindowCapabilities
+} from '../shared/contracts'
+export type {
+  AnswerEntry,
+  AppSettings,
+  AudioSource,
+  AudioSourceSelectionResult,
+  AvatarIndexStatus,
+  AvatarProfile,
+  AvatarReindexProgress,
+  DetectedQuestion,
+  DetectedQuestionFromImage,
+  TranscriptEvent,
+  WindowCapabilities
+} from '../shared/contracts'
 
 // Custom APIs for renderer
 const api = {

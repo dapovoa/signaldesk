@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
-import { AnswerEntry } from '../../preload/index'
+import type { AnswerEntry } from '../../shared/contracts'
 
 const MAX_HISTORY_LENGTH = 500
 

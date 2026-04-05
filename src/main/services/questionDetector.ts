@@ -1,13 +1,9 @@
 import { EventEmitter } from 'events'
+import type { DetectedQuestion } from '../../shared/contracts'
+export type { DetectedQuestion } from '../../shared/contracts'
 
 const QUESTION_DETECTOR_VERBOSE =
   process.env.SIGNALDESK_VERBOSE === '1' || process.env.SIGNALDESK_PIPELINE_VERBOSE === '1'
-
-export interface DetectedQuestion {
-  text: string
-  confidence: number
-  questionType: 'direct' | 'indirect' | 'scenario' | 'unknown'
-}
 
 export class QuestionDetector extends EventEmitter {
   private transcriptBuffer: string[] = []

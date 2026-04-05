@@ -1,30 +1,8 @@
 import { app } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
-
-export interface AvatarProfile {
-  id: string
-  identityBase: string
-  cvSummary: string
-  jobTitle: string
-  companyName: string
-  jobDescription: string
-  companyContext: string
-  sourceDirectory: string
-  embeddingModel: string
-  updatedAt: number
-}
-
-export interface AvatarIndexStatus {
-  available: boolean
-  sourceDirectory: string
-  embeddingModel: string
-  documentCount: number
-  chunkCount: number
-  lastIndexedAt: number | null
-  databasePath: string
-  lastError: string | null
-}
+import type { AvatarProfile } from '../../shared/contracts'
+export type { AvatarIndexStatus, AvatarProfile } from '../../shared/contracts'
 
 export const getDefaultAvatarRoot = (): string => path.join(app.getPath('userData'), 'avatar')
 
