@@ -24,6 +24,17 @@ const getEnvApiKey = (key: string): string => {
   return process.env[key] || process.env[`VITE_${key}`] || ''
 }
 
+const DEFAULT_LLM_PROVIDER: AppSettings['llmProvider'] =
+  process.env.LLM_PROVIDER === 'llama.cpp' || process.env.VITE_LLM_PROVIDER === 'llama.cpp'
+    ? 'llama.cpp'
+    : process.env.LLM_PROVIDER === 'openai-compatible' ||
+        process.env.VITE_LLM_PROVIDER === 'openai-compatible'
+      ? 'openai-compatible'
+      : process.env.LLM_PROVIDER === 'openai-oauth' ||
+          process.env.VITE_LLM_PROVIDER === 'openai-oauth'
+        ? 'openai-oauth'
+        : 'openai'
+
 const DEFAULT_SETTINGS: AppSettings = {
   transcriptionProvider:
     process.env.TRANSCRIPTION_PROVIDER === 'assemblyai' ||
@@ -45,14 +56,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   assemblyAiKeytermsPrompt:
     process.env.ASSEMBLYAI_KEYTERMS_PROMPT || process.env.VITE_ASSEMBLYAI_KEYTERMS_PROMPT || '',
   assemblyAiPrompt: process.env.ASSEMBLYAI_PROMPT || process.env.VITE_ASSEMBLYAI_PROMPT || '',
-  llmProvider:
-    process.env.LLM_PROVIDER === 'openai-compatible' ||
-    process.env.VITE_LLM_PROVIDER === 'openai-compatible'
-      ? 'openai-compatible'
-      : process.env.LLM_PROVIDER === 'openai-oauth' ||
-          process.env.VITE_LLM_PROVIDER === 'openai-oauth'
-        ? 'openai-oauth'
-        : 'openai',
+  llmProvider: DEFAULT_LLM_PROVIDER,
   llmAuthMode:
     process.env.LLM_AUTH_MODE === 'oauth-token' || process.env.VITE_LLM_AUTH_MODE === 'oauth-token'
       ? 'oauth-token'
@@ -84,7 +88,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     process.env.VITE_LLM_MODEL ||
     process.env.OPENAI_MODEL ||
     process.env.VITE_OPENAI_MODEL ||
-    'gpt-4o-mini',
+    (DEFAULT_LLM_PROVIDER === 'llama.cpp' ? '' : 'gpt-4o-mini'),
   transcriptionLanguage:
     process.env.TRANSCRIPTION_LANGUAGE === 'pt' || process.env.VITE_TRANSCRIPTION_LANGUAGE === 'pt'
       ? 'pt'

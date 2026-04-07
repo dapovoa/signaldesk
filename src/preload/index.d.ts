@@ -29,21 +29,24 @@ export interface Api {
   getSettings: () => Promise<AppSettings>
   updateSettings: (updates: Partial<AppSettings>) => Promise<AppSettings>
   getWindowCapabilities: () => Promise<WindowCapabilities>
-  fetchOpenAIModels: (payload: {
+  fetchLlmModels: (payload: {
     apiKey?: string
     oauthToken?: string
-    provider?: 'openai' | 'openai-oauth' | 'openai-compatible'
+    provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp'
     authMode?: 'api-key' | 'oauth-token'
     baseURL?: string
     customHeaders?: string
   }) => Promise<{ success: boolean; models: Array<{ id: string; name: string }>; error?: string }>
-  fetchOllamaEmbeddingModels: (payload?: {
-    baseURL?: string
-  }) => Promise<{ success: boolean; models: Array<{ id: string; name: string }>; error?: string }>
+  fetchEmbeddingModels: () => Promise<{
+    success: boolean
+    models: Array<{ id: string; name: string }>
+    directory: string
+    error?: string
+  }>
   testProviderConnection: (payload: {
     apiKey?: string
     oauthToken?: string
-    provider?: 'openai' | 'openai-oauth' | 'openai-compatible'
+    provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp'
     authMode?: 'api-key' | 'oauth-token'
     baseURL?: string
     customHeaders?: string

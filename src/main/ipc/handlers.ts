@@ -31,8 +31,15 @@ import {
   getDefaultAvatarSourceDirectory
 } from '../services/avatarProfileManager'
 import { streamChatGPTCodexResponse } from '../services/chatgptCodexClient'
+import { llamaCppLlmServer } from '../services/llamaCppLlmServer'
+import { DEFAULT_LLM_BASE_URL, listLlmModels } from '../services/localEmbeddingPaths'
 import { VisionService } from '../services/visionService'
 import { WhisperService } from '../services/whisperService'
+import {
+  DEFAULT_EMBEDDING_MODEL,
+  listEmbeddingModels,
+  resolveEmbeddingModelDirectory
+} from '../services/localEmbeddingPaths'
 
 let whisperService: WhisperService | null = null
 let openaiService: OpenAIService | null = null
@@ -90,7 +97,7 @@ interface TranscriptionConfig {
 }
 
 interface ProviderPayloadState {
-  provider: 'openai' | 'openai-oauth' | 'openai-compatible'
+  provider: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp'
   usesOAuthCredential: boolean
   credential?: string
 }
@@ -117,8 +124,8 @@ const IPC_HANDLE_CHANNELS = [
   'get-window-capabilities',
   'connect-openai-oauth',
   'disconnect-openai-oauth',
-  'fetch-openai-models',
-  'fetch-ollama-embedding-models',
+  'fetch-llm-models',
+  'fetch-embedding-models',
   'test-provider-connection',
   'test-transcription-connection',
   'start-capture',
@@ -241,6 +248,19 @@ const normalizePauseThresholdMs = (value: number | undefined): number => {
 const getConfiguredPauseThresholdMs = (): number =>
   normalizePauseThresholdMs(settingsManager?.getSettings().pauseThreshold)
 
+const isLlamaCppProvider = (
+  provider: AppSettings['llmProvider'] | ProviderPayloadState['provider']
+): boolean => provider === 'llama.cpp'
+
+const ensureLocalLlmModelReady = async (model?: string): Promise<void> => {
+  const normalizedModel = model?.trim()
+  if (!normalizedModel) {
+    throw new Error('Select a local llama.cpp model before continuing.')
+  }
+
+  await llamaCppLlmServer.ensureRunning(normalizedModel)
+}
+
 const getPostUtteranceDebounceMs = (): number =>
   Math.max(
     MIN_POST_UTTERANCE_DEBOUNCE_MS,
@@ -248,6 +268,14 @@ const getPostUtteranceDebounceMs = (): number =>
   )
 
 const getProviderConfig = (settings: AppSettings): ProviderConfig => {
+  if (settings.llmProvider === 'llama.cpp') {
+    return {
+      apiKey: 'no-key',
+      baseURL: DEFAULT_LLM_BASE_URL,
+      customHeaders: undefined
+    }
+  }
+
   const isOpenAICompatible =
     settings.llmProvider === 'openai-compatible' || settings.llmProvider === 'openai-oauth'
 
@@ -337,6 +365,12 @@ const getTranscriptionConfig = (settings: AppSettings): TranscriptionConfig => {
 }
 
 const validateProviderSettings = (settings: AppSettings): string | null => {
+  if (settings.llmProvider === 'llama.cpp') {
+    return settings.llmModel?.trim()
+      ? null
+      : 'Select a local llama.cpp model in Settings before using the LLM provider.'
+  }
+
   const hasCredential = Boolean(resolveLlmCredential(settings))
 
   if (!hasCredential) {
@@ -638,6 +672,9 @@ const classifyTurnWithModel = async (turnText: string): Promise<ModelClassifierR
   }
 
   const providerConfig = getProviderConfig(settings)
+  if (settings.llmProvider === 'llama.cpp') {
+    await ensureLocalLlmModelReady(settings.llmModel)
+  }
   if (settings.llmProvider === 'openai-oauth') {
     providerConfig.apiKey = (await ensureOpenAIOAuthToken()) || ''
   }
@@ -1002,7 +1039,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
   const getProviderPayloadState = (payload: {
     apiKey?: string
     oauthToken?: string
-    provider?: 'openai' | 'openai-oauth' | 'openai-compatible'
+    provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp'
     authMode?: 'api-key' | 'oauth-token'
   }): ProviderPayloadState => {
     const provider = payload?.provider || 'openai'
@@ -1020,13 +1057,13 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
   }
 
   ipcMain.handle(
-    'fetch-openai-models',
+    'fetch-llm-models',
     async (
       _event,
       payload: {
         apiKey?: string
         oauthToken?: string
-        provider?: 'openai' | 'openai-oauth' | 'openai-compatible'
+        provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp'
         authMode?: 'api-key' | 'oauth-token'
         baseURL?: string
         customHeaders?: string
@@ -1038,6 +1075,13 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         return {
           success: true,
           models: OPENAI_OAUTH_MODEL_OPTIONS.map((id) => ({ id, name: id }))
+        }
+      }
+
+      if (isLlamaCppProvider(provider)) {
+        return {
+          success: true,
+          models: listLlmModels()
         }
       }
 
@@ -1090,59 +1134,31 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
   )
 
   ipcMain.handle(
-    'fetch-ollama-embedding-models',
-    async (_event, payload?: { baseURL?: string }) => {
-      const normalizedBaseUrl = (
-        payload?.baseURL?.trim() ||
-        process.env.OLLAMA_BASE_URL ||
-        'http://127.0.0.1:11434'
-      ).replace(/\/+$/, '')
-
+    'fetch-embedding-models',
+    async () => {
+      const directory = resolveEmbeddingModelDirectory()
       try {
-        const response = await fetch(`${normalizedBaseUrl}/api/tags`, {
-          method: 'GET',
-          headers: {
-            Accept: 'application/json'
-          }
-        })
+        const models = listEmbeddingModels()
 
-        if (!response.ok) {
-          const body = await response.text()
-          throw new Error(`Ollama tags request failed: ${response.status} ${body}`)
-        }
-
-        const payloadJson = (await response.json()) as {
-          models?: Array<{
-            name?: string
-            model?: string
-            details?: {
-              family?: string
-              families?: string[]
-            }
-          }>
-        }
-
-        const models = (payloadJson.models || [])
-          .map((model) => {
-            const id = model.name?.trim() || model.model?.trim() || ''
-            if (!id) return null
-
-            return {
-              id,
-              name: id
-            }
+        if (
+          !models.some((model) => model.id === DEFAULT_EMBEDDING_MODEL) &&
+          fs.existsSync(`${directory}/${DEFAULT_EMBEDDING_MODEL}`)
+        ) {
+          models.unshift({
+            id: DEFAULT_EMBEDDING_MODEL,
+            name: DEFAULT_EMBEDDING_MODEL
           })
-          .filter((model): model is { id: string; name: string } => Boolean(model))
-          .sort((left, right) => left.id.localeCompare(right.id))
+        }
 
-        return { success: true, models }
+        return { success: true, models, directory }
       } catch (error) {
         const errorMessage =
-          error instanceof Error ? error.message : 'Failed to fetch Ollama models'
+          error instanceof Error ? error.message : 'Failed to list local embedding models'
         return {
           success: false,
           error: errorMessage,
-          models: [] as Array<{ id: string; name: string }>
+          models: [] as Array<{ id: string; name: string }>,
+          directory
         }
       }
     }
@@ -1155,7 +1171,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       payload: {
         apiKey?: string
         oauthToken?: string
-        provider?: 'openai' | 'openai-oauth' | 'openai-compatible'
+        provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp'
         authMode?: 'api-key' | 'oauth-token'
         baseURL?: string
         customHeaders?: string
@@ -1177,10 +1193,12 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           ? CHATGPT_CODEX_BASE_URL
           : provider === 'openai-compatible'
             ? payload?.baseURL?.trim()
+            : provider === 'llama.cpp'
+              ? DEFAULT_LLM_BASE_URL
             : undefined
       const preferredModel = payload?.model?.trim()
 
-      if (!credential) {
+      if (!credential && !isLlamaCppProvider(provider)) {
         return {
           success: false,
           message: usesOAuthCredential ? 'OAuth token is required' : 'API key is required'
@@ -1201,9 +1219,20 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         }
       }
 
+      if (provider === 'llama.cpp' && !preferredModel) {
+        return {
+          success: false,
+          message: 'Select a local llama.cpp model before testing the connection.'
+        }
+      }
+
       try {
+        if (provider === 'llama.cpp') {
+          await ensureLocalLlmModelReady(preferredModel)
+        }
+
         const client = createOpenAIClient({
-          apiKey: credential,
+          apiKey: credential || 'no-key',
           baseURL,
           customHeaders:
             provider === 'openai-oauth'
@@ -1216,7 +1245,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         if (provider === 'openai-oauth') {
           const oauthModel = preferredModel || 'gpt-5.4'
           const stream = streamChatGPTCodexResponse({
-            accessToken: credential,
+            accessToken: credential || '',
             accountId: storedSettings?.llmOauthAccountId || '',
             baseURL,
             body: {
@@ -1370,6 +1399,9 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       questionDetector?.removeAllListeners()
 
       const providerConfig = getProviderConfig(settings)
+      if (settings.llmProvider === 'llama.cpp') {
+        await ensureLocalLlmModelReady(settings.llmModel)
+      }
       if (settings.llmProvider === 'openai-oauth') {
         providerConfig.apiKey = (await ensureOpenAIOAuthToken()) || ''
       }
@@ -1767,6 +1799,9 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     }
 
     const providerConfig = getProviderConfig(settings)
+    if (settings.llmProvider === 'llama.cpp') {
+      await ensureLocalLlmModelReady(settings.llmModel)
+    }
     if (settings.llmProvider === 'openai-oauth') {
       providerConfig.apiKey = (await ensureOpenAIOAuthToken()) || ''
     }
@@ -1916,6 +1951,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 export async function cleanupIpcHandlers(): Promise<void> {
   unregisterIpcHandlers()
   resetRuntimePipelineState()
+  await llamaCppLlmServer.dispose()
   avatarKnowledgeService?.dispose()
   avatarKnowledgeService = null
   avatarProfileManager = null

@@ -127,8 +127,42 @@ export function SettingsModal(): React.ReactNode | null {
       llmProvider,
       llmAuthMode
     })
+    const usesLocalLlama = provider === 'llama.cpp'
     const credential = usesOAuth ? llmOauthToken.trim() : llmApiKey.trim()
     const baseURL = llmBaseUrl.trim()
+    if (usesLocalLlama) {
+      setModelsLoading(true)
+      setModelsError(null)
+
+      fetchTimeoutRef.current = setTimeout(async () => {
+        try {
+          const result = await window.api.fetchLlmModels({
+            provider
+          })
+
+          if (result.success) {
+            setModels(result.models)
+            setModelsError(null)
+          } else {
+            setModels([])
+            setModelsError(result.error || 'Failed to fetch models')
+          }
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : 'Failed to fetch models'
+          setModels([])
+          setModelsError(errorMessage)
+        } finally {
+          setModelsLoading(false)
+        }
+      }, 200)
+
+      return () => {
+        if (fetchTimeoutRef.current) {
+          clearTimeout(fetchTimeoutRef.current)
+        }
+      }
+    }
+
     if (!credential) {
       setModels([])
       setModelsError(null)
@@ -155,7 +189,7 @@ export function SettingsModal(): React.ReactNode | null {
 
     fetchTimeoutRef.current = setTimeout(async () => {
       try {
-        const result = await window.api.fetchOpenAIModels({
+        const result = await window.api.fetchLlmModels({
           apiKey: usesOAuth ? undefined : credential,
           oauthToken: usesOAuth ? credential : undefined,
           provider,
@@ -243,7 +277,7 @@ export function SettingsModal(): React.ReactNode | null {
       setOauthMessage('')
     }
 
-    if (!credential) {
+    if (provider !== 'llama.cpp' && !credential) {
       setConnectionStatus('error')
       setConnectionMessage(
         provider === 'openai-oauth'
@@ -332,7 +366,8 @@ export function SettingsModal(): React.ReactNode | null {
   const hasStoredOAuthSession = Boolean(
     localSettings.llmOauthToken || localSettings.llmOauthRefreshToken
   )
-  const usesManualCredentialInput = localSettings.llmProvider !== 'openai-oauth'
+  const usesManualCredentialInput =
+    localSettings.llmProvider !== 'openai-oauth' && localSettings.llmProvider !== 'llama.cpp'
   const usesOAuthCredentialForInput = usesOAuthCredential(localSettings)
 
   const handleConnectOpenAI = async (): Promise<void> => {
@@ -609,6 +644,8 @@ export function SettingsModal(): React.ReactNode | null {
                       ? localSettings.llmAuthMode
                       : nextProvider === 'openai-compatible'
                         ? 'api-key'
+                        : nextProvider === 'llama.cpp'
+                          ? 'api-key'
                         : 'oauth-token'
                 }
 
@@ -626,6 +663,7 @@ export function SettingsModal(): React.ReactNode | null {
               <option value="openai">OpenAI</option>
               <option value="openai-oauth">OpenAI OAuth</option>
               <option value="openai-compatible">OpenAI-Compatible</option>
+              <option value="llama.cpp">GGUF Models</option>
             </select>
           </div>
 
@@ -699,32 +737,42 @@ export function SettingsModal(): React.ReactNode | null {
             )}
             {localSettings.llmProvider === 'openai-oauth' && (
               <div className="space-y-2">
-                <div className="w-full">
-                  {oauthStatus === 'connecting' ? (
-                    <button
-                      type="button"
-                      disabled
-                      className="settings-action w-full px-3 py-2 text-sm disabled:opacity-60"
-                    >
-                      Opening browser...
-                    </button>
-                  ) : hasStoredOAuthSession ? (
-                    <button
-                      type="button"
-                      onClick={handleDisconnectOpenAI}
-                      className="settings-action w-full px-3 py-2 text-sm transition-colors hover:border-red-400/20 hover:bg-red-500/10 hover:text-red-300"
-                    >
-                      Disconnect
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleConnectOpenAI}
-                      className="settings-action w-full px-3 py-2 text-sm transition-colors"
-                    >
-                      Connect via browser
-                    </button>
-                  )}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="w-full">
+                    {oauthStatus === 'connecting' ? (
+                      <button
+                        type="button"
+                        disabled
+                        className="settings-action w-full px-3 py-2 text-sm disabled:opacity-60"
+                      >
+                        Opening browser...
+                      </button>
+                    ) : hasStoredOAuthSession ? (
+                      <button
+                        type="button"
+                        onClick={handleDisconnectOpenAI}
+                        className="settings-action w-full px-3 py-2 text-sm transition-colors hover:border-red-400/20 hover:bg-red-500/10 hover:text-red-300"
+                      >
+                        Disconnect
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleConnectOpenAI}
+                        className="settings-action w-full px-3 py-2 text-sm transition-colors"
+                      >
+                        Connect via browser
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleTestConnection}
+                    disabled={connectionStatus === 'testing'}
+                    className="settings-action w-full px-3 py-2 text-sm transition-colors disabled:opacity-60"
+                  >
+                    {connectionStatus === 'testing' ? 'Testing LLM...' : 'Test LLM'}
+                  </button>
                 </div>
                 {oauthStatus === 'ok' && (
                   <div className="settings-status-ok flex items-center gap-1.5 text-xs">
@@ -740,14 +788,16 @@ export function SettingsModal(): React.ReactNode | null {
                 )}
               </div>
             )}
-            <button
-              type="button"
-              onClick={handleTestConnection}
-              disabled={connectionStatus === 'testing'}
-              className="settings-action mt-2 w-full px-3 py-2 text-sm transition-colors disabled:opacity-60"
-            >
-              {connectionStatus === 'testing' ? 'Testing LLM...' : 'Test LLM'}
-            </button>
+            {localSettings.llmProvider !== 'openai-oauth' && (
+              <button
+                type="button"
+                onClick={handleTestConnection}
+                disabled={connectionStatus === 'testing'}
+                className="settings-action mt-2 w-full px-3 py-2 text-sm transition-colors disabled:opacity-60"
+              >
+                {connectionStatus === 'testing' ? 'Testing LLM...' : 'Test LLM'}
+              </button>
+            )}
             {connectionStatus === 'ok' && (
               <div className="settings-status-ok flex items-center gap-1.5 text-xs">
                 <CheckCircle size={12} />
@@ -804,7 +854,11 @@ export function SettingsModal(): React.ReactNode | null {
               type="text"
               value={localSettings.llmModel}
               onChange={(e) => setLocalSettings({ ...localSettings, llmModel: e.target.value })}
-              placeholder="e.g. deepseek-chat, qwen-max, glm-4"
+              placeholder={
+                localSettings.llmProvider === 'llama.cpp'
+                  ? 'e.g. qwen2.5-coder-14b-instruct-q8_0.gguf'
+                  : 'e.g. deepseek-chat, qwen-max, glm-4'
+              }
               className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
             />
             {modelsLoading && (
@@ -836,6 +890,9 @@ export function SettingsModal(): React.ReactNode | null {
                 <AlertCircle size={12} />
                 <span>{modelsError}</span>
               </div>
+            )}
+            {localSettings.llmProvider === 'llama.cpp' && (
+              <p className="text-xs text-dark-500">Local models are loaded from models.</p>
             )}
           </div>
 

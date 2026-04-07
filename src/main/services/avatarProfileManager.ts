@@ -73,7 +73,7 @@ const buildDefaultProfile = (): AvatarProfile => {
     jobDescription: '',
     companyContext: '',
     sourceDirectory: getDefaultAvatarSourceDirectory(),
-    embeddingModel: process.env.SIGNALDESK_EMBED_MODEL || 'mxbai-embed-large',
+    embeddingModel: process.env.SIGNALDESK_EMBED_MODEL || 'all-MiniLM-L6-v2.F16.gguf',
     updatedAt: Date.now()
   }
 }

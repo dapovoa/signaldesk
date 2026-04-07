@@ -25,7 +25,7 @@ export interface AppSettings {
   assemblyAiMaxTurnSilence: number
   assemblyAiKeytermsPrompt: string
   assemblyAiPrompt: string
-  llmProvider: 'openai' | 'openai-oauth' | 'openai-compatible'
+  llmProvider: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp'
   llmAuthMode: 'api-key' | 'oauth-token'
   llmApiKey: string
   llmOauthToken: string

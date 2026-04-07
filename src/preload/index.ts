@@ -32,23 +32,25 @@ const api = {
     ipcRenderer.invoke('update-settings', updates),
   getWindowCapabilities: (): Promise<WindowCapabilities> =>
     ipcRenderer.invoke('get-window-capabilities'),
-  fetchOpenAIModels: (payload: {
+  fetchLlmModels: (payload: {
     apiKey?: string
     oauthToken?: string
-    provider?: 'openai' | 'openai-oauth' | 'openai-compatible'
+    provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp'
     authMode?: 'api-key' | 'oauth-token'
     baseURL?: string
     customHeaders?: string
   }): Promise<{ success: boolean; models: Array<{ id: string; name: string }>; error?: string }> =>
-    ipcRenderer.invoke('fetch-openai-models', payload),
-  fetchOllamaEmbeddingModels: (payload?: {
-    baseURL?: string
-  }): Promise<{ success: boolean; models: Array<{ id: string; name: string }>; error?: string }> =>
-    ipcRenderer.invoke('fetch-ollama-embedding-models', payload),
+    ipcRenderer.invoke('fetch-llm-models', payload),
+  fetchEmbeddingModels: (): Promise<{
+    success: boolean
+    models: Array<{ id: string; name: string }>
+    directory: string
+    error?: string
+  }> => ipcRenderer.invoke('fetch-embedding-models'),
   testProviderConnection: (payload: {
     apiKey?: string
     oauthToken?: string
-    provider?: 'openai' | 'openai-oauth' | 'openai-compatible'
+    provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp'
     authMode?: 'api-key' | 'oauth-token'
     baseURL?: string
     customHeaders?: string

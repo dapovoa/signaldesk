@@ -138,7 +138,7 @@ const DEFAULT_AVATAR_PROFILE: AvatarProfile = {
   jobDescription: '',
   companyContext: '',
   sourceDirectory: '',
-  embeddingModel: 'mxbai-embed-large',
+  embeddingModel: 'all-MiniLM-L6-v2.F16.gguf',
   updatedAt: 0
 }
 

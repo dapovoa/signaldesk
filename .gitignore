@@ -11,3 +11,7 @@ coverage
 .vscode
 *.tsbuildinfo
 release
+vendor/llama/*
+!vendor/llama/.gitkeep
+models/*
+!models/.gitkeep

@@ -120,9 +120,9 @@ export function AvatarModal(): React.ReactNode | null {
       setEmbeddingModelsLoading(true)
       setEmbeddingModelsError(null)
       try {
-        const result = await window.api.fetchOllamaEmbeddingModels()
+        const result = await window.api.fetchEmbeddingModels()
         if (!result.success) {
-          throw new Error(result.error || 'Failed to fetch embedding models from Ollama.')
+          throw new Error(result.error || 'Failed to load local embedding models.')
         }
 
         const uniqueModels = Array.from(
@@ -135,11 +135,14 @@ export function AvatarModal(): React.ReactNode | null {
         ).sort((left, right) => left.localeCompare(right))
 
         setEmbeddingModels(uniqueModels)
+        if (result.models.length === 0) {
+          setEmbeddingModelsError(`No .gguf embedding models found in ${result.directory}.`)
+        }
       } catch (error) {
-        console.error('Failed to load Ollama embedding models:', error)
+        console.error('Failed to load local embedding models:', error)
         setEmbeddingModels(localProfile.embeddingModel ? [localProfile.embeddingModel] : [])
         setEmbeddingModelsError(
-          error instanceof Error ? error.message : 'Failed to fetch embedding models.'
+          error instanceof Error ? error.message : 'Failed to load local embedding models.'
         )
       } finally {
         setEmbeddingModelsLoading(false)
@@ -446,11 +449,14 @@ export function AvatarModal(): React.ReactNode | null {
                   ))}
                 </select>
                 {embeddingModelsLoading && (
-                  <p className="text-xs text-dark-500">Loading embedding models from Ollama...</p>
+                  <p className="text-xs text-dark-500">Loading local embedding models...</p>
                 )}
                 {embeddingModelsError && (
                   <p className="text-xs text-amber-300">{embeddingModelsError}</p>
                 )}
+                <p className="text-xs text-dark-500">
+                  Put embedding files in models.
+                </p>
               </div>
               <div className="space-y-2">
                 <label className={fieldLabelClassName}>Last Indexed</label>

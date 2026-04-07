@@ -31,6 +31,10 @@ export const getSuggestedLlmModels = ({ llmProvider, llmBaseUrl }: LlmModelSelec
     return [...OPENAI_OAUTH_MODEL_OPTIONS]
   }
 
+  if (llmProvider === 'llama.cpp') {
+    return []
+  }
+
   if (llmProvider !== 'openai-compatible') {
     return []
   }
@@ -61,6 +65,10 @@ export const getDefaultLlmModel = (settings: LlmModelSelection): string => {
     return 'gpt-4o-mini'
   }
 
+  if (settings.llmProvider === 'llama.cpp') {
+    return ''
+  }
+
   return ''
 }
 
@@ -75,6 +83,11 @@ export const normalizeLlmSettings = (settings: AppSettings): AppSettings => {
     llmAuthMode = 'oauth-token'
     if (!isOpenAIOAuthModel(llmModel)) {
       llmModel = OPENAI_OAUTH_MODEL_OPTIONS[0]
+    }
+  } else if (settings.llmProvider === 'llama.cpp') {
+    llmAuthMode = 'api-key'
+    if (llmModel && (isOpenAIOAuthModel(llmModel) || llmModel === 'gpt-4o-mini')) {
+      llmModel = ''
     }
   } else if (settings.llmProvider === 'openai-compatible') {
     llmAuthMode = 'api-key'

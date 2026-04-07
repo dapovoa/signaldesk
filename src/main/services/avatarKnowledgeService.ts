@@ -1,6 +1,7 @@
 import * as path from 'path'
 import { AvatarIngestionService } from './avatarIngestion'
-import { OllamaEmbeddingProvider } from './avatarEmbeddingProvider'
+import { LlamaCppEmbeddingProvider } from './avatarEmbeddingProvider'
+import { llamaCppServer } from './llamaCppServer'
 import {
   AvatarIndexStatus,
   AvatarProfile,
@@ -38,7 +39,7 @@ export class AvatarKnowledgeService {
   private configureServices(profile: AvatarProfile): void {
     try {
       const sourceDirectory = profile.sourceDirectory || getDefaultAvatarSourceDirectory()
-      const embeddingProvider = new OllamaEmbeddingProvider({
+      const embeddingProvider = new LlamaCppEmbeddingProvider({
         model: profile.embeddingModel
       })
 
@@ -187,5 +188,6 @@ export class AvatarKnowledgeService {
 
   dispose(): void {
     this.store?.close()
+    void llamaCppServer.dispose()
   }
 }
