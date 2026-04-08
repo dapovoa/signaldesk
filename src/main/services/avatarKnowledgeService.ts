@@ -76,6 +76,17 @@ export class AvatarKnowledgeService {
     return this.initPromise
   }
 
+  async warmup(): Promise<void> {
+    if (!this.retrieval) {
+      return
+    }
+    try {
+      await this.retrieval.warmup()
+    } catch (error) {
+      console.warn('[AvatarKnowledge] warmup failed:', error)
+    }
+  }
+
   updateProfile(profile: AvatarProfile, options?: { silentLog?: boolean }): void {
     if (AVATAR_VERBOSE_LOGS && !options?.silentLog) {
       console.log('[AvatarKnowledge] updating profile for RAG:', {

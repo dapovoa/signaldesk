@@ -16,7 +16,8 @@ export function useInterviewEvents(): void {
     setSettings,
     setAvatarProfile,
     setAvatarIndexStatus,
-    setAvatarReindexProgress
+    setAvatarReindexProgress,
+    setGenerating
   } = useInterviewStore()
 
   const listenersSetUp = useRef(false)
@@ -126,6 +127,14 @@ export function useInterviewEvents(): void {
       setAvatarReindexProgress(progress)
     })
 
+    const unsubGenerationStart = window.api.onGenerationStart(() => {
+      setGenerating(true)
+    })
+
+    const unsubGenerationEnd = window.api.onGenerationEnd(() => {
+      setGenerating(false)
+    })
+
     return () => {
       unsubTranscript()
       unsubSpeechStarted()
@@ -140,6 +149,8 @@ export function useInterviewEvents(): void {
       unsubQuestionDetectedFromImage()
       unsubScreenshotNoQuestion()
       unsubAvatarReindexProgress()
+      unsubGenerationStart()
+      unsubGenerationEnd()
       listenersSetUp.current = false
     }
   }, [
@@ -153,6 +164,7 @@ export function useInterviewEvents(): void {
     finalizeAnswer,
     setError,
     setCapturing,
-    setAvatarReindexProgress
+    setAvatarReindexProgress,
+    setGenerating
   ])
 }

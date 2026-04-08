@@ -32,7 +32,7 @@ export interface Api {
   fetchLlmModels: (payload: {
     apiKey?: string
     oauthToken?: string
-    provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp'
+    provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp' | 'anthropic-compatible'
     authMode?: 'api-key' | 'oauth-token'
     baseURL?: string
     customHeaders?: string
@@ -46,7 +46,7 @@ export interface Api {
   testProviderConnection: (payload: {
     apiKey?: string
     oauthToken?: string
-    provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp'
+    provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp' | 'anthropic-compatible'
     authMode?: 'api-key' | 'oauth-token'
     baseURL?: string
     customHeaders?: string
@@ -75,6 +75,7 @@ export interface Api {
   openAvatarMemoryFolder: () => Promise<{ success: boolean; path: string; error?: string }>
   getAvatarIndexStatus: () => Promise<AvatarIndexStatus>
   reindexAvatarSources: () => Promise<AvatarIndexStatus>
+  testEmbeddingModel: (model: string) => Promise<{ valid: boolean; error?: string }>
   startCapture: () => Promise<{ success: boolean }>
   stopCapture: () => Promise<{ success: boolean }>
   sendAudioData: (audioData: ArrayBuffer) => void
@@ -121,6 +122,8 @@ export interface Api {
   ) => () => void
   onScreenshotNoQuestion: (callback: (data: { message: string }) => void) => () => void
   onAvatarReindexProgress: (callback: (progress: AvatarReindexProgress) => void) => () => void
+  onGenerationStart: (callback: () => void) => () => void
+  onGenerationEnd: (callback: () => void) => () => void
 }
 
 declare global {

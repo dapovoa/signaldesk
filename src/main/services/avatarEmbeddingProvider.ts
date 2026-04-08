@@ -43,6 +43,10 @@ export class LlamaCppEmbeddingProvider implements EmbeddingProvider {
     return this.embed(input.map((value) => this.applyPrefix(this.documentPrefix, value)))
   }
 
+  async warmup(): Promise<void> {
+    await llamaCppServer.ensureRunning(this.model)
+  }
+
   private applyPrefix(prefix: string, value: string): string {
     const trimmedPrefix = prefix.trim()
     return trimmedPrefix ? `${trimmedPrefix} ${value}` : value

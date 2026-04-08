@@ -3,6 +3,7 @@ import {
   CheckCircle,
   FolderOpen,
   Loader2,
+  Play,
   RefreshCw,
   Save,
   X
@@ -93,6 +94,8 @@ export function AvatarModal(): React.ReactNode | null {
   const [embeddingModels, setEmbeddingModels] = useState<string[]>([])
   const [embeddingModelsLoading, setEmbeddingModelsLoading] = useState(false)
   const [embeddingModelsError, setEmbeddingModelsError] = useState<string | null>(null)
+  const [embeddingTestStatus, setEmbeddingTestStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle')
+  const [embeddingTestMessage, setEmbeddingTestMessage] = useState('')
 
   useEffect(() => {
     setLocalProfile(avatarProfile)
@@ -223,6 +226,25 @@ export function AvatarModal(): React.ReactNode | null {
       setStatusMessage(error instanceof Error ? error.message : 'Avatar reindex failed.')
       setTimeout(() => setReindexStatus('idle'), 3000)
     }
+  }
+
+  const handleTestEmbedding = async (): Promise<void> => {
+    try {
+      setEmbeddingTestStatus('testing')
+      setEmbeddingTestMessage('')
+      const result = await window.api.testEmbeddingModel(localProfile.embeddingModel)
+      if (result.valid) {
+        setEmbeddingTestStatus('ok')
+        setEmbeddingTestMessage('Embedding model validated successfully')
+      } else {
+        setEmbeddingTestStatus('error')
+        setEmbeddingTestMessage(result.error || 'Validation failed')
+      }
+    } catch (error) {
+      setEmbeddingTestStatus('error')
+      setEmbeddingTestMessage(error instanceof Error ? error.message : 'Test failed')
+    }
+    setTimeout(() => setEmbeddingTestStatus('idle'), 3000)
   }
 
   const status = avatarIndexStatus
@@ -487,24 +509,58 @@ export function AvatarModal(): React.ReactNode | null {
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={handleReindex}
-              disabled={isReindexing}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/5 bg-white/[0.04] px-4 py-2 text-sm font-medium text-dark-200 transition-colors hover:border-cyan-400/15 hover:bg-cyan-400/8 hover:text-dark-100 disabled:opacity-60"
-            >
-              {isReindexing ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" />
-                  <span>Reindexing...</span>
-                </>
-              ) : (
-                <>
-                  <RefreshCw size={16} />
-                  <span>Reindex Sources</span>
-                </>
-              )}
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleTestEmbedding}
+                disabled={embeddingTestStatus === 'testing'}
+                className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/5 bg-white/[0.04] px-4 py-2 text-sm font-medium text-dark-200 transition-colors hover:border-green-400/15 hover:bg-green-400/8 hover:text-dark-100 disabled:opacity-60"
+              >
+                {embeddingTestStatus === 'testing' ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>Testing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Play size={16} />
+                    <span>Test</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleReindex}
+                disabled={isReindexing}
+                className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/5 bg-white/[0.04] px-4 py-2 text-sm font-medium text-dark-200 transition-colors hover:border-cyan-400/15 hover:bg-cyan-400/8 hover:text-dark-100 disabled:opacity-60"
+              >
+                {isReindexing ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>Reindexing...</span>
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw size={16} />
+                    <span>Reindex</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {embeddingTestStatus === 'ok' && embeddingTestMessage && (
+              <div className="settings-status-ok flex items-center gap-1.5 text-xs">
+                <CheckCircle size={12} />
+                <span>{embeddingTestMessage}</span>
+              </div>
+            )}
+            {embeddingTestStatus === 'error' && embeddingTestMessage && (
+              <div className="settings-status-error flex items-center gap-1.5 text-xs">
+                <AlertCircle size={12} />
+                <span>{embeddingTestMessage}</span>
+              </div>
+            )}
 
             {status?.lastError && (
               <div className="settings-status-error flex items-center gap-1.5 text-xs">

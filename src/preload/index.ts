@@ -35,7 +35,7 @@ const api = {
   fetchLlmModels: (payload: {
     apiKey?: string
     oauthToken?: string
-    provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp'
+    provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp' | 'anthropic-compatible'
     authMode?: 'api-key' | 'oauth-token'
     baseURL?: string
     customHeaders?: string
@@ -50,7 +50,7 @@ const api = {
   testProviderConnection: (payload: {
     apiKey?: string
     oauthToken?: string
-    provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp'
+    provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp' | 'anthropic-compatible'
     authMode?: 'api-key' | 'oauth-token'
     baseURL?: string
     customHeaders?: string
@@ -89,6 +89,8 @@ const api = {
     ipcRenderer.invoke('get-avatar-index-status'),
   reindexAvatarSources: (): Promise<AvatarIndexStatus> =>
     ipcRenderer.invoke('reindex-avatar-sources'),
+  testEmbeddingModel: (model: string): Promise<{ valid: boolean; error?: string }> =>
+    ipcRenderer.invoke('test-embedding-model', model),
   startCapture: (): Promise<{ success: boolean }> => ipcRenderer.invoke('start-capture'),
   stopCapture: (): Promise<{ success: boolean }> => ipcRenderer.invoke('stop-capture'),
   sendAudioData: (audioData: ArrayBuffer): void => ipcRenderer.send('audio-data', audioData),
@@ -224,6 +226,18 @@ const api = {
       callback(progress)
     ipcRenderer.on('avatar-reindex-progress', handler)
     return () => ipcRenderer.removeListener('avatar-reindex-progress', handler)
+  },
+
+  onGenerationStart: (callback: () => void): (() => void) => {
+    const handler = (): void => callback()
+    ipcRenderer.on('generation-start', handler)
+    return () => ipcRenderer.removeListener('generation-start', handler)
+  },
+
+  onGenerationEnd: (callback: () => void): (() => void) => {
+    const handler = (): void => callback()
+    ipcRenderer.on('generation-end', handler)
+    return () => ipcRenderer.removeListener('generation-end', handler)
   }
 }
 

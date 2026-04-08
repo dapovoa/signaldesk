@@ -38,4 +38,5 @@ export interface EmbeddingProvider {
   readonly model: string
   embedQuery(input: string): Promise<number[]>
   embedDocuments(input: string[]): Promise<number[][]>
+  warmup?(): Promise<void>
 }

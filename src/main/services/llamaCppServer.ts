@@ -16,7 +16,7 @@ const EMBED_BASE_URL = normalizeBaseUrl(
 const EMBED_URL = new URL(EMBED_BASE_URL)
 const EMBED_HOST = EMBED_URL.hostname || '127.0.0.1'
 const EMBED_PORT = EMBED_URL.port || (EMBED_URL.protocol === 'https:' ? '443' : '80')
-const EMBED_GPU_LAYERS = (process.env.SIGNALDESK_EMBED_GPU_LAYERS || '99').trim()
+const EMBED_GPU_LAYERS = (process.env.SIGNALDESK_EMBED_GPU_LAYERS || '20').trim()
 const EMBED_POOLING = (process.env.SIGNALDESK_EMBED_POOLING || 'mean').trim() || 'mean'
 const START_TIMEOUT_MS = Number(process.env.SIGNALDESK_EMBED_START_TIMEOUT_MS || 30_000)
 const SHUTDOWN_TIMEOUT_MS = Number(process.env.SIGNALDESK_EMBED_SHUTDOWN_TIMEOUT_MS || 3_000)
@@ -46,6 +46,45 @@ class LlamaCppServerManager {
       await this.starting
     } finally {
       this.starting = null
+    }
+  }
+
+  async validateModel(model: string): Promise<{ valid: boolean; error?: string }> {
+    const modelPath = resolveEmbeddingModelPath(model)
+    if (!fs.existsSync(modelPath)) {
+      return { valid: false, error: `Embedding model file not found: ${modelPath}` }
+    }
+
+    const serverBinary = resolveLlamaServerBinary()
+    if (!serverBinary || !fs.existsSync(serverBinary)) {
+      return { valid: false, error: `llama-server binary not found` }
+    }
+
+    try {
+      await this.ensureRunning(model)
+      const inferenceTest = await this.testInference()
+      if (!inferenceTest) {
+        return { valid: false, error: 'Embedding inference test failed' }
+      }
+      return { valid: true }
+    } catch (err) {
+      return { valid: false, error: err instanceof Error ? err.message : 'Unknown error' }
+    }
+  }
+
+  private async testInference(): Promise<boolean> {
+    try {
+      const response = await fetch(`${EMBED_BASE_URL}/v1/embeddings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input: ['test'],
+          model: this.activeModel
+        })
+      })
+      return response.ok
+    } catch {
+      return false
     }
   }
 
@@ -98,7 +137,10 @@ class LlamaCppServerManager {
       EMBED_PORT,
       '--embedding',
       '--pooling',
-      EMBED_POOLING
+      EMBED_POOLING,
+      '-ub', '1024',
+      '-b', '1024',
+      '-c', '4096'
     ]
 
     if (EMBED_GPU_LAYERS) {

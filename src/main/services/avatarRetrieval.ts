@@ -317,6 +317,12 @@ export class AvatarRetrievalService {
     private readonly embeddingProvider: EmbeddingProvider
   ) {}
 
+  async warmup(): Promise<void> {
+    if (this.embeddingProvider.warmup) {
+      await this.embeddingProvider.warmup()
+    }
+  }
+
   async buildContextPack(question: string, limit = 5): Promise<AvatarContextPack | null> {
     const normalizedQuestion = question.trim()
     if (!normalizedQuestion) return null

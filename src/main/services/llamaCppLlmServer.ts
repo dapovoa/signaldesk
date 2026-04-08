@@ -14,7 +14,7 @@ const LLM_BASE_URL = normalizeBaseUrl(DEFAULT_LLM_BASE_URL).replace(/\/v1$/, '')
 const LLM_URL = new URL(LLM_BASE_URL)
 const LLM_HOST = LLM_URL.hostname || '127.0.0.1'
 const LLM_PORT = LLM_URL.port || (LLM_URL.protocol === 'https:' ? '443' : '80')
-const LLM_GPU_LAYERS = (process.env.SIGNALDESK_LLM_GPU_LAYERS || '99').trim()
+const LLM_GPU_LAYERS = (process.env.SIGNALDESK_LLM_GPU_LAYERS || '60').trim()
 const START_TIMEOUT_MS = Number(process.env.SIGNALDESK_LLM_START_TIMEOUT_MS || 30_000)
 const SHUTDOWN_TIMEOUT_MS = Number(process.env.SIGNALDESK_LLM_SHUTDOWN_TIMEOUT_MS || 3_000)
 const POLL_INTERVAL_MS = 250
@@ -43,6 +43,47 @@ class LlamaCppLlmServerManager {
       await this.starting
     } finally {
       this.starting = null
+    }
+  }
+
+  async validateModel(model: string): Promise<{ valid: boolean; error?: string }> {
+    const modelPath = resolveEmbeddingModelPath(model)
+    if (!fs.existsSync(modelPath)) {
+      return { valid: false, error: `Model file not found: ${modelPath}` }
+    }
+
+    const serverBinary = resolveLlamaServerBinary()
+    if (!serverBinary || !fs.existsSync(serverBinary)) {
+      return { valid: false, error: `llama-server binary not found in ${resolveLlamaDirectory() || 'vendor/llama'}` }
+    }
+
+    try {
+      await this.ensureRunning(model)
+      const inferenceTest = await this.testInference()
+      if (!inferenceTest) {
+        return { valid: false, error: 'Model inference test failed' }
+      }
+      return { valid: true }
+    } catch (err) {
+      return { valid: false, error: err instanceof Error ? err.message : 'Unknown error' }
+    }
+  }
+
+  private async testInference(): Promise<boolean> {
+    try {
+      const response = await fetch(`${LLM_BASE_URL}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: this.activeModel,
+          messages: [{ role: 'user', content: 'hi' }],
+          max_tokens: 2,
+          temperature: 0.1
+        })
+      })
+      return response.ok
+    } catch {
+      return false
     }
   }
 
@@ -86,7 +127,7 @@ class LlamaCppLlmServerManager {
       throw new Error(`LLM model not found: ${modelPath}`)
     }
 
-    const args = ['-m', modelPath, '--host', LLM_HOST, '--port', LLM_PORT, '-np', '1', '--no-cache-prompt', '-cram', '0', '--reasoning', 'off', '--no-warmup']
+    const args = ['-m', modelPath, '--host', LLM_HOST, '--port', LLM_PORT, '-np', '1', '--no-cache-prompt', '-cram', '0', '--reasoning', 'off', '--no-warmup', '-ub', '1024', '-b', '1024', '-c', '4096']
 
     if (LLM_GPU_LAYERS) {
       args.push('-ngl', LLM_GPU_LAYERS)

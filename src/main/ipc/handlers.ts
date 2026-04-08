@@ -20,6 +20,7 @@ import {
   OpenAIStreamEvent,
   OpenAITruncatedEvent
 } from '../services/openaiService'
+import { AnthropicService } from '../services/anthropicService'
 import { QuestionDetector } from '../services/questionDetector'
 import { ScreenshotService } from '../services/screenshotService'
 import { AppSettings, SettingsManager } from '../services/settingsManager'
@@ -43,6 +44,7 @@ import {
 
 let whisperService: WhisperService | null = null
 let openaiService: OpenAIService | null = null
+let anthropicService: AnthropicService | null = null
 let questionDetector: QuestionDetector | null = null
 let settingsManager: SettingsManager | null = null
 let historyManager: HistoryManager | null = null
@@ -75,6 +77,8 @@ const MAX_PAUSE_THRESHOLD_MS = 3000
 const MIN_POST_UTTERANCE_DEBOUNCE_MS = 150
 const MAX_POST_UTTERANCE_DEBOUNCE_MS = 600
 let lastAnswerCompletedAt = 0
+let validatedLlamaModel: string | null = null
+let llamaWarmupDone = false
 
 interface AnswerTimingTrace {
   utteranceEndAt: number | null
@@ -97,7 +101,7 @@ interface TranscriptionConfig {
 }
 
 interface ProviderPayloadState {
-  provider: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp'
+  provider: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp' | 'anthropic-compatible'
   usesOAuthCredential: boolean
   credential?: string
 }
@@ -252,6 +256,12 @@ const isLlamaCppProvider = (
   provider: AppSettings['llmProvider'] | ProviderPayloadState['provider']
 ): boolean => provider === 'llama.cpp'
 
+const isAnthropicProvider = (
+  provider: AppSettings['llmProvider'] | ProviderPayloadState['provider']
+): boolean => provider === 'anthropic-compatible'
+
+const ANTHROPIC_BASE_URL = 'https://api.minimax.io/anthropic'
+
 const ensureLocalLlmModelReady = async (model?: string): Promise<void> => {
   const normalizedModel = model?.trim()
   if (!normalizedModel) {
@@ -272,6 +282,14 @@ const getProviderConfig = (settings: AppSettings): ProviderConfig => {
     return {
       apiKey: 'no-key',
       baseURL: DEFAULT_LLM_BASE_URL,
+      customHeaders: undefined
+    }
+  }
+
+  if (settings.llmProvider === 'anthropic-compatible') {
+    return {
+      apiKey: resolveLlmCredential(settings),
+      baseURL: settings.llmBaseUrl?.trim() || ANTHROPIC_BASE_URL,
       customHeaders: undefined
     }
   }
@@ -369,6 +387,12 @@ const validateProviderSettings = (settings: AppSettings): string | null => {
     return settings.llmModel?.trim()
       ? null
       : 'Select a local llama.cpp model in Settings before using the LLM provider.'
+  }
+
+  if (settings.llmProvider === 'anthropic-compatible') {
+    return settings.llmModel?.trim()
+      ? null
+      : 'Select a MiniMax model (e.g. MiniMax-M2.7) in Settings before using Anthropic.'
   }
 
   const hasCredential = Boolean(resolveLlmCredential(settings))
@@ -478,7 +502,7 @@ interface ModelClassifierResult {
 
 const MODEL_CLASSIFIER_THRESHOLD = 0.62
 const MODEL_CLASSIFIER_MIN_CHARS = 80
-const MODEL_CLASSIFIER_MIN_INTERVAL_MS = 5000
+const MODEL_CLASSIFIER_MIN_INTERVAL_MS = 1000
 
 const notifyQuestionNotDetected = (text: string): void => {
   const normalized = text.trim()
@@ -717,6 +741,55 @@ const classifyTurnWithModel = async (turnText: string): Promise<ModelClassifierR
           rawOutput += event.delta
         }
       }
+    } else if (settings.llmProvider === 'anthropic-compatible') {
+      const response = await fetch(`${providerConfig.baseURL}/v1/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': providerConfig.apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 800,
+          temperature: 1,
+          system: classifierPrompt,
+          messages: [
+            {
+              role: 'user',
+              content: [{ type: 'text', text: classifierInput }]
+            }
+          ]
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Anthropic API error: ${response.status} ${errorText}`)
+      }
+
+      const data = await response.json()
+      if (PIPELINE_VERBOSE) {
+        console.log('[QuestionClassifier] Anthropic response:', JSON.stringify(data))
+      }
+      if (data.content && Array.isArray(data.content)) {
+        const textBlock = data.content.find((block: { type: string }) => block.type === 'text')
+        if (textBlock && textBlock.text) {
+          rawOutput = textBlock.text
+        } else {
+          const thinkingBlock = data.content.find((block: { type: string }) => block.type === 'thinking')
+          if (thinkingBlock && thinkingBlock.text) {
+            const jsonMatch = thinkingBlock.text.match(/\{[\s\S]*?"shouldAnswer"[\s\S]*?\}/)
+            if (jsonMatch) {
+              rawOutput = jsonMatch[0]
+            }
+          }
+        }
+        if (PIPELINE_VERBOSE) {
+          console.log('[QuestionClassifier] Anthropic raw output:', rawOutput)
+        }
+      }
     } else {
       const client = createOpenAIClient({
         apiKey: providerConfig.apiKey,
@@ -788,7 +861,14 @@ const generateAnswerForQuestion = async (
   questionText: string,
   epoch = pipelineEpoch
 ): Promise<void> => {
-  if (!openaiService) {
+  const settings = settingsManager?.getSettings()
+  const isAnthropic = settings?.llmProvider === 'anthropic-compatible'
+
+  if (!isAnthropic && !openaiService) {
+    throw new Error('Answer generation is not available')
+  }
+
+  if (isAnthropic && !anthropicService) {
     throw new Error('Answer generation is not available')
   }
 
@@ -807,6 +887,7 @@ const generateAnswerForQuestion = async (
 
   answerTimingTrace.answerRequestedAt = Date.now()
   isGeneratingAnswer = true
+  mainWindow?.webContents.send('generation-start')
   const requestId = reserveAnswerRequest(epoch)
   mainWindow?.webContents.send('question-detected', {
     text: trimmedQuestion,
@@ -823,15 +904,28 @@ const generateAnswerForQuestion = async (
     }
     answerTimingTrace.ragReadyAt = Date.now()
     logAvatarContext(trimmedQuestion, avatarContext)
-    await openaiService.generateAnswer(
-      trimmedQuestion,
-      {
-        identityBase: profile ? buildIdentityBase(profile) : '',
-        interviewContext: profile ? buildInterviewContext(profile) : '',
-        avatarContext: avatarContext?.promptContext
-      },
-      requestId
-    )
+
+    if (isAnthropic && anthropicService) {
+      await anthropicService.generateAnswer(
+        trimmedQuestion,
+        {
+          identityBase: profile ? buildIdentityBase(profile) : '',
+          interviewContext: profile ? buildInterviewContext(profile) : '',
+          avatarContext: avatarContext?.promptContext
+        },
+        requestId
+      )
+    } else if (openaiService) {
+      await openaiService.generateAnswer(
+        trimmedQuestion,
+        {
+          identityBase: profile ? buildIdentityBase(profile) : '',
+          interviewContext: profile ? buildInterviewContext(profile) : '',
+          avatarContext: avatarContext?.promptContext
+        },
+        requestId
+      )
+    }
   } catch (error) {
     releaseAnswerRequest(requestId)
     throw error
@@ -866,6 +960,7 @@ const attachOpenAIServiceListeners = (service: OpenAIService): void => {
     logAnswerTimingSummary('complete')
     resetAnswerTimingTrace()
     mainWindow?.webContents.send('answer-complete', event.answer)
+    mainWindow?.webContents.send('generation-end')
   })
 
   service.on('truncated', (event: OpenAITruncatedEvent) => {
@@ -877,6 +972,7 @@ const attachOpenAIServiceListeners = (service: OpenAIService): void => {
       console.warn('[Pipeline] answer truncated by max token limit')
     }
     mainWindow?.webContents.send('answer-truncated')
+    mainWindow?.webContents.send('generation-end')
   })
 
   service.on('error', (event: OpenAIErrorEvent) => {
@@ -888,6 +984,66 @@ const attachOpenAIServiceListeners = (service: OpenAIService): void => {
     logAnswerTimingSummary('error')
     resetAnswerTimingTrace()
     console.error('[Pipeline] answer-error event:', event.error)
+    mainWindow?.webContents.send('answer-error', String(event.error))
+    mainWindow?.webContents.send('generation-end')
+  })
+}
+
+interface AnthropicStreamEvent {
+  requestId: number
+  chunk: string
+}
+
+interface AnthropicCompleteEvent {
+  requestId: number
+  answer: string
+}
+
+interface AnthropicErrorEvent {
+  requestId: number
+  error: unknown
+}
+
+const attachAnthropicServiceListeners = (service: AnthropicService): void => {
+  service.removeAllListeners('stream')
+  service.removeAllListeners('complete')
+  service.removeAllListeners('error')
+
+  service.on('stream', (event: AnthropicStreamEvent) => {
+    if (!isCurrentAnswerRequest(event.requestId)) {
+      return
+    }
+
+    if (!answerTimingTrace.firstStreamAt) {
+      answerTimingTrace.firstStreamAt = Date.now()
+    }
+
+    mainWindow?.webContents.send('answer-stream', event.chunk)
+  })
+
+  service.on('complete', (event: AnthropicCompleteEvent) => {
+    const isCurrent = releaseAnswerRequest(event.requestId)
+    if (!isCurrent) {
+      return
+    }
+
+    lastAnswerCompletedAt = Date.now()
+    logAnswerTimingSummary('complete')
+    resetAnswerTimingTrace()
+    mainWindow?.webContents.send('answer-complete', event.answer)
+    mainWindow?.webContents.send('generation-end')
+  })
+
+  service.on('error', (event: AnthropicErrorEvent) => {
+    const isCurrent = releaseAnswerRequest(event.requestId)
+    if (!isCurrent) {
+      return
+    }
+
+    logAnswerTimingSummary('error')
+    resetAnswerTimingTrace()
+    mainWindow?.webContents.send('answer-error', String(event.error))
+    mainWindow?.webContents.send('generation-end')
   })
 }
 
@@ -922,6 +1078,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
   avatarProfileManager = new AvatarProfileManager()
   settingsManager.flushPendingMigrations()
   avatarKnowledgeService = new AvatarKnowledgeService(avatarProfileManager.getProfile())
+  avatarKnowledgeService.warmup().catch((err) => console.warn('[Avatar] warmup failed:', err))
 
   ipcMain.handle('get-settings', () => {
     return settingsManager?.getSettings()
@@ -984,6 +1141,10 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     })
   })
 
+  ipcMain.handle('test-embedding-model', async (_event, model: string) => {
+    return llamaCppServer.validateModel(model)
+  })
+
   ipcMain.handle('generate-answer-manually', async (_event, questionText: string) => {
     await generateAnswerForQuestion(questionText)
     return { success: true }
@@ -1039,7 +1200,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
   const getProviderPayloadState = (payload: {
     apiKey?: string
     oauthToken?: string
-    provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp'
+    provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp' | 'anthropic-compatible'
     authMode?: 'api-key' | 'oauth-token'
   }): ProviderPayloadState => {
     const provider = payload?.provider || 'openai'
@@ -1063,7 +1224,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       payload: {
         apiKey?: string
         oauthToken?: string
-        provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp'
+        provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp' | 'anthropic-compatible'
         authMode?: 'api-key' | 'oauth-token'
         baseURL?: string
         customHeaders?: string
@@ -1082,6 +1243,18 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         return {
           success: true,
           models: listLlmModels()
+        }
+      }
+
+      if (isAnthropicProvider(provider)) {
+        return {
+          success: true,
+          models: [
+            { id: 'MiniMax-M2.7', name: 'MiniMax-M2.7' },
+            { id: 'MiniMax-M2.7-highspeed', name: 'MiniMax-M2.7-highspeed' },
+            { id: 'MiniMax-M2.5', name: 'MiniMax-M2.5' },
+            { id: 'MiniMax-M2.5-highspeed', name: 'MiniMax-M2.5-highspeed' }
+          ]
         }
       }
 
@@ -1171,7 +1344,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       payload: {
         apiKey?: string
         oauthToken?: string
-        provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp'
+        provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp' | 'anthropic-compatible'
         authMode?: 'api-key' | 'oauth-token'
         baseURL?: string
         customHeaders?: string
@@ -1195,10 +1368,12 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
             ? payload?.baseURL?.trim()
             : provider === 'llama.cpp'
               ? DEFAULT_LLM_BASE_URL
-            : undefined
+              : provider === 'anthropic-compatible'
+                ? payload?.baseURL?.trim() || ANTHROPIC_BASE_URL
+                : undefined
       const preferredModel = payload?.model?.trim()
 
-      if (!credential && !isLlamaCppProvider(provider)) {
+      if (!credential && !isLlamaCppProvider(provider) && !isAnthropicProvider(provider)) {
         return {
           success: false,
           message: usesOAuthCredential ? 'OAuth token is required' : 'API key is required'
@@ -1226,9 +1401,60 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         }
       }
 
+      if (provider === 'anthropic-compatible' && !preferredModel) {
+        return {
+          success: false,
+          message: 'Select a MiniMax model (e.g. MiniMax-M2.7) before testing the connection.'
+        }
+      }
+
       try {
         if (provider === 'llama.cpp') {
-          await ensureLocalLlmModelReady(preferredModel)
+          const validation = await llamaCppLlmServer.validateModel(preferredModel || '')
+          if (!validation.valid) {
+            return {
+              success: false,
+              message: validation.error || 'Model validation failed'
+            }
+          }
+          validatedLlamaModel = preferredModel || null
+          llamaWarmupDone = true
+        }
+
+        if (provider === 'anthropic-compatible') {
+          const apiKey = credential || ''
+          const response = await fetch(`${baseURL}/v1/messages`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': apiKey,
+              'anthropic-version': '2023-06-01',
+              'anthropic-dangerous-direct-browser-access': 'true'
+            },
+            body: JSON.stringify({
+              model: preferredModel || 'MiniMax-M2.7',
+              max_tokens: 10,
+              temperature: 1,
+              messages: [
+                {
+                  role: 'user',
+                  content: [{ type: 'text', text: 'Reply with exactly: pong' }]
+                }
+              ]
+            })
+          })
+
+          if (!response.ok) {
+            const errorText = await response.text()
+            throw new Error(`Anthropic API error: ${response.status} ${errorText}`)
+          }
+
+          return {
+            success: true,
+            message: 'LLM connection established.',
+            modelCount: 0,
+            hasPreferredModel: true
+          }
         }
 
         const client = createOpenAIClient({
@@ -1396,6 +1622,10 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         openaiService.removeAllListeners()
         openaiService = null
       }
+      if (anthropicService) {
+        anthropicService.removeAllListeners()
+        anthropicService = null
+      }
       questionDetector?.removeAllListeners()
 
       const providerConfig = getProviderConfig(settings)
@@ -1422,16 +1652,25 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         silenceThresholdMs: settings.pauseThreshold
       })
 
-      openaiService = new OpenAIService({
-        apiKey: providerConfig.apiKey,
-        baseURL: providerConfig.baseURL,
-        customHeaders: providerConfig.customHeaders,
-        chatgptAccountId: settings.llmOauthAccountId,
-        useResponsesApi: shouldUseResponsesApi(settings),
-        model: settings.llmModel
-      })
-
-      attachOpenAIServiceListeners(openaiService)
+      if (settings.llmProvider === 'anthropic-compatible') {
+        anthropicService = new AnthropicService({
+          apiKey: providerConfig.apiKey,
+          baseURL: providerConfig.baseURL,
+          model: settings.llmModel,
+          temperature: 1
+        })
+        attachAnthropicServiceListeners(anthropicService)
+      } else {
+        openaiService = new OpenAIService({
+          apiKey: providerConfig.apiKey,
+          baseURL: providerConfig.baseURL,
+          customHeaders: providerConfig.customHeaders,
+          chatgptAccountId: settings.llmOauthAccountId,
+          useResponsesApi: shouldUseResponsesApi(settings),
+          model: settings.llmModel
+        })
+        attachOpenAIServiceListeners(openaiService)
+      }
 
       whisperService.on('transcript', async (event) => {
         if (!isCapturing) {
@@ -1800,7 +2039,18 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
     const providerConfig = getProviderConfig(settings)
     if (settings.llmProvider === 'llama.cpp') {
-      await ensureLocalLlmModelReady(settings.llmModel)
+      try {
+        await ensureLocalLlmModelReady(settings.llmModel)
+        validatedLlamaModel = settings.llmModel || null
+        llamaWarmupDone = true
+      } catch (err) {
+        console.warn('[LlamaCpp] startup failed:', err)
+        validatedLlamaModel = null
+        llamaWarmupDone = false
+      }
+    } else {
+      validatedLlamaModel = null
+      llamaWarmupDone = false
     }
     if (settings.llmProvider === 'openai-oauth') {
       providerConfig.apiKey = (await ensureOpenAIOAuthToken()) || ''

@@ -128,9 +128,10 @@ export function SettingsModal(): React.ReactNode | null {
       llmAuthMode
     })
     const usesLocalLlama = provider === 'llama.cpp'
+    const usesAnthropic = provider === 'anthropic-compatible'
     const credential = usesOAuth ? llmOauthToken.trim() : llmApiKey.trim()
     const baseURL = llmBaseUrl.trim()
-    if (usesLocalLlama) {
+    if (usesLocalLlama || usesAnthropic) {
       setModelsLoading(true)
       setModelsError(null)
 
@@ -179,7 +180,7 @@ export function SettingsModal(): React.ReactNode | null {
 
     if (provider === 'openai-compatible' && !baseURL) {
       setModels([])
-      setModelsError('Base URL is required for OpenAI-compatible provider')
+      setModelsError('Base URL is required for OpenAI compatible provider')
       setModelsLoading(false)
       return
     }
@@ -287,9 +288,15 @@ export function SettingsModal(): React.ReactNode | null {
       return
     }
 
+    if (provider === 'anthropic-compatible' && !credential) {
+      setConnectionStatus('error')
+      setConnectionMessage('API Key is required for Anthropic Compatible.')
+      return
+    }
+
     if (provider === 'openai-compatible' && !baseURL) {
       setConnectionStatus('error')
-      setConnectionMessage('Base URL is required for OpenAI-compatible provider.')
+      setConnectionMessage('Base URL is required for OpenAI compatible provider.')
       return
     }
 
@@ -367,7 +374,8 @@ export function SettingsModal(): React.ReactNode | null {
     localSettings.llmOauthToken || localSettings.llmOauthRefreshToken
   )
   const usesManualCredentialInput =
-    localSettings.llmProvider !== 'openai-oauth' && localSettings.llmProvider !== 'llama.cpp'
+    localSettings.llmProvider !== 'openai-oauth' &&
+    localSettings.llmProvider !== 'llama.cpp'
   const usesOAuthCredentialForInput = usesOAuthCredential(localSettings)
 
   const handleConnectOpenAI = async (): Promise<void> => {
@@ -639,13 +647,11 @@ export function SettingsModal(): React.ReactNode | null {
                 const nextSettings: AppSettings = {
                   ...localSettings,
                   llmProvider: nextProvider,
-                  llmAuthMode:
+                llmAuthMode:
                     nextProvider === 'openai'
                       ? localSettings.llmAuthMode
-                      : nextProvider === 'openai-compatible'
+                      : nextProvider === 'openai-compatible' || nextProvider === 'anthropic-compatible' || nextProvider === 'llama.cpp'
                         ? 'api-key'
-                        : nextProvider === 'llama.cpp'
-                          ? 'api-key'
                         : 'oauth-token'
                 }
 
@@ -662,7 +668,8 @@ export function SettingsModal(): React.ReactNode | null {
             >
               <option value="openai">OpenAI</option>
               <option value="openai-oauth">OpenAI OAuth</option>
-              <option value="openai-compatible">OpenAI-Compatible</option>
+              <option value="openai-compatible">OpenAI Compatible</option>
+              <option value="anthropic-compatible">Anthropic Compatible</option>
               <option value="llama.cpp">GGUF Models</option>
             </select>
           </div>
@@ -812,11 +819,11 @@ export function SettingsModal(): React.ReactNode | null {
             )}
           </div>
 
-          {localSettings.llmProvider === 'openai-compatible' && (
+          {(localSettings.llmProvider === 'openai-compatible' || localSettings.llmProvider === 'anthropic-compatible') && (
             <>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-dark-200">
-                  OpenAI-Compatible Base URL
+                  {localSettings.llmProvider === 'anthropic-compatible' ? 'Anthropic Base URL' : 'OpenAI-Compatible Base URL'}
                 </label>
                 <input
                   type="text"

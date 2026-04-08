@@ -35,6 +35,10 @@ export const getSuggestedLlmModels = ({ llmProvider, llmBaseUrl }: LlmModelSelec
     return []
   }
 
+  if (llmProvider === 'anthropic-compatible') {
+    return ['MiniMax-M2.7', 'MiniMax-M2.7-highspeed', 'MiniMax-M2.5', 'MiniMax-M2.5-highspeed']
+  }
+
   if (llmProvider !== 'openai-compatible') {
     return []
   }
@@ -69,6 +73,10 @@ export const getDefaultLlmModel = (settings: LlmModelSelection): string => {
     return ''
   }
 
+  if (settings.llmProvider === 'anthropic-compatible') {
+    return 'MiniMax-M2.7'
+  }
+
   return ''
 }
 
@@ -88,6 +96,14 @@ export const normalizeLlmSettings = (settings: AppSettings): AppSettings => {
     llmAuthMode = 'api-key'
     if (llmModel && (isOpenAIOAuthModel(llmModel) || llmModel === 'gpt-4o-mini')) {
       llmModel = ''
+    }
+  } else if (settings.llmProvider === 'anthropic-compatible') {
+    llmAuthMode = 'api-key'
+    if (llmModel && (isOpenAIOAuthModel(llmModel) || llmModel === 'gpt-4o-mini')) {
+      llmModel = 'MiniMax-M2.7'
+    }
+    if (!llmModel) {
+      llmModel = 'MiniMax-M2.7'
     }
   } else if (settings.llmProvider === 'openai-compatible') {
     llmAuthMode = 'api-key'
