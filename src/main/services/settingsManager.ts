@@ -52,7 +52,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     process.env.VITE_ASSEMBLYAI_LANGUAGE_DETECTION === 'false'
       ? false
       : true,
-  assemblyAiMinTurnSilence: Number(process.env.ASSEMBLYAI_MIN_TURN_SILENCE || 160),
+  assemblyAiMinTurnSilence: Number(process.env.ASSEMBLYAI_MIN_TURN_SILENCE || 400),
   assemblyAiMaxTurnSilence: Number(process.env.ASSEMBLYAI_MAX_TURN_SILENCE || 1280),
   assemblyAiKeytermsPrompt:
     process.env.ASSEMBLYAI_KEYTERMS_PROMPT || process.env.VITE_ASSEMBLYAI_KEYTERMS_PROMPT || '',
@@ -188,11 +188,19 @@ export class SettingsManager {
           needsSave = true
         }
         if (!savedSettings.assemblyAiMinTurnSilence) {
-          savedSettings.assemblyAiMinTurnSilence = 160
+          savedSettings.assemblyAiMinTurnSilence = 400
           needsSave = true
         }
         if (!savedSettings.assemblyAiMaxTurnSilence) {
           savedSettings.assemblyAiMaxTurnSilence = 1280
+          needsSave = true
+        }
+        if (
+          savedSettings.assemblyAiSpeechModel === 'universal-streaming-multilingual' &&
+          savedSettings.assemblyAiMinTurnSilence === 160 &&
+          savedSettings.assemblyAiMaxTurnSilence === 1280
+        ) {
+          savedSettings.assemblyAiMinTurnSilence = 400
           needsSave = true
         }
         // Decrypt API keys if encryption is available

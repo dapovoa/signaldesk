@@ -105,7 +105,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   transcriptionApiKey: '',
   assemblyAiSpeechModel: 'universal-streaming-multilingual',
   assemblyAiLanguageDetection: true,
-  assemblyAiMinTurnSilence: 160,
+  assemblyAiMinTurnSilence: 400,
   assemblyAiMaxTurnSilence: 1280,
   assemblyAiKeytermsPrompt: '',
   assemblyAiPrompt: '',

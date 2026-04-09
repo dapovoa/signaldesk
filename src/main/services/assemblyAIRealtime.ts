@@ -9,7 +9,7 @@ interface AssemblyAIRealtimeConfig {
   languageDetection?: boolean
   minTurnSilence?: number
   maxTurnSilence?: number
-  keytermsPrompt?: string
+  keytermsPrompt?: string | string[]
   prompt?: string
 }
 
@@ -21,31 +21,70 @@ interface AssemblyAITurnMessage {
 }
 
 const DEFAULT_SAMPLE_RATE = 16000
+const DEFAULT_SPEECH_MODEL = 'universal-streaming-multilingual'
 const SIGNALDESK_VERBOSE = process.env.SIGNALDESK_VERBOSE === '1'
 const ASSEMBLYAI_VERBOSE_LOGS =
   SIGNALDESK_VERBOSE || process.env.SIGNALDESK_ASSEMBLYAI_VERBOSE === '1'
 
+const resolveSpeechModel = (
+  config: AssemblyAIRealtimeConfig
+): NonNullable<AssemblyAIRealtimeConfig['speechModel']> => {
+  return (
+    config.speechModel ||
+    (config.language === 'en' ? 'universal-streaming-english' : DEFAULT_SPEECH_MODEL)
+  )
+}
+
+const supportsLanguageDetection = (
+  speechModel: NonNullable<AssemblyAIRealtimeConfig['speechModel']>
+): boolean => {
+  return speechModel === 'universal-streaming-multilingual'
+}
+
+const normalizeKeytermsPrompt = (value?: string | string[]): string[] => {
+  if (!value) return []
+
+  const terms = Array.isArray(value)
+    ? value
+    : (() => {
+        const trimmed = value.trim()
+        if (!trimmed) return []
+
+        if (trimmed.startsWith('[')) {
+          try {
+            const parsed = JSON.parse(trimmed)
+            if (Array.isArray(parsed)) {
+              return parsed.filter((term): term is string => typeof term === 'string')
+            }
+          } catch {
+            // Fall back to comma/newline parsing.
+          }
+        }
+
+        return trimmed.split(/[\n,]+/)
+      })()
+
+  return [...new Set(terms.map((term) => term.trim()).filter(Boolean))]
+}
+
 const buildUrl = (config: AssemblyAIRealtimeConfig): string => {
+  const speechModel = resolveSpeechModel(config)
   const params = new URLSearchParams({
     sample_rate: String(config.sampleRate || DEFAULT_SAMPLE_RATE),
     encoding: 'pcm_s16le',
     format_turns: 'true',
-    speech_model:
-      config.speechModel ||
-      (config.language === 'en'
-        ? 'universal-streaming-english'
-        : 'universal-streaming-multilingual'),
-    language_detection: String(config.languageDetection ?? true),
-    min_turn_silence: String(config.minTurnSilence ?? 160),
+    speech_model: speechModel,
+    min_turn_silence: String(config.minTurnSilence ?? 400),
     max_turn_silence: String(config.maxTurnSilence ?? 1280)
   })
 
-  if (config.prompt?.trim()) {
-    params.set('prompt', config.prompt.trim())
+  if (supportsLanguageDetection(speechModel)) {
+    params.set('language_detection', String(config.languageDetection ?? true))
   }
 
-  if (config.keytermsPrompt?.trim()) {
-    params.set('keyterms_prompt', config.keytermsPrompt.trim())
+  const keytermsPrompt = normalizeKeytermsPrompt(config.keytermsPrompt)
+  if (keytermsPrompt.length > 0) {
+    params.set('keyterms_prompt', JSON.stringify(keytermsPrompt))
   }
 
   return `wss://streaming.assemblyai.com/v3/ws?${params.toString()}`
@@ -59,7 +98,7 @@ export class AssemblyAIRealtimeClient extends EventEmitter {
   private readonly languageDetection?: boolean
   private readonly minTurnSilence?: number
   private readonly maxTurnSilence?: number
-  private readonly keytermsPrompt?: string
+  private readonly keytermsPrompt: string[]
   private readonly prompt?: string
   private socket: WebSocket | null = null
   private pendingAudio: Buffer[] = []
@@ -76,7 +115,7 @@ export class AssemblyAIRealtimeClient extends EventEmitter {
     this.languageDetection = config.languageDetection
     this.minTurnSilence = config.minTurnSilence
     this.maxTurnSilence = config.maxTurnSilence
-    this.keytermsPrompt = config.keytermsPrompt
+    this.keytermsPrompt = normalizeKeytermsPrompt(config.keytermsPrompt)
     this.prompt = config.prompt
   }
 

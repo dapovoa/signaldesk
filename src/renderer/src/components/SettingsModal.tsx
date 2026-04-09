@@ -236,16 +236,6 @@ export function SettingsModal(): React.ReactNode | null {
       return
     }
 
-    if (
-      localSettings.transcriptionProvider === 'assemblyai' &&
-      localSettings.assemblyAiPrompt.trim() &&
-      localSettings.assemblyAiKeytermsPrompt.trim()
-    ) {
-      setTranscriptionStatus('error')
-      setTranscriptionMessage('AssemblyAI prompt and keyterms cannot be used together.')
-      return
-    }
-
     try {
       setTranscriptionStatus('testing')
       setTranscriptionMessage('')
@@ -331,18 +321,6 @@ export function SettingsModal(): React.ReactNode | null {
 
   const handleSave = async (): Promise<void> => {
     try {
-      if (
-        localSettings.transcriptionProvider === 'assemblyai' &&
-        localSettings.assemblyAiPrompt.trim() &&
-        localSettings.assemblyAiKeytermsPrompt.trim()
-      ) {
-        setSaveStatus('error')
-        setTranscriptionStatus('error')
-        setTranscriptionMessage('AssemblyAI prompt and keyterms cannot be used together.')
-        setTimeout(() => setSaveStatus('idle'), 3000)
-        return
-      }
-
       setSaveStatus('saving')
       const updatedSettings = await window.api.updateSettings(normalizeSettingsForUi(localSettings))
       setSettings(updatedSettings as AppSettings)
@@ -623,22 +601,22 @@ export function SettingsModal(): React.ReactNode | null {
                   onChange={(e) =>
                     setLocalSettings({ ...localSettings, assemblyAiKeytermsPrompt: e.target.value })
                   }
-                  placeholder="Metoprolol, Dextroamphetamine, Toyota, Abercrombie and Fitch"
-                  rows={3}
+                  placeholder={'Metoprolol\nDextroamphetamine\nToyota\nAbercrombie and Fitch'}
+                  rows={4}
                   className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors resize-y"
                 />
               </div>
 
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-dark-200">Streaming Prompt</label>
+                <label className="block text-sm font-medium text-dark-200">
+                  Streaming Prompt
+                </label>
                 <textarea
                   value={localSettings.assemblyAiPrompt}
                   onChange={(e) =>
                     setLocalSettings({ ...localSettings, assemblyAiPrompt: e.target.value })
                   }
-                  placeholder={
-                    'Transcribe verbatim.\nAlways include punctuation in output.\nUse period/question mark only for complete sentences.'
-                  }
+                  placeholder=""
                   rows={4}
                   className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors resize-y"
                 />
