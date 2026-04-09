@@ -3,6 +3,7 @@ import * as fs from 'fs'
 import OpenAI from 'openai'
 import * as os from 'os'
 import * as path from 'path'
+import type { AssemblyAiSpeechModel } from '../../shared/contracts'
 import { AssemblyAIRealtimeClient } from './assemblyAIRealtime'
 import { createOpenAIClient } from './openaiClient'
 
@@ -22,7 +23,7 @@ export interface WhisperConfig {
   customHeaders?: string
   model?: string
   language?: string
-  assemblyAiSpeechModel?: 'universal-streaming-multilingual' | 'universal-streaming-english'
+  assemblyAiSpeechModel?: AssemblyAiSpeechModel
   assemblyAiLanguageDetection?: boolean
   assemblyAiMinTurnSilence?: number
   assemblyAiMaxTurnSilence?: number

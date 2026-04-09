@@ -1,11 +1,12 @@
 import { EventEmitter } from 'events'
 import WebSocket from 'ws'
+import type { AssemblyAiSpeechModel } from '../../shared/contracts'
 
 interface AssemblyAIRealtimeConfig {
   apiKey: string
   language?: string
   sampleRate?: number
-  speechModel?: 'universal-streaming-multilingual' | 'universal-streaming-english'
+  speechModel?: AssemblyAiSpeechModel
   languageDetection?: boolean
   minTurnSilence?: number
   maxTurnSilence?: number
@@ -21,7 +22,7 @@ interface AssemblyAITurnMessage {
 }
 
 const DEFAULT_SAMPLE_RATE = 16000
-const DEFAULT_SPEECH_MODEL = 'universal-streaming-multilingual'
+const DEFAULT_SPEECH_MODEL: AssemblyAiSpeechModel = 'universal-streaming-multilingual'
 const SIGNALDESK_VERBOSE = process.env.SIGNALDESK_VERBOSE === '1'
 const ASSEMBLYAI_VERBOSE_LOGS =
   SIGNALDESK_VERBOSE || process.env.SIGNALDESK_ASSEMBLYAI_VERBOSE === '1'
@@ -39,6 +40,20 @@ const supportsLanguageDetection = (
   speechModel: NonNullable<AssemblyAIRealtimeConfig['speechModel']>
 ): boolean => {
   return speechModel === 'universal-streaming-multilingual'
+}
+
+const supportsPrompt = (speechModel: NonNullable<AssemblyAIRealtimeConfig['speechModel']>): boolean => {
+  return speechModel === 'u3-rt-pro'
+}
+
+const getTurnSilenceDefaults = (
+  speechModel: NonNullable<AssemblyAIRealtimeConfig['speechModel']>
+): { minTurnSilence: number; maxTurnSilence: number } => {
+  if (speechModel === 'u3-rt-pro') {
+    return { minTurnSilence: 100, maxTurnSilence: 1000 }
+  }
+
+  return { minTurnSilence: 400, maxTurnSilence: 1280 }
 }
 
 const normalizeKeytermsPrompt = (value?: string | string[]): string[] => {
@@ -69,17 +84,22 @@ const normalizeKeytermsPrompt = (value?: string | string[]): string[] => {
 
 const buildUrl = (config: AssemblyAIRealtimeConfig): string => {
   const speechModel = resolveSpeechModel(config)
+  const silenceDefaults = getTurnSilenceDefaults(speechModel)
   const params = new URLSearchParams({
     sample_rate: String(config.sampleRate || DEFAULT_SAMPLE_RATE),
     encoding: 'pcm_s16le',
     format_turns: 'true',
     speech_model: speechModel,
-    min_turn_silence: String(config.minTurnSilence ?? 400),
-    max_turn_silence: String(config.maxTurnSilence ?? 1280)
+    min_turn_silence: String(config.minTurnSilence ?? silenceDefaults.minTurnSilence),
+    max_turn_silence: String(config.maxTurnSilence ?? silenceDefaults.maxTurnSilence)
   })
 
   if (supportsLanguageDetection(speechModel)) {
     params.set('language_detection', String(config.languageDetection ?? true))
+  }
+
+  if (supportsPrompt(speechModel) && config.prompt?.trim()) {
+    params.set('prompt', config.prompt.trim())
   }
 
   const keytermsPrompt = normalizeKeytermsPrompt(config.keytermsPrompt)
@@ -94,7 +114,7 @@ export class AssemblyAIRealtimeClient extends EventEmitter {
   private readonly apiKey: string
   private readonly language?: string
   private readonly sampleRate: number
-  private readonly speechModel?: 'universal-streaming-multilingual' | 'universal-streaming-english'
+  private readonly speechModel: AssemblyAiSpeechModel
   private readonly languageDetection?: boolean
   private readonly minTurnSilence?: number
   private readonly maxTurnSilence?: number
@@ -111,7 +131,7 @@ export class AssemblyAIRealtimeClient extends EventEmitter {
     this.apiKey = config.apiKey
     this.language = config.language
     this.sampleRate = config.sampleRate || DEFAULT_SAMPLE_RATE
-    this.speechModel = config.speechModel
+    this.speechModel = resolveSpeechModel(config)
     this.languageDetection = config.languageDetection
     this.minTurnSilence = config.minTurnSilence
     this.maxTurnSilence = config.maxTurnSilence
@@ -241,6 +261,14 @@ export class AssemblyAIRealtimeClient extends EventEmitter {
   }
 
   private handleMessage(message: AssemblyAITurnMessage): void {
+    if (message.type === 'SpeechStarted') {
+      if (!this.speechActive) {
+        this.speechActive = true
+        this.emit('speechStarted')
+      }
+      return
+    }
+
     if (message.type !== 'Turn') return
 
     const transcript = message.transcript?.trim()
@@ -259,7 +287,12 @@ export class AssemblyAIRealtimeClient extends EventEmitter {
       this.emit('speechStarted')
     }
 
-    if (message.end_of_turn && message.turn_is_formatted) {
+    const isFinalTurn =
+      this.speechModel === 'u3-rt-pro'
+        ? Boolean(message.end_of_turn)
+        : Boolean(message.end_of_turn && message.turn_is_formatted)
+
+    if (isFinalTurn) {
       this.emit('transcript', {
         text: transcript,
         isFinal: true,

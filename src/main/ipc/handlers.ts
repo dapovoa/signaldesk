@@ -1602,7 +1602,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         provider?: 'openai' | 'assemblyai'
         apiKey?: string
         language?: 'auto' | 'en' | 'pt'
-        assemblyAiSpeechModel?: 'universal-streaming-multilingual' | 'universal-streaming-english'
+        assemblyAiSpeechModel?: 'u3-rt-pro' | 'universal-streaming-multilingual' | 'universal-streaming-english'
         assemblyAiLanguageDetection?: boolean
         assemblyAiMinTurnSilence?: number
         assemblyAiMaxTurnSilence?: number

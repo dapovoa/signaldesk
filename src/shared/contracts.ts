@@ -16,10 +16,15 @@ export interface DetectedQuestionFromImage {
   confidence?: number
 }
 
+export type AssemblyAiSpeechModel =
+  | 'u3-rt-pro'
+  | 'universal-streaming-multilingual'
+  | 'universal-streaming-english'
+
 export interface AppSettings {
   transcriptionProvider: 'openai' | 'assemblyai'
   transcriptionApiKey: string
-  assemblyAiSpeechModel: 'universal-streaming-multilingual' | 'universal-streaming-english'
+  assemblyAiSpeechModel: AssemblyAiSpeechModel
   assemblyAiLanguageDetection: boolean
   assemblyAiMinTurnSilence: number
   assemblyAiMaxTurnSilence: number

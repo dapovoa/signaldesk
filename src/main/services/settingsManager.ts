@@ -2,7 +2,7 @@ import { config } from 'dotenv'
 import { app, safeStorage } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
-import type { AppSettings } from '../../shared/contracts'
+import type { AppSettings, AssemblyAiSpeechModel } from '../../shared/contracts'
 import { normalizeLlmSettings } from '../../shared/llmSettings'
 import { ensureLlamaBinDirectory, getDefaultLlamaBinDirectory } from './localEmbeddingPaths'
 export type { AppSettings } from '../../shared/contracts'
@@ -36,6 +36,36 @@ const DEFAULT_LLM_PROVIDER: AppSettings['llmProvider'] =
         ? 'openai-oauth'
         : 'openai'
 
+const ASSEMBLYAI_SPEECH_MODEL_ENV =
+  process.env.ASSEMBLYAI_SPEECH_MODEL || process.env.VITE_ASSEMBLYAI_SPEECH_MODEL
+
+const DEFAULT_ASSEMBLYAI_SPEECH_MODEL: AssemblyAiSpeechModel =
+  ASSEMBLYAI_SPEECH_MODEL_ENV === 'u3-rt-pro'
+    ? 'u3-rt-pro'
+    : ASSEMBLYAI_SPEECH_MODEL_ENV === 'universal-streaming-english'
+      ? 'universal-streaming-english'
+      : 'universal-streaming-multilingual'
+
+const getAssemblyAiSilenceDefaults = (
+  speechModel: AssemblyAiSpeechModel
+): { minTurnSilence: number; maxTurnSilence: number } => {
+  if (speechModel === 'u3-rt-pro') {
+    return { minTurnSilence: 100, maxTurnSilence: 1000 }
+  }
+
+  return { minTurnSilence: 400, maxTurnSilence: 1280 }
+}
+
+const isAssemblyAiSpeechModel = (value: unknown): value is AssemblyAiSpeechModel => {
+  return (
+    value === 'u3-rt-pro' ||
+    value === 'universal-streaming-multilingual' ||
+    value === 'universal-streaming-english'
+  )
+}
+
+const DEFAULT_ASSEMBLYAI_SILENCE = getAssemblyAiSilenceDefaults(DEFAULT_ASSEMBLYAI_SPEECH_MODEL)
+
 const DEFAULT_SETTINGS: AppSettings = {
   transcriptionProvider:
     process.env.TRANSCRIPTION_PROVIDER === 'assemblyai' ||
@@ -43,17 +73,18 @@ const DEFAULT_SETTINGS: AppSettings = {
       ? 'assemblyai'
       : 'openai',
   transcriptionApiKey: process.env.ASSEMBLYAI_API_KEY || process.env.VITE_ASSEMBLYAI_API_KEY || '',
-  assemblyAiSpeechModel:
-    process.env.ASSEMBLYAI_SPEECH_MODEL === 'universal-streaming-english'
-      ? 'universal-streaming-english'
-      : 'universal-streaming-multilingual',
+  assemblyAiSpeechModel: DEFAULT_ASSEMBLYAI_SPEECH_MODEL,
   assemblyAiLanguageDetection:
     process.env.ASSEMBLYAI_LANGUAGE_DETECTION === 'false' ||
     process.env.VITE_ASSEMBLYAI_LANGUAGE_DETECTION === 'false'
       ? false
       : true,
-  assemblyAiMinTurnSilence: Number(process.env.ASSEMBLYAI_MIN_TURN_SILENCE || 400),
-  assemblyAiMaxTurnSilence: Number(process.env.ASSEMBLYAI_MAX_TURN_SILENCE || 1280),
+  assemblyAiMinTurnSilence: Number(
+    process.env.ASSEMBLYAI_MIN_TURN_SILENCE || DEFAULT_ASSEMBLYAI_SILENCE.minTurnSilence
+  ),
+  assemblyAiMaxTurnSilence: Number(
+    process.env.ASSEMBLYAI_MAX_TURN_SILENCE || DEFAULT_ASSEMBLYAI_SILENCE.maxTurnSilence
+  ),
   assemblyAiKeytermsPrompt:
     process.env.ASSEMBLYAI_KEYTERMS_PROMPT || process.env.VITE_ASSEMBLYAI_KEYTERMS_PROMPT || '',
   assemblyAiPrompt: process.env.ASSEMBLYAI_PROMPT || process.env.VITE_ASSEMBLYAI_PROMPT || '',
@@ -183,24 +214,39 @@ export class SettingsManager {
           savedSettings.assemblyAiSpeechModel = 'universal-streaming-multilingual'
           needsSave = true
         }
+        if (!isAssemblyAiSpeechModel(savedSettings.assemblyAiSpeechModel)) {
+          savedSettings.assemblyAiSpeechModel = 'universal-streaming-multilingual'
+          needsSave = true
+        }
+        const speechModel = savedSettings.assemblyAiSpeechModel as AssemblyAiSpeechModel
+        const silenceDefaults = getAssemblyAiSilenceDefaults(speechModel)
         if (savedSettings.assemblyAiLanguageDetection === undefined) {
           savedSettings.assemblyAiLanguageDetection = true
           needsSave = true
         }
         if (!savedSettings.assemblyAiMinTurnSilence) {
-          savedSettings.assemblyAiMinTurnSilence = 400
+          savedSettings.assemblyAiMinTurnSilence = silenceDefaults.minTurnSilence
           needsSave = true
         }
         if (!savedSettings.assemblyAiMaxTurnSilence) {
-          savedSettings.assemblyAiMaxTurnSilence = 1280
+          savedSettings.assemblyAiMaxTurnSilence = silenceDefaults.maxTurnSilence
           needsSave = true
         }
         if (
-          savedSettings.assemblyAiSpeechModel === 'universal-streaming-multilingual' &&
+          speechModel === 'universal-streaming-multilingual' &&
           savedSettings.assemblyAiMinTurnSilence === 160 &&
           savedSettings.assemblyAiMaxTurnSilence === 1280
         ) {
           savedSettings.assemblyAiMinTurnSilence = 400
+          needsSave = true
+        }
+        if (
+          speechModel === 'u3-rt-pro' &&
+          savedSettings.assemblyAiMinTurnSilence === 400 &&
+          savedSettings.assemblyAiMaxTurnSilence === 1280
+        ) {
+          savedSettings.assemblyAiMinTurnSilence = 100
+          savedSettings.assemblyAiMaxTurnSilence = 1000
           needsSave = true
         }
         // Decrypt API keys if encryption is available

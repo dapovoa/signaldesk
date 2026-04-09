@@ -53,6 +53,39 @@ const getLlmFormState = (settings: AppSettings): LlmFormState => {
   }
 }
 
+const getAssemblyAiTurnSilenceDefaults = (
+  speechModel: AppSettings['assemblyAiSpeechModel']
+): { minTurnSilence: number; maxTurnSilence: number } => {
+  if (speechModel === 'u3-rt-pro') {
+    return { minTurnSilence: 100, maxTurnSilence: 1000 }
+  }
+
+  return { minTurnSilence: 400, maxTurnSilence: 1280 }
+}
+
+const applyAssemblyAiSpeechModel = (
+  settings: AppSettings,
+  speechModel: AppSettings['assemblyAiSpeechModel']
+): AppSettings => {
+  const currentDefaults = getAssemblyAiTurnSilenceDefaults(settings.assemblyAiSpeechModel)
+  const nextDefaults = getAssemblyAiTurnSilenceDefaults(speechModel)
+
+  const nextSettings: AppSettings = {
+    ...settings,
+    assemblyAiSpeechModel: speechModel
+  }
+
+  if (
+    settings.assemblyAiMinTurnSilence === currentDefaults.minTurnSilence &&
+    settings.assemblyAiMaxTurnSilence === currentDefaults.maxTurnSilence
+  ) {
+    nextSettings.assemblyAiMinTurnSilence = nextDefaults.minTurnSilence
+    nextSettings.assemblyAiMaxTurnSilence = nextDefaults.maxTurnSilence
+  }
+
+  return nextSettings
+}
+
 export function SettingsModal(): React.ReactNode | null {
   const { settings, showSettings, setShowSettings, setSettings } = useInterviewStore()
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings)
@@ -515,13 +548,16 @@ export function SettingsModal(): React.ReactNode | null {
                 <select
                   value={localSettings.assemblyAiSpeechModel}
                   onChange={(e) =>
-                    setLocalSettings({
-                      ...localSettings,
-                      assemblyAiSpeechModel: e.target.value as AppSettings['assemblyAiSpeechModel']
-                    })
+                    setLocalSettings(
+                      applyAssemblyAiSpeechModel(
+                        localSettings,
+                        e.target.value as AppSettings['assemblyAiSpeechModel']
+                      )
+                    )
                   }
                   className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors"
                 >
+                  <option value="u3-rt-pro">Universal 3 Pro</option>
                   <option value="universal-streaming-multilingual">
                     Universal Streaming Multilingual
                   </option>
