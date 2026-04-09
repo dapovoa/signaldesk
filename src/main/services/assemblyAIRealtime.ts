@@ -85,6 +85,12 @@ const normalizeKeytermsPrompt = (value?: string | string[]): string[] => {
 const buildUrl = (config: AssemblyAIRealtimeConfig): string => {
   const speechModel = resolveSpeechModel(config)
   const silenceDefaults = getTurnSilenceDefaults(speechModel)
+  const keytermsPrompt = normalizeKeytermsPrompt(config.keytermsPrompt)
+
+  if (supportsPrompt(speechModel) && config.prompt?.trim() && keytermsPrompt.length > 0) {
+    throw new Error('AssemblyAI Universal 3 Pro does not support using prompt and keyterms together.')
+  }
+
   const params = new URLSearchParams({
     sample_rate: String(config.sampleRate || DEFAULT_SAMPLE_RATE),
     encoding: 'pcm_s16le',
@@ -102,7 +108,6 @@ const buildUrl = (config: AssemblyAIRealtimeConfig): string => {
     params.set('prompt', config.prompt.trim())
   }
 
-  const keytermsPrompt = normalizeKeytermsPrompt(config.keytermsPrompt)
   if (keytermsPrompt.length > 0) {
     params.set('keyterms_prompt', JSON.stringify(keytermsPrompt))
   }

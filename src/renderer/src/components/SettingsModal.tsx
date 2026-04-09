@@ -63,12 +63,43 @@ const getAssemblyAiTurnSilenceDefaults = (
   return { minTurnSilence: 400, maxTurnSilence: 1280 }
 }
 
+const getAssemblyAiLanguageDetectionDefault = (
+  speechModel: AppSettings['assemblyAiSpeechModel']
+): boolean => {
+  return speechModel === 'universal-streaming-multilingual'
+}
+
+const supportsAssemblyAiLanguageDetection = (
+  speechModel: AppSettings['assemblyAiSpeechModel']
+): boolean => {
+  return speechModel === 'universal-streaming-multilingual'
+}
+
+const getAssemblyAiPromptValidationError = (
+  settings: Pick<AppSettings, 'transcriptionProvider' | 'assemblyAiSpeechModel' | 'assemblyAiPrompt' | 'assemblyAiKeytermsPrompt'>
+): string | null => {
+  if (
+    settings.transcriptionProvider === 'assemblyai' &&
+    settings.assemblyAiSpeechModel === 'u3-rt-pro' &&
+    settings.assemblyAiPrompt.trim() &&
+    settings.assemblyAiKeytermsPrompt.trim()
+  ) {
+    return 'AssemblyAI Universal 3 Pro does not support using prompt and keyterms together.'
+  }
+
+  return null
+}
+
 const applyAssemblyAiSpeechModel = (
   settings: AppSettings,
   speechModel: AppSettings['assemblyAiSpeechModel']
 ): AppSettings => {
   const currentDefaults = getAssemblyAiTurnSilenceDefaults(settings.assemblyAiSpeechModel)
   const nextDefaults = getAssemblyAiTurnSilenceDefaults(speechModel)
+  const currentLanguageDetectionDefault = getAssemblyAiLanguageDetectionDefault(
+    settings.assemblyAiSpeechModel
+  )
+  const nextLanguageDetectionDefault = getAssemblyAiLanguageDetectionDefault(speechModel)
 
   const nextSettings: AppSettings = {
     ...settings,
@@ -81,6 +112,10 @@ const applyAssemblyAiSpeechModel = (
   ) {
     nextSettings.assemblyAiMinTurnSilence = nextDefaults.minTurnSilence
     nextSettings.assemblyAiMaxTurnSilence = nextDefaults.maxTurnSilence
+  }
+
+  if (settings.assemblyAiLanguageDetection === currentLanguageDetectionDefault) {
+    nextSettings.assemblyAiLanguageDetection = nextLanguageDetectionDefault
   }
 
   return nextSettings
@@ -263,9 +298,17 @@ export function SettingsModal(): React.ReactNode | null {
         ? localSettings.transcriptionApiKey.trim()
         : localSettings.llmApiKey.trim()
 
+    const assemblyAiValidationError = getAssemblyAiPromptValidationError(localSettings)
+
     if (!apiKey) {
       setTranscriptionStatus('error')
       setTranscriptionMessage('Transcription credential is required before testing.')
+      return
+    }
+
+    if (assemblyAiValidationError) {
+      setTranscriptionStatus('error')
+      setTranscriptionMessage(assemblyAiValidationError)
       return
     }
 
@@ -354,6 +397,15 @@ export function SettingsModal(): React.ReactNode | null {
 
   const handleSave = async (): Promise<void> => {
     try {
+      const assemblyAiValidationError = getAssemblyAiPromptValidationError(localSettings)
+      if (assemblyAiValidationError) {
+        setSaveStatus('error')
+        setTranscriptionStatus('error')
+        setTranscriptionMessage(assemblyAiValidationError)
+        setTimeout(() => setSaveStatus('idle'), 3000)
+        return
+      }
+
       setSaveStatus('saving')
       const updatedSettings = await window.api.updateSettings(normalizeSettingsForUi(localSettings))
       setSettings(updatedSettings as AppSettings)
@@ -571,13 +623,14 @@ export function SettingsModal(): React.ReactNode | null {
                 </label>
                 <select
                   value={localSettings.assemblyAiLanguageDetection ? 'on' : 'off'}
+                  disabled={!supportsAssemblyAiLanguageDetection(localSettings.assemblyAiSpeechModel)}
                   onChange={(e) =>
                     setLocalSettings({
                       ...localSettings,
                       assemblyAiLanguageDetection: e.target.value === 'on'
                     })
                   }
-                  className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors"
+                  className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-60"
                 >
                   <option value="on">On</option>
                   <option value="off">Off</option>

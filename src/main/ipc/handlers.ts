@@ -426,6 +426,15 @@ const validateTranscriptionSettings = (settings: AppSettings): string | null => 
     return 'AssemblyAI API key not configured. Please add it in Settings.'
   }
 
+  if (
+    settings.transcriptionProvider === 'assemblyai' &&
+    settings.assemblyAiSpeechModel === 'u3-rt-pro' &&
+    settings.assemblyAiPrompt?.trim() &&
+    settings.assemblyAiKeytermsPrompt?.trim()
+  ) {
+    return 'AssemblyAI Universal 3 Pro does not support using prompt and keyterms together.'
+  }
+
   if (settings.transcriptionProvider === 'openai' && !settings.llmApiKey?.trim()) {
     return 'OpenAI API key not configured for transcription. Please add it in Settings.'
   }
@@ -1619,6 +1628,17 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       }
 
       if (provider === 'assemblyai') {
+        if (
+          payload?.assemblyAiSpeechModel === 'u3-rt-pro' &&
+          payload?.assemblyAiPrompt?.trim() &&
+          payload?.assemblyAiKeytermsPrompt?.trim()
+        ) {
+          return {
+            success: false,
+            message: 'AssemblyAI Universal 3 Pro does not support using prompt and keyterms together.'
+          }
+        }
+
         return testAssemblyAIConnection(apiKey, {
           language,
           speechModel: payload?.assemblyAiSpeechModel,

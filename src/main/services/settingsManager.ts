@@ -40,11 +40,15 @@ const ASSEMBLYAI_SPEECH_MODEL_ENV =
   process.env.ASSEMBLYAI_SPEECH_MODEL || process.env.VITE_ASSEMBLYAI_SPEECH_MODEL
 
 const DEFAULT_ASSEMBLYAI_SPEECH_MODEL: AssemblyAiSpeechModel =
-  ASSEMBLYAI_SPEECH_MODEL_ENV === 'u3-rt-pro'
-    ? 'u3-rt-pro'
-    : ASSEMBLYAI_SPEECH_MODEL_ENV === 'universal-streaming-english'
+  ASSEMBLYAI_SPEECH_MODEL_ENV === 'universal-streaming-english'
       ? 'universal-streaming-english'
-      : 'universal-streaming-multilingual'
+      : ASSEMBLYAI_SPEECH_MODEL_ENV === 'universal-streaming-multilingual'
+        ? 'universal-streaming-multilingual'
+        : 'u3-rt-pro'
+
+const getAssemblyAiLanguageDetectionDefault = (speechModel: AssemblyAiSpeechModel): boolean => {
+  return speechModel === 'universal-streaming-multilingual'
+}
 
 const getAssemblyAiSilenceDefaults = (
   speechModel: AssemblyAiSpeechModel
@@ -78,7 +82,10 @@ const DEFAULT_SETTINGS: AppSettings = {
     process.env.ASSEMBLYAI_LANGUAGE_DETECTION === 'false' ||
     process.env.VITE_ASSEMBLYAI_LANGUAGE_DETECTION === 'false'
       ? false
-      : true,
+      : process.env.ASSEMBLYAI_LANGUAGE_DETECTION === 'true' ||
+          process.env.VITE_ASSEMBLYAI_LANGUAGE_DETECTION === 'true'
+        ? true
+        : getAssemblyAiLanguageDetectionDefault(DEFAULT_ASSEMBLYAI_SPEECH_MODEL),
   assemblyAiMinTurnSilence: Number(
     process.env.ASSEMBLYAI_MIN_TURN_SILENCE || DEFAULT_ASSEMBLYAI_SILENCE.minTurnSilence
   ),
@@ -211,17 +218,18 @@ export class SettingsManager {
           needsSave = true
         }
         if (!savedSettings.assemblyAiSpeechModel) {
-          savedSettings.assemblyAiSpeechModel = 'universal-streaming-multilingual'
+          savedSettings.assemblyAiSpeechModel = DEFAULT_ASSEMBLYAI_SPEECH_MODEL
           needsSave = true
         }
         if (!isAssemblyAiSpeechModel(savedSettings.assemblyAiSpeechModel)) {
-          savedSettings.assemblyAiSpeechModel = 'universal-streaming-multilingual'
+          savedSettings.assemblyAiSpeechModel = DEFAULT_ASSEMBLYAI_SPEECH_MODEL
           needsSave = true
         }
         const speechModel = savedSettings.assemblyAiSpeechModel as AssemblyAiSpeechModel
         const silenceDefaults = getAssemblyAiSilenceDefaults(speechModel)
         if (savedSettings.assemblyAiLanguageDetection === undefined) {
-          savedSettings.assemblyAiLanguageDetection = true
+          savedSettings.assemblyAiLanguageDetection =
+            getAssemblyAiLanguageDetectionDefault(speechModel)
           needsSave = true
         }
         if (!savedSettings.assemblyAiMinTurnSilence) {
