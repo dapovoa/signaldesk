@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle, Eye, EyeOff, Loader2, Save, X } from 'lucide-react'
+import { AlertCircle, CheckCircle, Eye, EyeOff, FolderOpen, Loader2, Save, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { AppSettings, useInterviewStore } from '../store/interviewStore'
 import {
@@ -312,7 +312,8 @@ export function SettingsModal(): React.ReactNode | null {
         baseURL: provider === 'openai-compatible' ? baseURL : undefined,
         customHeaders:
           provider === 'openai-compatible' ? localSettings.llmCustomHeaders : undefined,
-        model: localSettings.llmModel
+        model: localSettings.llmModel,
+        llamaBinDir: provider === 'llama.cpp' ? localSettings.llamaBinDir : undefined
       })
 
       if (result.success) {
@@ -362,6 +363,36 @@ export function SettingsModal(): React.ReactNode | null {
     }
     setLocalSettings({ ...localSettings, windowOpacity: value })
     await window.api.setWindowOpacity(value)
+  }
+
+  const handleOpenLlamaBinFolder = async (): Promise<void> => {
+    try {
+      const result = await window.api.openLlamaBinFolder(localSettings.llamaBinDir)
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to open llama.cpp binaries folder.')
+      }
+    } catch (err) {
+      setConnectionStatus('error')
+      setConnectionMessage(
+        err instanceof Error ? err.message : 'Failed to open llama.cpp binaries folder.'
+      )
+    }
+  }
+
+  const handleChooseLlamaBinFolder = async (): Promise<void> => {
+    try {
+      const result = await window.api.selectLlamaBinDir()
+      if (result.success && result.directory) {
+        setLocalSettings({ ...localSettings, llamaBinDir: result.directory })
+        setConnectionStatus('idle')
+        setConnectionMessage('')
+      }
+    } catch (err) {
+      setConnectionStatus('error')
+      setConnectionMessage(
+        err instanceof Error ? err.message : 'Failed to choose llama.cpp binaries folder.'
+      )
+    }
   }
 
   const handleClose = (): void => {
@@ -647,10 +678,12 @@ export function SettingsModal(): React.ReactNode | null {
                 const nextSettings: AppSettings = {
                   ...localSettings,
                   llmProvider: nextProvider,
-                llmAuthMode:
+                  llmAuthMode:
                     nextProvider === 'openai'
                       ? localSettings.llmAuthMode
-                      : nextProvider === 'openai-compatible' || nextProvider === 'anthropic-compatible' || nextProvider === 'llama.cpp'
+                      : nextProvider === 'openai-compatible' ||
+                          nextProvider === 'anthropic-compatible' ||
+                          nextProvider === 'llama.cpp'
                         ? 'api-key'
                         : 'oauth-token'
                 }
@@ -853,6 +886,41 @@ export function SettingsModal(): React.ReactNode | null {
             </>
           )}
 
+          {localSettings.llmProvider === 'llama.cpp' && (
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-dark-200">
+                Llama.cpp Binaries Folder
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={localSettings.llamaBinDir}
+                  className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={handleOpenLlamaBinFolder}
+                  className="settings-action flex items-center justify-center px-3 py-2 text-sm transition-colors"
+                  title="Open binaries folder"
+                >
+                  <FolderOpen size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleChooseLlamaBinFolder}
+                  className="settings-action px-3 py-2 text-sm transition-colors"
+                >
+                  Choose
+                </button>
+              </div>
+              <p className="text-xs text-dark-500">
+                Put <code>llama-server</code> here. <code>llama-cli</code> can live in the same
+                folder.
+              </p>
+            </div>
+          )}
+
           <div className="space-y-2">
             <label className="block text-sm font-medium text-dark-200">
               Answer Generation Model
@@ -899,7 +967,10 @@ export function SettingsModal(): React.ReactNode | null {
               </div>
             )}
             {localSettings.llmProvider === 'llama.cpp' && (
-              <p className="text-xs text-dark-500">Local models are loaded from models.</p>
+              <p className="text-xs text-dark-500">
+                Local GGUF models are loaded from the models directory. Runtime binaries are
+                configured separately above.
+              </p>
             )}
           </div>
 

@@ -5,6 +5,7 @@ directories:
 files:
   - '!**/.vscode/*'
   - '!src/*'
+  - '!models/**'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,CHANGELOG.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
@@ -13,6 +14,11 @@ asarUnpack:
   - resources/**
   - node_modules/sqlite-vec/**
   - node_modules/sqlite-vec-*/**
+extraResources:
+  - from: vendor/llama
+    to: vendor/llama
+    filter:
+      - '**/*'
 win:
   executableName: SignalDesk
   icon: icon.ico

@@ -1,4 +1,4 @@
-import { BrowserWindow, clipboard, desktopCapturer, ipcMain, shell } from 'electron'
+import { BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, shell } from 'electron'
 import * as fs from 'fs'
 import type { AnswerEntry } from '../../shared/contracts'
 import {
@@ -33,14 +33,17 @@ import {
 } from '../services/avatarProfileManager'
 import { streamChatGPTCodexResponse } from '../services/chatgptCodexClient'
 import { llamaCppLlmServer } from '../services/llamaCppLlmServer'
-import { DEFAULT_LLM_BASE_URL, listLlmModels } from '../services/localEmbeddingPaths'
+import { llamaCppServer } from '../services/llamaCppServer'
+import {
+  DEFAULT_LLM_BASE_URL,
+  ensureLlamaBinDirectory,
+  ensureModelsDirectory,
+  getDefaultLlamaBinDirectory,
+  listEmbeddingModels,
+  listLlmModels
+} from '../services/localEmbeddingPaths'
 import { VisionService } from '../services/visionService'
 import { WhisperService } from '../services/whisperService'
-import {
-  DEFAULT_EMBEDDING_MODEL,
-  listEmbeddingModels,
-  resolveEmbeddingModelDirectory
-} from '../services/localEmbeddingPaths'
 
 let whisperService: WhisperService | null = null
 let openaiService: OpenAIService | null = null
@@ -77,8 +80,6 @@ const MAX_PAUSE_THRESHOLD_MS = 3000
 const MIN_POST_UTTERANCE_DEBOUNCE_MS = 150
 const MAX_POST_UTTERANCE_DEBOUNCE_MS = 600
 let lastAnswerCompletedAt = 0
-let validatedLlamaModel: string | null = null
-let llamaWarmupDone = false
 
 interface AnswerTimingTrace {
   utteranceEndAt: number | null
@@ -130,6 +131,10 @@ const IPC_HANDLE_CHANNELS = [
   'disconnect-openai-oauth',
   'fetch-llm-models',
   'fetch-embedding-models',
+  'test-embedding-model',
+  'select-embedding-model-dir',
+  'open-llama-bin-folder',
+  'select-llama-bin-dir',
   'test-provider-connection',
   'test-transcription-connection',
   'start-capture',
@@ -1085,7 +1090,13 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
   })
 
   ipcMain.handle('update-settings', (_event, updates: Partial<AppSettings>) => {
+    const llamaBinDirChanged = updates.llamaBinDir !== undefined
     settingsManager?.updateSettings(updates)
+
+    if (llamaBinDirChanged) {
+      void llamaCppLlmServer.dispose()
+      void llamaCppServer.dispose()
+    }
 
     if (updates.alwaysOnTop !== undefined && mainWindow && !isWaylandSession) {
       mainWindow.setAlwaysOnTop(updates.alwaysOnTop)
@@ -1141,8 +1152,8 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     })
   })
 
-  ipcMain.handle('test-embedding-model', async (_event, model: string) => {
-    return llamaCppServer.validateModel(model)
+  ipcMain.handle('test-embedding-model', async (_event, model: string, userDir?: string) => {
+    return llamaCppServer.validateModel(model, userDir)
   })
 
   ipcMain.handle('generate-answer-manually', async (_event, questionText: string) => {
@@ -1308,21 +1319,10 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
   ipcMain.handle(
     'fetch-embedding-models',
-    async () => {
-      const directory = resolveEmbeddingModelDirectory()
+    async (_event, userDir?: string) => {
+      const directory = ensureModelsDirectory(userDir)
       try {
-        const models = listEmbeddingModels()
-
-        if (
-          !models.some((model) => model.id === DEFAULT_EMBEDDING_MODEL) &&
-          fs.existsSync(`${directory}/${DEFAULT_EMBEDDING_MODEL}`)
-        ) {
-          models.unshift({
-            id: DEFAULT_EMBEDDING_MODEL,
-            name: DEFAULT_EMBEDDING_MODEL
-          })
-        }
-
+        const models = listEmbeddingModels(userDir)
         return { success: true, models, directory }
       } catch (error) {
         const errorMessage =
@@ -1338,6 +1338,52 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
   )
 
   ipcMain.handle(
+    'select-embedding-model-dir',
+    async () => {
+      const defaultPath = ensureModelsDirectory()
+      const result = await dialog.showOpenDialog(mainWindow!, {
+        defaultPath,
+        properties: ['openDirectory']
+      })
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: false, directory: '' }
+      }
+
+      return { success: true, directory: result.filePaths[0] }
+    }
+  )
+
+  ipcMain.handle('open-llama-bin-folder', async (_event, directory?: string) => {
+    const targetDirectory = ensureLlamaBinDirectory(
+      directory || settingsManager?.getSettings().llamaBinDir || getDefaultLlamaBinDirectory()
+    )
+    const error = await shell.openPath(targetDirectory)
+
+    return {
+      success: !error,
+      path: targetDirectory,
+      error: error || undefined
+    }
+  })
+
+  ipcMain.handle('select-llama-bin-dir', async () => {
+    const defaultPath = ensureLlamaBinDirectory(
+      settingsManager?.getSettings().llamaBinDir || getDefaultLlamaBinDirectory()
+    )
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      defaultPath,
+      properties: ['openDirectory']
+    })
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { success: false, directory: '' }
+    }
+
+    return { success: true, directory: result.filePaths[0] }
+  })
+
+  ipcMain.handle(
     'test-provider-connection',
     async (
       _event,
@@ -1349,6 +1395,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         baseURL?: string
         customHeaders?: string
         model?: string
+        llamaBinDir?: string
       }
     ) => {
       const {
@@ -1410,15 +1457,16 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
       try {
         if (provider === 'llama.cpp') {
-          const validation = await llamaCppLlmServer.validateModel(preferredModel || '')
+          const validation = await llamaCppLlmServer.validateModel(
+            preferredModel || '',
+            payload?.llamaBinDir?.trim() || undefined
+          )
           if (!validation.valid) {
             return {
               success: false,
               message: validation.error || 'Model validation failed'
             }
           }
-          validatedLlamaModel = preferredModel || null
-          llamaWarmupDone = true
         }
 
         if (provider === 'anthropic-compatible') {
@@ -2041,16 +2089,9 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     if (settings.llmProvider === 'llama.cpp') {
       try {
         await ensureLocalLlmModelReady(settings.llmModel)
-        validatedLlamaModel = settings.llmModel || null
-        llamaWarmupDone = true
       } catch (err) {
         console.warn('[LlamaCpp] startup failed:', err)
-        validatedLlamaModel = null
-        llamaWarmupDone = false
       }
-    } else {
-      validatedLlamaModel = null
-      llamaWarmupDone = false
     }
     if (settings.llmProvider === 'openai-oauth') {
       providerConfig.apiKey = (await ensureOpenAIOAuthToken()) || ''

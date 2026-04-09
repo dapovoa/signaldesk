@@ -119,6 +119,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   llmBaseUrl: '',
   llmCustomHeaders: '',
   llmModel: 'gpt-4o-mini',
+  llamaBinDir: '',
   transcriptionLanguage: 'auto',
   alwaysOnTop: true,
   windowOpacity: 1.0,
@@ -138,7 +139,8 @@ const DEFAULT_AVATAR_PROFILE: AvatarProfile = {
   jobDescription: '',
   companyContext: '',
   sourceDirectory: '',
-  embeddingModel: 'all-MiniLM-L6-v2.F16.gguf',
+  embeddingModel: '',
+  embeddingModelDir: '',
   updatedAt: 0
 }
 

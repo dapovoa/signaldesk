@@ -4,6 +4,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import type { AppSettings } from '../../shared/contracts'
 import { normalizeLlmSettings } from '../../shared/llmSettings'
+import { ensureLlamaBinDirectory, getDefaultLlamaBinDirectory } from './localEmbeddingPaths'
 export type { AppSettings } from '../../shared/contracts'
 
 config()
@@ -89,6 +90,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     process.env.OPENAI_MODEL ||
     process.env.VITE_OPENAI_MODEL ||
     (DEFAULT_LLM_PROVIDER === 'llama.cpp' ? '' : 'gpt-4o-mini'),
+  llamaBinDir: process.env.SIGNALDESK_LLAMA_BIN_DIR || '',
   transcriptionLanguage:
     process.env.TRANSCRIPTION_LANGUAGE === 'pt' || process.env.VITE_TRANSCRIPTION_LANGUAGE === 'pt'
       ? 'pt'
@@ -103,6 +105,12 @@ const DEFAULT_SETTINGS: AppSettings = {
   captureSourceType: 'auto'
 }
 
+const normalizeSettings = (settings: AppSettings): AppSettings =>
+  normalizeLlmSettings({
+    ...settings,
+    llamaBinDir: settings.llamaBinDir?.trim() || getDefaultLlamaBinDirectory()
+  })
+
 export class SettingsManager {
   private settingsPath: string
   private settings: AppSettings
@@ -114,6 +122,14 @@ export class SettingsManager {
     const loaded = this.loadSettings()
     this.settings = loaded.settings
     this.pendingMigrationSave = loaded.needsSave
+    this.applyRuntimeSettings()
+  }
+
+  private applyRuntimeSettings(): void {
+    const normalized = normalizeSettings(this.settings)
+    this.settings = normalized
+    process.env.SIGNALDESK_LLAMA_BIN_DIR = normalized.llamaBinDir
+    ensureLlamaBinDirectory(normalized.llamaBinDir)
   }
 
   private loadSettings(): { settings: AppSettings; needsSave: boolean } {
@@ -146,6 +162,9 @@ export class SettingsManager {
         }
         if (!savedSettings.llmModel && savedSettings.openaiModel) {
           savedSettings.llmModel = savedSettings.openaiModel
+          needsSave = true
+        }
+        if (typeof savedSettings.llamaBinDir !== 'string' || !savedSettings.llamaBinDir.trim()) {
           needsSave = true
         }
         if ('llmDisableThinking' in savedSettings) {
@@ -241,7 +260,7 @@ export class SettingsManager {
         }
 
         const hydratedSettings = hydrateStoredSettings(savedSettings)
-        const normalizedSettings = normalizeLlmSettings(hydratedSettings)
+        const normalizedSettings = normalizeSettings(hydratedSettings)
 
         if (JSON.stringify(hydratedSettings) !== JSON.stringify(normalizedSettings)) {
           needsSave = true
@@ -252,12 +271,12 @@ export class SettingsManager {
     } catch (error) {
       console.error('Failed to load settings:', error)
     }
-    return { settings: normalizeLlmSettings({ ...DEFAULT_SETTINGS }), needsSave: false }
+    return { settings: normalizeSettings({ ...DEFAULT_SETTINGS }), needsSave: false }
   }
 
   private saveSettings(): void {
     try {
-      const settingsToSave = { ...normalizeLlmSettings(this.settings) }
+      const settingsToSave = { ...normalizeSettings(this.settings) }
 
       // Encrypt API keys if encryption is available
       if (safeStorage.isEncryptionAvailable()) {
@@ -303,7 +322,7 @@ export class SettingsManager {
   }
 
   getSettings(): AppSettings {
-    this.settings = normalizeLlmSettings(this.settings)
+    this.settings = normalizeSettings(this.settings)
     return { ...this.settings }
   }
 
@@ -312,20 +331,23 @@ export class SettingsManager {
   }
 
   updateSettings(updates: Partial<AppSettings>): void {
-    this.settings = normalizeLlmSettings({ ...this.settings, ...updates })
+    this.settings = normalizeSettings({ ...this.settings, ...updates })
+    this.applyRuntimeSettings()
     this.pendingMigrationSave = false
     this.saveSettings()
   }
 
   setSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]): void {
     this.settings[key] = value
-    this.settings = normalizeLlmSettings(this.settings)
+    this.settings = normalizeSettings(this.settings)
+    this.applyRuntimeSettings()
     this.pendingMigrationSave = false
     this.saveSettings()
   }
 
   resetToDefaults(): void {
-    this.settings = normalizeLlmSettings({ ...DEFAULT_SETTINGS })
+    this.settings = normalizeSettings({ ...DEFAULT_SETTINGS })
+    this.applyRuntimeSettings()
     this.pendingMigrationSave = false
     this.saveSettings()
   }

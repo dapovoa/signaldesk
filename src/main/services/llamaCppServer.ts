@@ -1,8 +1,8 @@
 import { spawn } from 'child_process'
 import * as fs from 'fs'
 import {
+  buildLlamaBinaryNotFoundError,
   resolveEmbeddingModelPath,
-  resolveLlamaDirectory,
   resolveLlamaServerBinary
 } from './localEmbeddingPaths'
 
@@ -32,7 +32,11 @@ class LlamaCppServerManager {
   private activeModel: string | null = null
   private outputTail: string[] = []
 
-  async ensureRunning(model: string): Promise<void> {
+  async ensureRunning(model: string, userDir?: string, binaryDir?: string): Promise<void> {
+    if (!model?.trim()) {
+      throw new Error('No embedding model specified')
+    }
+
     if (this.starting) {
       await this.starting
     }
@@ -41,7 +45,7 @@ class LlamaCppServerManager {
       return
     }
 
-    this.starting = this.restart(model)
+    this.starting = this.restart(model, userDir, binaryDir)
     try {
       await this.starting
     } finally {
@@ -49,19 +53,27 @@ class LlamaCppServerManager {
     }
   }
 
-  async validateModel(model: string): Promise<{ valid: boolean; error?: string }> {
-    const modelPath = resolveEmbeddingModelPath(model)
+  async validateModel(
+    model: string,
+    userDir?: string,
+    binaryDir?: string
+  ): Promise<{ valid: boolean; error?: string }> {
+    if (!model?.trim()) {
+      return { valid: false, error: 'No embedding model specified' }
+    }
+
+    const modelPath = resolveEmbeddingModelPath(model, userDir)
     if (!fs.existsSync(modelPath)) {
       return { valid: false, error: `Embedding model file not found: ${modelPath}` }
     }
 
-    const serverBinary = resolveLlamaServerBinary()
+    const serverBinary = resolveLlamaServerBinary(binaryDir)
     if (!serverBinary || !fs.existsSync(serverBinary)) {
-      return { valid: false, error: `llama-server binary not found` }
+      return { valid: false, error: buildLlamaBinaryNotFoundError('llama-server', binaryDir) }
     }
 
     try {
-      await this.ensureRunning(model)
+      await this.ensureRunning(model, userDir, binaryDir)
       const inferenceTest = await this.testInference()
       if (!inferenceTest) {
         return { valid: false, error: 'Embedding inference test failed' }
@@ -110,18 +122,17 @@ class LlamaCppServerManager {
     child.kill('SIGKILL')
   }
 
-  private async restart(model: string): Promise<void> {
+  private async restart(model: string, userDir?: string, binaryDir?: string): Promise<void> {
     await this.dispose()
-    await this.start(model)
+    await this.start(model, userDir, binaryDir)
   }
 
-  private async start(model: string): Promise<void> {
-    const llamaDirectory = resolveLlamaDirectory()
-    const serverBinary = resolveLlamaServerBinary()
-    const modelPath = resolveEmbeddingModelPath(model)
+  private async start(model: string, userDir?: string, binaryDir?: string): Promise<void> {
+    const serverBinary = resolveLlamaServerBinary(binaryDir)
+    const modelPath = resolveEmbeddingModelPath(model, userDir)
 
     if (!serverBinary || !fs.existsSync(serverBinary)) {
-      throw new Error(`Local llama-server not found in ${llamaDirectory || 'vendor/llama'}`)
+      throw new Error(buildLlamaBinaryNotFoundError('llama-server', binaryDir))
     }
 
     if (!fs.existsSync(modelPath)) {
@@ -137,10 +148,7 @@ class LlamaCppServerManager {
       EMBED_PORT,
       '--embedding',
       '--pooling',
-      EMBED_POOLING,
-      '-ub', '1024',
-      '-b', '1024',
-      '-c', '4096'
+      EMBED_POOLING
     ]
 
     if (EMBED_GPU_LAYERS) {
@@ -148,13 +156,7 @@ class LlamaCppServerManager {
     }
 
     const child = spawn(serverBinary, args, {
-      cwd: llamaDirectory || undefined,
-      env: {
-        ...process.env,
-        LD_LIBRARY_PATH: [llamaDirectory, process.env.LD_LIBRARY_PATH || '']
-          .filter(Boolean)
-          .join(':')
-      },
+      env: process.env,
       stdio: ['ignore', 'pipe', 'pipe']
     })
 

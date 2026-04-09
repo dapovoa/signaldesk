@@ -37,7 +37,7 @@ export interface Api {
     baseURL?: string
     customHeaders?: string
   }) => Promise<{ success: boolean; models: Array<{ id: string; name: string }>; error?: string }>
-  fetchEmbeddingModels: () => Promise<{
+  fetchEmbeddingModels: (userDir?: string) => Promise<{
     success: boolean
     models: Array<{ id: string; name: string }>
     directory: string
@@ -51,6 +51,7 @@ export interface Api {
     baseURL?: string
     customHeaders?: string
     model?: string
+    llamaBinDir?: string
   }) => Promise<{
     success: boolean
     message: string
@@ -73,9 +74,12 @@ export interface Api {
   getAvatarProfile: () => Promise<AvatarProfile>
   updateAvatarProfile: (updates: Partial<AvatarProfile>) => Promise<AvatarProfile>
   openAvatarMemoryFolder: () => Promise<{ success: boolean; path: string; error?: string }>
+  openLlamaBinFolder: (directory?: string) => Promise<{ success: boolean; path: string; error?: string }>
   getAvatarIndexStatus: () => Promise<AvatarIndexStatus>
   reindexAvatarSources: () => Promise<AvatarIndexStatus>
-  testEmbeddingModel: (model: string) => Promise<{ valid: boolean; error?: string }>
+  testEmbeddingModel: (model: string, userDir?: string) => Promise<{ valid: boolean; error?: string }>
+  selectEmbeddingModelDir: () => Promise<{ success: boolean; directory: string }>
+  selectLlamaBinDir: () => Promise<{ success: boolean; directory: string }>
   startCapture: () => Promise<{ success: boolean }>
   stopCapture: () => Promise<{ success: boolean }>
   sendAudioData: (audioData: ArrayBuffer) => void

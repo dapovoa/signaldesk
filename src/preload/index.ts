@@ -41,12 +41,12 @@ const api = {
     customHeaders?: string
   }): Promise<{ success: boolean; models: Array<{ id: string; name: string }>; error?: string }> =>
     ipcRenderer.invoke('fetch-llm-models', payload),
-  fetchEmbeddingModels: (): Promise<{
+  fetchEmbeddingModels: (userDir?: string): Promise<{
     success: boolean
     models: Array<{ id: string; name: string }>
     directory: string
     error?: string
-  }> => ipcRenderer.invoke('fetch-embedding-models'),
+  }> => ipcRenderer.invoke('fetch-embedding-models', userDir),
   testProviderConnection: (payload: {
     apiKey?: string
     oauthToken?: string
@@ -55,6 +55,7 @@ const api = {
     baseURL?: string
     customHeaders?: string
     model?: string
+    llamaBinDir?: string
   }): Promise<{
     success: boolean
     message: string
@@ -85,12 +86,20 @@ const api = {
     ipcRenderer.invoke('update-avatar-profile', updates),
   openAvatarMemoryFolder: (): Promise<{ success: boolean; path: string; error?: string }> =>
     ipcRenderer.invoke('open-avatar-memory-folder'),
+  openLlamaBinFolder: (
+    directory?: string
+  ): Promise<{ success: boolean; path: string; error?: string }> =>
+    ipcRenderer.invoke('open-llama-bin-folder', directory),
   getAvatarIndexStatus: (): Promise<AvatarIndexStatus> =>
     ipcRenderer.invoke('get-avatar-index-status'),
   reindexAvatarSources: (): Promise<AvatarIndexStatus> =>
     ipcRenderer.invoke('reindex-avatar-sources'),
-  testEmbeddingModel: (model: string): Promise<{ valid: boolean; error?: string }> =>
-    ipcRenderer.invoke('test-embedding-model', model),
+  testEmbeddingModel: (model: string, userDir?: string): Promise<{ valid: boolean; error?: string }> =>
+    ipcRenderer.invoke('test-embedding-model', model, userDir),
+  selectEmbeddingModelDir: (): Promise<{ success: boolean; directory: string }> =>
+    ipcRenderer.invoke('select-embedding-model-dir'),
+  selectLlamaBinDir: (): Promise<{ success: boolean; directory: string }> =>
+    ipcRenderer.invoke('select-llama-bin-dir'),
   startCapture: (): Promise<{ success: boolean }> => ipcRenderer.invoke('start-capture'),
   stopCapture: (): Promise<{ success: boolean }> => ipcRenderer.invoke('stop-capture'),
   sendAudioData: (audioData: ArrayBuffer): void => ipcRenderer.send('audio-data', audioData),

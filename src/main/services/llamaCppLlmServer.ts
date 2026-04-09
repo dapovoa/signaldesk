@@ -1,9 +1,8 @@
 import { spawn } from 'child_process'
 import * as fs from 'fs'
 import {
+  buildLlamaBinaryNotFoundError,
   DEFAULT_LLM_BASE_URL,
-  resolveEmbeddingModelPath,
-  resolveLlamaDirectory,
   resolveLlamaServerBinary
 } from './localEmbeddingPaths'
 
@@ -29,7 +28,11 @@ class LlamaCppLlmServerManager {
   private activeModel: string | null = null
   private outputTail: string[] = []
 
-  async ensureRunning(model: string): Promise<void> {
+  async ensureRunning(model: string, binaryDir?: string): Promise<void> {
+    if (!model?.trim()) {
+      throw new Error('No LLM model specified')
+    }
+
     if (this.starting) {
       await this.starting
     }
@@ -38,7 +41,7 @@ class LlamaCppLlmServerManager {
       return
     }
 
-    this.starting = this.restart(model)
+    this.starting = this.restart(model, binaryDir)
     try {
       await this.starting
     } finally {
@@ -46,19 +49,18 @@ class LlamaCppLlmServerManager {
     }
   }
 
-  async validateModel(model: string): Promise<{ valid: boolean; error?: string }> {
-    const modelPath = resolveEmbeddingModelPath(model)
-    if (!fs.existsSync(modelPath)) {
-      return { valid: false, error: `Model file not found: ${modelPath}` }
+  async validateModel(model: string, binaryDir?: string): Promise<{ valid: boolean; error?: string }> {
+    if (!model?.trim()) {
+      return { valid: false, error: 'No LLM model specified' }
     }
 
-    const serverBinary = resolveLlamaServerBinary()
+    const serverBinary = resolveLlamaServerBinary(binaryDir)
     if (!serverBinary || !fs.existsSync(serverBinary)) {
-      return { valid: false, error: `llama-server binary not found in ${resolveLlamaDirectory() || 'vendor/llama'}` }
+      return { valid: false, error: buildLlamaBinaryNotFoundError('llama-server', binaryDir) }
     }
 
     try {
-      await this.ensureRunning(model)
+      await this.ensureRunning(model, binaryDir)
       const inferenceTest = await this.testInference()
       if (!inferenceTest) {
         return { valid: false, error: 'Model inference test failed' }
@@ -109,38 +111,26 @@ class LlamaCppLlmServerManager {
     child.kill('SIGKILL')
   }
 
-  private async restart(model: string): Promise<void> {
+  private async restart(model: string, binaryDir?: string): Promise<void> {
     await this.dispose()
-    await this.start(model)
+    await this.start(model, binaryDir)
   }
 
-  private async start(model: string): Promise<void> {
-    const llamaDirectory = resolveLlamaDirectory()
-    const serverBinary = resolveLlamaServerBinary()
-    const modelPath = resolveEmbeddingModelPath(model)
+  private async start(model: string, binaryDir?: string): Promise<void> {
+    const serverBinary = resolveLlamaServerBinary(binaryDir)
 
     if (!serverBinary || !fs.existsSync(serverBinary)) {
-      throw new Error(`Local llama-server not found in ${llamaDirectory || 'vendor/llama'}`)
+      throw new Error(buildLlamaBinaryNotFoundError('llama-server', binaryDir))
     }
 
-    if (!fs.existsSync(modelPath)) {
-      throw new Error(`LLM model not found: ${modelPath}`)
-    }
-
-    const args = ['-m', modelPath, '--host', LLM_HOST, '--port', LLM_PORT, '-np', '1', '--no-cache-prompt', '-cram', '0', '--reasoning', 'off', '--no-warmup', '-ub', '1024', '-b', '1024', '-c', '4096']
+    const args = ['-m', model, '--host', LLM_HOST, '--port', LLM_PORT, '-np', '1', '--no-cache-prompt', '-cram', '0', '--reasoning', 'off', '--no-warmup']
 
     if (LLM_GPU_LAYERS) {
       args.push('-ngl', LLM_GPU_LAYERS)
     }
 
     const child = spawn(serverBinary, args, {
-      cwd: llamaDirectory || undefined,
-      env: {
-        ...process.env,
-        LD_LIBRARY_PATH: [llamaDirectory, process.env.LD_LIBRARY_PATH || '']
-          .filter(Boolean)
-          .join(':')
-      },
+      env: process.env,
       stdio: ['ignore', 'pipe', 'pipe']
     })
 
@@ -158,7 +148,7 @@ class LlamaCppLlmServerManager {
       }
     })
 
-    await this.waitUntilHealthy(child, modelPath)
+    await this.waitUntilHealthy(child, model)
   }
 
   private async waitUntilHealthy(child: SpawnedLlamaServer, modelPath: string): Promise<void> {

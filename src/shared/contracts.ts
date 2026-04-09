@@ -35,6 +35,7 @@ export interface AppSettings {
   llmBaseUrl: string
   llmCustomHeaders: string
   llmModel: string
+  llamaBinDir: string
   transcriptionLanguage: 'auto' | 'en' | 'pt'
   alwaysOnTop: boolean
   windowOpacity: number
@@ -53,6 +54,7 @@ export interface AvatarProfile {
   companyContext: string
   sourceDirectory: string
   embeddingModel: string
+  embeddingModelDir: string
   updatedAt: number
 }
 
