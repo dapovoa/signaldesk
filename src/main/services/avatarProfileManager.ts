@@ -73,7 +73,8 @@ const buildDefaultProfile = (): AvatarProfile => {
     jobDescription: '',
     companyContext: '',
     sourceDirectory: getDefaultAvatarSourceDirectory(),
-    embeddingModel: process.env.SIGNALDESK_EMBED_MODEL || 'all-MiniLM-L6-v2.F16.gguf',
+    embeddingModel: '',
+    embeddingModelDir: '',
     updatedAt: Date.now()
   }
 }
@@ -88,6 +89,7 @@ const normalizeProfile = (profile: AvatarProfile): AvatarProfile => ({
   companyContext: clampText(profile.companyContext, AVATAR_LIMITS.companyContext),
   sourceDirectory: getDefaultAvatarSourceDirectory(),
   embeddingModel: profile.embeddingModel?.trim() || buildDefaultProfile().embeddingModel,
+  embeddingModelDir: profile.embeddingModelDir?.trim() || buildDefaultProfile().embeddingModelDir,
   updatedAt: profile.updatedAt || Date.now()
 })
 

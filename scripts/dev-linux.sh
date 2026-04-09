@@ -28,6 +28,15 @@ else
     /base_capturer_pipewire\.cc:93\] ScreenCastPortal failed: 2$/ { next }
     /\[vite\] \(client\) hmr update / { next }
     /^Opening in existing browser session\.$/ { next }
+    /ERROR:ui\/gfx\/x\/atom_cache\.cc/ { next }
+    /^Click Start to begin$/ { next }
+    /^Start a session to enable capture and answers$/ { next }
+    /^Transcript$/ { next }
+    /^Start listening to see real-time transcription\.\.\.$/ { next }
+    /^Answers$/ { next }
+    /^Answers will appear here when questions are detected$/ { next }
+    /^The AI will listen and respond to interview questions$/ { next }
+    /^Avatar$/ { next }
     { print }
   '
 fi

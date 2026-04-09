@@ -40,7 +40,8 @@ export class AvatarKnowledgeService {
     try {
       const sourceDirectory = profile.sourceDirectory || getDefaultAvatarSourceDirectory()
       const embeddingProvider = new LlamaCppEmbeddingProvider({
-        model: profile.embeddingModel
+        model: profile.embeddingModel,
+        embeddingModelDir: profile.embeddingModelDir
       })
 
       this.store = new AvatarStore(this.databasePath)
@@ -111,6 +112,9 @@ export class AvatarKnowledgeService {
     }) => void
   ): Promise<AvatarIndexStatus> {
     const startedAt = Date.now()
+    if (!profile.embeddingModel?.trim()) {
+      throw new Error('No embedding model selected. Please select a model in Avatar settings.')
+    }
     if (AVATAR_VERBOSE_LOGS) {
       console.log('[AvatarKnowledge] reindex requested:', {
         embeddingModel: profile.embeddingModel,

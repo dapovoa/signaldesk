@@ -123,7 +123,7 @@ export function AvatarModal(): React.ReactNode | null {
       setEmbeddingModelsLoading(true)
       setEmbeddingModelsError(null)
       try {
-        const result = await window.api.fetchEmbeddingModels()
+        const result = await window.api.fetchEmbeddingModels(localProfile.embeddingModelDir || undefined)
         if (!result.success) {
           throw new Error(result.error || 'Failed to load local embedding models.')
         }
@@ -138,8 +138,17 @@ export function AvatarModal(): React.ReactNode | null {
         ).sort((left, right) => left.localeCompare(right))
 
         setEmbeddingModels(uniqueModels)
+
+        const hasSelectedModel = localProfile.embeddingModel && 
+          result.models.some(m => m.id === localProfile.embeddingModel)
+        
         if (result.models.length === 0) {
-          setEmbeddingModelsError(`No .gguf embedding models found in ${result.directory}.`)
+          setEmbeddingModelsError('No models found')
+          if (localProfile.embeddingModel || localProfile.embeddingModelDir) {
+            setLocalProfile(prev => ({ ...prev, embeddingModel: '', embeddingModelDir: '' }))
+          }
+        } else if (localProfile.embeddingModel && !hasSelectedModel) {
+          setLocalProfile(prev => ({ ...prev, embeddingModel: '' }))
         }
       } catch (error) {
         console.error('Failed to load local embedding models:', error)
@@ -153,7 +162,7 @@ export function AvatarModal(): React.ReactNode | null {
     }
 
     loadEmbeddingModels()
-  }, [showAvatar, localProfile.embeddingModel])
+  }, [showAvatar, localProfile.embeddingModel, localProfile.embeddingModelDir])
 
   if (!showAvatar) return null
 
@@ -232,7 +241,10 @@ export function AvatarModal(): React.ReactNode | null {
     try {
       setEmbeddingTestStatus('testing')
       setEmbeddingTestMessage('')
-      const result = await window.api.testEmbeddingModel(localProfile.embeddingModel)
+      const result = await window.api.testEmbeddingModel(
+        localProfile.embeddingModel,
+        localProfile.embeddingModelDir || undefined
+      )
       if (result.valid) {
         setEmbeddingTestStatus('ok')
         setEmbeddingTestMessage('Embedding model validated successfully')
@@ -474,11 +486,32 @@ export function AvatarModal(): React.ReactNode | null {
                   <p className="text-xs text-dark-500">Loading local embedding models...</p>
                 )}
                 {embeddingModelsError && (
-                  <p className="text-xs text-amber-300">{embeddingModelsError}</p>
+                  <p className="text-xs text-dark-400">{embeddingModelsError}</p>
                 )}
-                <p className="text-xs text-dark-500">
-                  Put embedding files in models.
-                </p>
+              </div>
+              <div className="space-y-2">
+                <label className={fieldLabelClassName}>Model Directory</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={localProfile.embeddingModelDir || 'Default'}
+                    className={inputClassName}
+                    placeholder="Default"
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const result = await window.api.selectEmbeddingModelDir()
+                      if (result.success && result.directory) {
+                        setLocalProfile({ ...localProfile, embeddingModelDir: result.directory })
+                      }
+                    }}
+                    className="flex items-center justify-center rounded-lg border border-white/5 bg-white/[0.04] px-3 py-2 text-sm font-medium text-dark-200 transition-colors hover:border-cyan-400/15 hover:bg-cyan-400/8 hover:text-dark-100"
+                  >
+                    <FolderOpen size={16} />
+                  </button>
+                </div>
               </div>
               <div className="space-y-2">
                 <label className={fieldLabelClassName}>Last Indexed</label>

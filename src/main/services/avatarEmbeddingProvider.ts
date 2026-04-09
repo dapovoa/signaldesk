@@ -13,6 +13,7 @@ const normalizeBaseUrl = (value: string): string => value.replace(/\/+$/, '')
 export class LlamaCppEmbeddingProvider implements EmbeddingProvider {
   readonly provider = 'llama.cpp'
   readonly model: string
+  readonly embeddingModelDir: string
   private readonly baseUrl: string
   private readonly apiKey: string
   private readonly queryPrefix: string
@@ -22,6 +23,7 @@ export class LlamaCppEmbeddingProvider implements EmbeddingProvider {
     baseUrl?: string
     apiKey?: string
     model?: string
+    embeddingModelDir?: string
     queryPrefix?: string
     documentPrefix?: string
   }) {
@@ -29,7 +31,8 @@ export class LlamaCppEmbeddingProvider implements EmbeddingProvider {
       options?.baseUrl || process.env.SIGNALDESK_EMBED_BASE_URL || 'http://127.0.0.1:8080'
     )
     this.apiKey = (options?.apiKey || process.env.SIGNALDESK_EMBED_API_KEY || '').trim()
-    this.model = options?.model || process.env.SIGNALDESK_EMBED_MODEL || 'all-MiniLM-L6-v2.F16.gguf'
+    this.model = options?.model || ''
+    this.embeddingModelDir = options?.embeddingModelDir || ''
     this.queryPrefix = options?.queryPrefix || process.env.SIGNALDESK_EMBED_QUERY_PREFIX || ''
     this.documentPrefix = options?.documentPrefix || process.env.SIGNALDESK_EMBED_DOCUMENT_PREFIX || ''
   }
@@ -44,7 +47,10 @@ export class LlamaCppEmbeddingProvider implements EmbeddingProvider {
   }
 
   async warmup(): Promise<void> {
-    await llamaCppServer.ensureRunning(this.model)
+    if (!this.model) {
+      return
+    }
+    await llamaCppServer.ensureRunning(this.model, this.embeddingModelDir)
   }
 
   private applyPrefix(prefix: string, value: string): string {
@@ -57,7 +63,7 @@ export class LlamaCppEmbeddingProvider implements EmbeddingProvider {
       return []
     }
 
-    await llamaCppServer.ensureRunning(this.model)
+    await llamaCppServer.ensureRunning(this.model, this.embeddingModelDir)
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json'
