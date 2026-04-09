@@ -39,6 +39,7 @@ const api = {
     authMode?: 'api-key' | 'oauth-token'
     baseURL?: string
     customHeaders?: string
+    llmModelDir?: string
   }): Promise<{ success: boolean; models: Array<{ id: string; name: string }>; error?: string }> =>
     ipcRenderer.invoke('fetch-llm-models', payload),
   fetchEmbeddingModels: (userDir?: string): Promise<{
@@ -55,6 +56,7 @@ const api = {
     baseURL?: string
     customHeaders?: string
     model?: string
+    llmModelDir?: string
     llamaBinDir?: string
   }): Promise<{
     success: boolean
@@ -96,10 +98,12 @@ const api = {
     ipcRenderer.invoke('reindex-avatar-sources'),
   testEmbeddingModel: (model: string, userDir?: string): Promise<{ valid: boolean; error?: string }> =>
     ipcRenderer.invoke('test-embedding-model', model, userDir),
-  selectEmbeddingModelDir: (): Promise<{ success: boolean; directory: string }> =>
-    ipcRenderer.invoke('select-embedding-model-dir'),
-  selectLlamaBinDir: (): Promise<{ success: boolean; directory: string }> =>
-    ipcRenderer.invoke('select-llama-bin-dir'),
+  selectEmbeddingModelDir: (directory?: string): Promise<{ success: boolean; directory: string }> =>
+    ipcRenderer.invoke('select-embedding-model-dir', directory),
+  selectLlmModelDir: (directory?: string): Promise<{ success: boolean; directory: string }> =>
+    ipcRenderer.invoke('select-llm-model-dir', directory),
+  selectLlamaBinDir: (directory?: string): Promise<{ success: boolean; directory: string }> =>
+    ipcRenderer.invoke('select-llama-bin-dir', directory),
   startCapture: (): Promise<{ success: boolean }> => ipcRenderer.invoke('start-capture'),
   stopCapture: (): Promise<{ success: boolean }> => ipcRenderer.invoke('stop-capture'),
   sendAudioData: (audioData: ArrayBuffer): void => ipcRenderer.send('audio-data', audioData),

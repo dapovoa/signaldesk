@@ -3,6 +3,7 @@ import * as fs from 'fs'
 import {
   buildLlamaBinaryNotFoundError,
   DEFAULT_LLM_BASE_URL,
+  resolveLlmModelPath,
   resolveLlamaServerBinary
 } from './localEmbeddingPaths'
 
@@ -28,7 +29,7 @@ class LlamaCppLlmServerManager {
   private activeModel: string | null = null
   private outputTail: string[] = []
 
-  async ensureRunning(model: string, binaryDir?: string): Promise<void> {
+  async ensureRunning(model: string, modelDir?: string, binaryDir?: string): Promise<void> {
     if (!model?.trim()) {
       throw new Error('No LLM model specified')
     }
@@ -41,7 +42,7 @@ class LlamaCppLlmServerManager {
       return
     }
 
-    this.starting = this.restart(model, binaryDir)
+    this.starting = this.restart(model, modelDir, binaryDir)
     try {
       await this.starting
     } finally {
@@ -49,9 +50,18 @@ class LlamaCppLlmServerManager {
     }
   }
 
-  async validateModel(model: string, binaryDir?: string): Promise<{ valid: boolean; error?: string }> {
+  async validateModel(
+    model: string,
+    modelDir?: string,
+    binaryDir?: string
+  ): Promise<{ valid: boolean; error?: string }> {
     if (!model?.trim()) {
       return { valid: false, error: 'No LLM model specified' }
+    }
+
+    const modelPath = resolveLlmModelPath(model, modelDir)
+    if (!fs.existsSync(modelPath)) {
+      return { valid: false, error: `LLM model file not found: ${modelPath}` }
     }
 
     const serverBinary = resolveLlamaServerBinary(binaryDir)
@@ -60,7 +70,7 @@ class LlamaCppLlmServerManager {
     }
 
     try {
-      await this.ensureRunning(model, binaryDir)
+      await this.ensureRunning(model, modelDir, binaryDir)
       const inferenceTest = await this.testInference()
       if (!inferenceTest) {
         return { valid: false, error: 'Model inference test failed' }
@@ -111,19 +121,24 @@ class LlamaCppLlmServerManager {
     child.kill('SIGKILL')
   }
 
-  private async restart(model: string, binaryDir?: string): Promise<void> {
+  private async restart(model: string, modelDir?: string, binaryDir?: string): Promise<void> {
     await this.dispose()
-    await this.start(model, binaryDir)
+    await this.start(model, modelDir, binaryDir)
   }
 
-  private async start(model: string, binaryDir?: string): Promise<void> {
+  private async start(model: string, modelDir?: string, binaryDir?: string): Promise<void> {
     const serverBinary = resolveLlamaServerBinary(binaryDir)
+    const modelPath = resolveLlmModelPath(model, modelDir)
 
     if (!serverBinary || !fs.existsSync(serverBinary)) {
       throw new Error(buildLlamaBinaryNotFoundError('llama-server', binaryDir))
     }
 
-    const args = ['-m', model, '--host', LLM_HOST, '--port', LLM_PORT, '-np', '1', '--no-cache-prompt', '-cram', '0', '--reasoning', 'off', '--no-warmup']
+    if (!fs.existsSync(modelPath)) {
+      throw new Error(`LLM model not found: ${modelPath}`)
+    }
+
+    const args = ['-m', modelPath, '--host', LLM_HOST, '--port', LLM_PORT, '-np', '1', '--no-cache-prompt', '-cram', '0', '--reasoning', 'off', '--no-warmup']
 
     if (LLM_GPU_LAYERS) {
       args.push('-ngl', LLM_GPU_LAYERS)
@@ -148,7 +163,7 @@ class LlamaCppLlmServerManager {
       }
     })
 
-    await this.waitUntilHealthy(child, model)
+    await this.waitUntilHealthy(child, modelPath)
   }
 
   private async waitUntilHealthy(child: SpawnedLlamaServer, modelPath: string): Promise<void> {

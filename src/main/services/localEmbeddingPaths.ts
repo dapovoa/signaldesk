@@ -11,7 +11,7 @@ const unique = (values: string[]): string[] => [...new Set(values.filter(Boolean
 
 type LlamaBinaryName = 'llama-server' | 'llama-cli'
 
-const getDefaultModelsDirectory = (): string =>
+export const getDefaultModelsDirectory = (): string =>
   path.join(app.getPath('userData'), 'models')
 
 export const getDefaultLlamaBinDirectory = (): string =>
@@ -47,6 +47,16 @@ export const resolveEmbeddingModelDirectory = (userDir?: string): string => {
 export const resolveEmbeddingModelPath = (model: string, userDir?: string): string =>
   path.join(resolveEmbeddingModelDirectory(userDir), model)
 
+export const resolveLlmModelDirectory = (userDir?: string): string => {
+  const configuredDirectory = userDir?.trim() || process.env.SIGNALDESK_LLM_MODEL_DIR?.trim() || ''
+  const candidates = unique([configuredDirectory, getDefaultModelsDirectory()])
+
+  return pickFirstExisting(candidates)
+}
+
+export const resolveLlmModelPath = (model: string, userDir?: string): string =>
+  path.join(resolveLlmModelDirectory(userDir), model)
+
 const pickFirstExisting = (candidates: string[]): string => {
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) {
@@ -75,8 +85,8 @@ export const listEmbeddingModels = (userDir?: string): Array<{ id: string; name:
   return embeddingModels.length > 0 ? embeddingModels : allModels
 }
 
-export const listLlmModels = (): Array<{ id: string; name: string }> => {
-  const directory = resolveEmbeddingModelDirectory()
+export const listLlmModels = (userDir?: string): Array<{ id: string; name: string }> => {
+  const directory = resolveLlmModelDirectory(userDir)
   if (!directory || !fs.existsSync(directory)) {
     return []
   }
@@ -91,7 +101,7 @@ export const listLlmModels = (): Array<{ id: string; name: string }> => {
     .sort((left, right) => left.id.localeCompare(right.id))
 
   const llmModels = allModels.filter((model) => !EMBEDDING_MODEL_PATTERN.test(model.id))
-  return llmModels.length > 0 ? llmModels : allModels
+  return llmModels
 }
 
 const isExecutableFile = (candidate: string): boolean => {

@@ -2,9 +2,11 @@ import { AlertCircle, CheckCircle, Eye, EyeOff, FolderOpen, Loader2, Save, X } f
 import { useEffect, useRef, useState } from 'react'
 import { AppSettings, useInterviewStore } from '../store/interviewStore'
 import {
-  getDefaultLlmModel,
+  getActiveLlmModel,
   getSuggestedLlmModels,
   normalizeLlmSettings,
+  resolveLlmCredential,
+  setActiveLlmModel,
   usesOAuthCredential
 } from '../../../shared/llmSettings'
 
@@ -48,9 +50,25 @@ const getLlmFormState = (settings: AppSettings): LlmFormState => {
     provider,
     authMode,
     usesOAuth,
-    credential: usesOAuth ? settings.llmOauthToken.trim() : settings.llmApiKey.trim(),
+    credential: resolveLlmCredential(settings),
     baseURL: settings.llmBaseUrl.trim()
   }
+}
+
+const setActiveLlmCredential = (settings: AppSettings, value: string): AppSettings => {
+  if (usesOAuthCredential(settings)) {
+    return { ...settings, llmOauthToken: value }
+  }
+
+  if (settings.llmProvider === 'openai-compatible') {
+    return { ...settings, llmOpenAICompatibleApiKey: value }
+  }
+
+  if (settings.llmProvider === 'anthropic-compatible') {
+    return { ...settings, llmAnthropicCompatibleApiKey: value }
+  }
+
+  return { ...settings, llmApiKey: value }
 }
 
 const getAssemblyAiTurnSilenceDefaults = (
@@ -147,8 +165,16 @@ export function SettingsModal(): React.ReactNode | null {
     warning: ''
   })
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const { llmProvider, llmAuthMode, llmApiKey, llmOauthToken, llmBaseUrl, llmCustomHeaders } =
-    localSettings
+  const {
+    llmProvider,
+    llmAuthMode,
+    llmApiKey,
+    llmOpenAICompatibleApiKey,
+    llmAnthropicCompatibleApiKey,
+    llmOauthToken,
+    llmBaseUrl,
+    llmCustomHeaders
+  } = localSettings
 
   useEffect(() => {
     setLocalSettings(normalizeSettingsForUi(settings))
@@ -197,7 +223,14 @@ export function SettingsModal(): React.ReactNode | null {
     })
     const usesLocalLlama = provider === 'llama.cpp'
     const usesAnthropic = provider === 'anthropic-compatible'
-    const credential = usesOAuth ? llmOauthToken.trim() : llmApiKey.trim()
+    const credential = resolveLlmCredential({
+      llmProvider,
+      llmAuthMode,
+      llmApiKey,
+      llmOpenAICompatibleApiKey,
+      llmAnthropicCompatibleApiKey,
+      llmOauthToken
+    })
     const baseURL = llmBaseUrl.trim()
     if (usesLocalLlama || usesAnthropic) {
       setModelsLoading(true)
@@ -206,7 +239,9 @@ export function SettingsModal(): React.ReactNode | null {
       fetchTimeoutRef.current = setTimeout(async () => {
         try {
           const result = await window.api.fetchLlmModels({
-            provider
+            provider,
+            authMode,
+            llmModelDir: provider === 'llama.cpp' ? localSettings.llmModelDir : undefined
           })
 
           if (result.success) {
@@ -288,7 +323,61 @@ export function SettingsModal(): React.ReactNode | null {
         clearTimeout(fetchTimeoutRef.current)
       }
     }
-  }, [llmApiKey, llmOauthToken, llmProvider, llmAuthMode, llmBaseUrl, llmCustomHeaders])
+  }, [
+    llmApiKey,
+    llmOpenAICompatibleApiKey,
+    llmAnthropicCompatibleApiKey,
+    llmOauthToken,
+    llmProvider,
+    llmAuthMode,
+    llmBaseUrl,
+    llmCustomHeaders,
+    localSettings.llmModelDir
+  ])
+
+  useEffect(() => {
+    if (modelsLoading) {
+      return
+    }
+
+    const provider = localSettings.llmProvider
+    const constrainedModels =
+      provider === 'llama.cpp' ||
+      provider === 'anthropic-compatible' ||
+      usesOAuthCredential(localSettings)
+
+    if (!constrainedModels) {
+      return
+    }
+
+    const availableModels = (models.length > 0
+      ? models
+      : toModelOptions(getSuggestedLlmModels(localSettings))
+    ).map((model) => model.id)
+    const activeModel = getActiveLlmModel(localSettings)
+
+    if (availableModels.length === 0) {
+      if (provider === 'llama.cpp' && activeModel) {
+        setLocalSettings(normalizeSettingsForUi(setActiveLlmModel(localSettings, '')))
+      }
+      return
+    }
+
+    if (!activeModel || !availableModels.includes(activeModel)) {
+      setLocalSettings(normalizeSettingsForUi(setActiveLlmModel(localSettings, availableModels[0])))
+    }
+  }, [
+    models,
+    modelsLoading,
+    localSettings.llmProvider,
+    localSettings.llmAuthMode,
+    localSettings.llmBaseUrl,
+    localSettings.llmOpenAIModel,
+    localSettings.llmOpenAIOAuthModel,
+    localSettings.llmOpenAICompatibleModel,
+    localSettings.llmAnthropicCompatibleModel,
+    localSettings.llmLlamaCppModel
+  ])
 
   if (!showSettings) return null
 
@@ -378,7 +467,8 @@ export function SettingsModal(): React.ReactNode | null {
         baseURL: provider === 'openai-compatible' ? baseURL : undefined,
         customHeaders:
           provider === 'openai-compatible' ? localSettings.llmCustomHeaders : undefined,
-        model: localSettings.llmModel,
+        model: getActiveLlmModel(localSettings),
+        llmModelDir: provider === 'llama.cpp' ? localSettings.llmModelDir : undefined,
         llamaBinDir: provider === 'llama.cpp' ? localSettings.llamaBinDir : undefined
       })
 
@@ -428,23 +518,9 @@ export function SettingsModal(): React.ReactNode | null {
     await window.api.setWindowOpacity(value)
   }
 
-  const handleOpenLlamaBinFolder = async (): Promise<void> => {
-    try {
-      const result = await window.api.openLlamaBinFolder(localSettings.llamaBinDir)
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to open llama.cpp binaries folder.')
-      }
-    } catch (err) {
-      setConnectionStatus('error')
-      setConnectionMessage(
-        err instanceof Error ? err.message : 'Failed to open llama.cpp binaries folder.'
-      )
-    }
-  }
-
   const handleChooseLlamaBinFolder = async (): Promise<void> => {
     try {
-      const result = await window.api.selectLlamaBinDir()
+      const result = await window.api.selectLlamaBinDir(localSettings.llamaBinDir)
       if (result.success && result.directory) {
         setLocalSettings({ ...localSettings, llamaBinDir: result.directory })
         setConnectionStatus('idle')
@@ -458,14 +534,55 @@ export function SettingsModal(): React.ReactNode | null {
     }
   }
 
+  const handleChooseLlmModelFolder = async (): Promise<void> => {
+    try {
+      const result = await window.api.selectLlmModelDir(localSettings.llmModelDir)
+      if (result.success && result.directory) {
+        const nextSettings =
+          localSettings.llmProvider === 'llama.cpp'
+            ? normalizeSettingsForUi(
+                setActiveLlmModel(
+                  {
+                    ...localSettings,
+                    llmModelDir: result.directory
+                  },
+                  ''
+                )
+              )
+            : { ...localSettings, llmModelDir: result.directory }
+
+        setLocalSettings(nextSettings)
+        setConnectionStatus('idle')
+        setConnectionMessage('')
+      }
+    } catch (err) {
+      setConnectionStatus('error')
+      setConnectionMessage(
+        err instanceof Error ? err.message : 'Failed to choose GGUF models folder.'
+      )
+    }
+  }
+
   const handleClose = (): void => {
     setLocalSettings(normalizeSettingsForUi(settings))
     setShowSettings(false)
   }
 
   const suggestedModels = toModelOptions(getSuggestedLlmModels(localSettings))
+  const activeLlmModel = getActiveLlmModel(localSettings)
   const hasStoredOAuthSession = Boolean(
     localSettings.llmOauthToken || localSettings.llmOauthRefreshToken
+  )
+  const providerModelOptions = models.length > 0 ? models : suggestedModels
+  const answerModelOptions = Array.from(
+    new Map(
+      [
+        ...(activeLlmModel
+          ? [{ id: activeLlmModel, name: activeLlmModel }]
+          : []),
+        ...providerModelOptions
+      ].map((model) => [model.id, model] as const)
+    ).values()
   )
   const usesManualCredentialInput =
     localSettings.llmProvider !== 'openai-oauth' &&
@@ -489,8 +606,7 @@ export function SettingsModal(): React.ReactNode | null {
 
       const nextSettings = normalizeSettingsForUi({
         ...(result.settings as AppSettings),
-        llmProvider: 'openai-oauth' as const,
-        llmModel: result.settings.llmModel || 'gpt-5.4'
+        llmProvider: 'openai-oauth' as const
       })
       setSettings(nextSettings)
       setLocalSettings(nextSettings)
@@ -742,7 +858,7 @@ export function SettingsModal(): React.ReactNode | null {
               value={localSettings.llmProvider}
               onChange={(e) => {
                 const nextProvider = e.target.value as AppSettings['llmProvider']
-                const nextSettings: AppSettings = {
+                const nextSettings = normalizeSettingsForUi({
                   ...localSettings,
                   llmProvider: nextProvider,
                   llmAuthMode:
@@ -753,16 +869,14 @@ export function SettingsModal(): React.ReactNode | null {
                           nextProvider === 'llama.cpp'
                         ? 'api-key'
                         : 'oauth-token'
-                }
-
-                nextSettings.llmModel = getDefaultLlmModel(nextSettings)
+                })
                 setModels([])
                 setModelsError(null)
                 setConnectionStatus('idle')
                 setConnectionMessage('')
                 setOauthStatus('idle')
                 setOauthMessage('')
-                setLocalSettings(normalizeSettingsForUi(nextSettings))
+                setLocalSettings(nextSettings)
               }}
               className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors"
             >
@@ -781,10 +895,12 @@ export function SettingsModal(): React.ReactNode | null {
                 <select
                   value={localSettings.llmAuthMode}
                   onChange={(e) =>
-                    setLocalSettings({
-                      ...localSettings,
-                      llmAuthMode: e.target.value as AppSettings['llmAuthMode']
-                    })
+                    setLocalSettings(
+                      normalizeSettingsForUi({
+                        ...localSettings,
+                        llmAuthMode: e.target.value as AppSettings['llmAuthMode']
+                      })
+                    )
                   }
                   className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors"
                 >
@@ -813,18 +929,8 @@ export function SettingsModal(): React.ReactNode | null {
                 <div className="relative">
                   <input
                     type={showCredential ? 'text' : 'password'}
-                    value={
-                      usesOAuthCredentialForInput
-                        ? localSettings.llmOauthToken
-                        : localSettings.llmApiKey
-                    }
-                    onChange={(e) =>
-                      setLocalSettings(
-                        usesOAuthCredentialForInput
-                          ? { ...localSettings, llmOauthToken: e.target.value }
-                          : { ...localSettings, llmApiKey: e.target.value }
-                      )
-                    }
+                    value={getLlmFormState(localSettings).credential}
+                    onChange={(e) => setLocalSettings(setActiveLlmCredential(localSettings, e.target.value))}
                     placeholder={
                       usesOAuthCredentialForInput
                         ? 'Enter your OAuth access token'
@@ -954,90 +1060,86 @@ export function SettingsModal(): React.ReactNode | null {
           )}
 
           {localSettings.llmProvider === 'llama.cpp' && (
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-dark-200">
-                Llama.cpp Binaries Folder
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  readOnly
-                  value={localSettings.llamaBinDir}
-                  className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
-                />
-                <button
-                  type="button"
-                  onClick={handleOpenLlamaBinFolder}
-                  className="settings-action flex items-center justify-center px-3 py-2 text-sm transition-colors"
-                  title="Open binaries folder"
-                >
-                  <FolderOpen size={16} />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleChooseLlamaBinFolder}
-                  className="settings-action px-3 py-2 text-sm transition-colors"
-                >
-                  Choose
-                </button>
+            <>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-dark-200">
+                  Llama.cpp Binaries Folder
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={localSettings.llamaBinDir || 'Default'}
+                    className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
+                    placeholder="Default"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleChooseLlamaBinFolder}
+                    className="settings-action flex items-center justify-center px-3 py-2 text-sm transition-colors"
+                    title="Choose binaries folder"
+                  >
+                    <FolderOpen size={16} />
+                  </button>
+                </div>
               </div>
-              <p className="text-xs text-dark-500">
-                Put <code>llama-server</code> here. <code>llama-cli</code> can live in the same
-                folder.
-              </p>
-            </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-dark-200">GGUF Models Folder</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={localSettings.llmModelDir || 'Default'}
+                    className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
+                    placeholder="Default"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleChooseLlmModelFolder}
+                    className="settings-action flex items-center justify-center px-3 py-2 text-sm transition-colors"
+                    title="Choose GGUF models folder"
+                  >
+                    <FolderOpen size={16} />
+                  </button>
+                </div>
+              </div>
+            </>
           )}
 
           <div className="space-y-2">
             <label className="block text-sm font-medium text-dark-200">
               Answer Generation Model
             </label>
-            <input
-              type="text"
-              value={localSettings.llmModel}
-              onChange={(e) => setLocalSettings({ ...localSettings, llmModel: e.target.value })}
-              placeholder={
-                localSettings.llmProvider === 'llama.cpp'
-                  ? 'e.g. qwen2.5-coder-14b-instruct-q8_0.gguf'
-                  : 'e.g. deepseek-chat, qwen-max, glm-4'
+            <select
+              value={activeLlmModel}
+              onChange={(e) =>
+                setLocalSettings(normalizeSettingsForUi(setActiveLlmModel(localSettings, e.target.value)))
               }
-              className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
-            />
+              disabled={answerModelOptions.length === 0}
+              className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-60"
+            >
+              {answerModelOptions.length > 0 ? (
+                answerModelOptions.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name}
+                  </option>
+                ))
+              ) : (
+                <option value="">No models available</option>
+              )}
+            </select>
             {modelsLoading && (
               <div className="flex items-center gap-2 text-xs text-dark-400">
                 <Loader2 size={14} className="animate-spin text-blue-400" />
                 <span>Loading models...</span>
               </div>
             )}
-            {(models.length > 0 || suggestedModels.length > 0) && (
-              <select
-                value=""
-                onChange={(e) => {
-                  if (e.target.value) {
-                    setLocalSettings({ ...localSettings, llmModel: e.target.value })
-                  }
-                }}
-                className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors"
-              >
-                <option value="">Provider models</option>
-                {(models.length > 0 ? models : suggestedModels).map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.name}
-                  </option>
-                ))}
-              </select>
-            )}
             {modelsError && (
               <div className="settings-status-error flex items-center gap-1.5 text-xs">
                 <AlertCircle size={12} />
                 <span>{modelsError}</span>
               </div>
-            )}
-            {localSettings.llmProvider === 'llama.cpp' && (
-              <p className="text-xs text-dark-500">
-                Local GGUF models are loaded from the models directory. Runtime binaries are
-                configured separately above.
-              </p>
             )}
           </div>
 

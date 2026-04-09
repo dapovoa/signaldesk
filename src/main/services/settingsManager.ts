@@ -3,8 +3,17 @@ import { app, safeStorage } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
 import type { AppSettings, AssemblyAiSpeechModel } from '../../shared/contracts'
-import { normalizeLlmSettings } from '../../shared/llmSettings'
-import { ensureLlamaBinDirectory, getDefaultLlamaBinDirectory } from './localEmbeddingPaths'
+import {
+  inferLlmModelStorageKey,
+  normalizeLlmSettings,
+  OPENAI_OAUTH_MODEL_OPTIONS
+} from '../../shared/llmSettings'
+import {
+  ensureLlamaBinDirectory,
+  ensureModelsDirectory,
+  getDefaultLlamaBinDirectory,
+  getDefaultModelsDirectory
+} from './localEmbeddingPaths'
 export type { AppSettings } from '../../shared/contracts'
 
 config()
@@ -28,6 +37,9 @@ const getEnvApiKey = (key: string): string => {
 const DEFAULT_LLM_PROVIDER: AppSettings['llmProvider'] =
   process.env.LLM_PROVIDER === 'llama.cpp' || process.env.VITE_LLM_PROVIDER === 'llama.cpp'
     ? 'llama.cpp'
+    : process.env.LLM_PROVIDER === 'anthropic-compatible' ||
+        process.env.VITE_LLM_PROVIDER === 'anthropic-compatible'
+      ? 'anthropic-compatible'
     : process.env.LLM_PROVIDER === 'openai-compatible' ||
         process.env.VITE_LLM_PROVIDER === 'openai-compatible'
       ? 'openai-compatible'
@@ -69,6 +81,12 @@ const isAssemblyAiSpeechModel = (value: unknown): value is AssemblyAiSpeechModel
 }
 
 const DEFAULT_ASSEMBLYAI_SILENCE = getAssemblyAiSilenceDefaults(DEFAULT_ASSEMBLYAI_SPEECH_MODEL)
+const DEFAULT_ENV_LLM_MODEL =
+  process.env.LLM_MODEL ||
+  process.env.VITE_LLM_MODEL ||
+  process.env.OPENAI_MODEL ||
+  process.env.VITE_OPENAI_MODEL ||
+  ''
 
 const DEFAULT_SETTINGS: AppSettings = {
   transcriptionProvider:
@@ -101,6 +119,8 @@ const DEFAULT_SETTINGS: AppSettings = {
       ? 'oauth-token'
       : 'api-key',
   llmApiKey: getEnvApiKey('LLM_API_KEY') || getEnvApiKey('OPENAI_API_KEY'),
+  llmOpenAICompatibleApiKey: getEnvApiKey('OPENAI_COMPATIBLE_API_KEY'),
+  llmAnthropicCompatibleApiKey: getEnvApiKey('ANTHROPIC_API_KEY'),
   llmOauthToken:
     process.env.LLM_OAUTH_TOKEN ||
     process.env.VITE_LLM_OAUTH_TOKEN ||
@@ -122,12 +142,22 @@ const DEFAULT_SETTINGS: AppSettings = {
     process.env.OPENAI_CUSTOM_HEADERS ||
     process.env.VITE_OPENAI_CUSTOM_HEADERS ||
     '',
-  llmModel:
-    process.env.LLM_MODEL ||
-    process.env.VITE_LLM_MODEL ||
-    process.env.OPENAI_MODEL ||
-    process.env.VITE_OPENAI_MODEL ||
-    (DEFAULT_LLM_PROVIDER === 'llama.cpp' ? '' : 'gpt-4o-mini'),
+  llmModel: DEFAULT_ENV_LLM_MODEL,
+  llmOpenAIModel:
+    DEFAULT_LLM_PROVIDER === 'openai' && DEFAULT_ENV_LLM_MODEL ? DEFAULT_ENV_LLM_MODEL : 'gpt-4o-mini',
+  llmOpenAIOAuthModel: OPENAI_OAUTH_MODEL_OPTIONS.includes(
+    DEFAULT_ENV_LLM_MODEL as (typeof OPENAI_OAUTH_MODEL_OPTIONS)[number]
+  )
+    ? DEFAULT_ENV_LLM_MODEL
+    : OPENAI_OAUTH_MODEL_OPTIONS[0],
+  llmOpenAICompatibleModel:
+    DEFAULT_LLM_PROVIDER === 'openai-compatible' ? DEFAULT_ENV_LLM_MODEL : '',
+  llmAnthropicCompatibleModel:
+    DEFAULT_LLM_PROVIDER === 'anthropic-compatible' && DEFAULT_ENV_LLM_MODEL
+      ? DEFAULT_ENV_LLM_MODEL
+      : 'MiniMax-M2.7',
+  llmLlamaCppModel: DEFAULT_LLM_PROVIDER === 'llama.cpp' ? DEFAULT_ENV_LLM_MODEL : '',
+  llmModelDir: process.env.SIGNALDESK_LLM_MODEL_DIR || '',
   llamaBinDir: process.env.SIGNALDESK_LLAMA_BIN_DIR || '',
   transcriptionLanguage:
     process.env.TRANSCRIPTION_LANGUAGE === 'pt' || process.env.VITE_TRANSCRIPTION_LANGUAGE === 'pt'
@@ -146,6 +176,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 const normalizeSettings = (settings: AppSettings): AppSettings =>
   normalizeLlmSettings({
     ...settings,
+    llmModelDir: settings.llmModelDir?.trim() || getDefaultModelsDirectory(),
     llamaBinDir: settings.llamaBinDir?.trim() || getDefaultLlamaBinDirectory()
   })
 
@@ -166,7 +197,9 @@ export class SettingsManager {
   private applyRuntimeSettings(): void {
     const normalized = normalizeSettings(this.settings)
     this.settings = normalized
+    process.env.SIGNALDESK_LLM_MODEL_DIR = normalized.llmModelDir
     process.env.SIGNALDESK_LLAMA_BIN_DIR = normalized.llamaBinDir
+    ensureModelsDirectory(normalized.llmModelDir)
     ensureLlamaBinDirectory(normalized.llamaBinDir)
   }
 
@@ -180,6 +213,20 @@ export class SettingsManager {
         // Backward compatibility with older OpenAI-specific setting keys.
         if (!savedSettings.llmApiKey && savedSettings.openaiApiKey) {
           savedSettings.llmApiKey = savedSettings.openaiApiKey
+          needsSave = true
+        }
+        if (
+          !savedSettings.llmOpenAICompatibleApiKey &&
+          savedSettings.openaiCompatibleApiKey
+        ) {
+          savedSettings.llmOpenAICompatibleApiKey = savedSettings.openaiCompatibleApiKey
+          needsSave = true
+        }
+        if (
+          !savedSettings.llmAnthropicCompatibleApiKey &&
+          savedSettings.anthropicCompatibleApiKey
+        ) {
+          savedSettings.llmAnthropicCompatibleApiKey = savedSettings.anthropicCompatibleApiKey
           needsSave = true
         }
         if (!savedSettings.llmOauthToken && savedSettings.openaiOauthToken) {
@@ -202,7 +249,25 @@ export class SettingsManager {
           savedSettings.llmModel = savedSettings.openaiModel
           needsSave = true
         }
+        const legacyModel =
+          typeof savedSettings.llmModel === 'string' ? savedSettings.llmModel.trim() : ''
+        if (legacyModel) {
+          const inferredModelKey = inferLlmModelStorageKey(legacyModel, {
+            llmProvider: (savedSettings.llmProvider ||
+              DEFAULT_LLM_PROVIDER) as AppSettings['llmProvider'],
+            llmAuthMode:
+              savedSettings.llmAuthMode === 'oauth-token' ? 'oauth-token' : 'api-key'
+          })
+
+          if (!savedSettings[inferredModelKey]) {
+            savedSettings[inferredModelKey] = legacyModel
+            needsSave = true
+          }
+        }
         if (typeof savedSettings.llamaBinDir !== 'string' || !savedSettings.llamaBinDir.trim()) {
+          needsSave = true
+        }
+        if (typeof savedSettings.llmModelDir !== 'string' || !savedSettings.llmModelDir.trim()) {
           needsSave = true
         }
         if ('llmDisableThinking' in savedSettings) {
@@ -257,6 +322,22 @@ export class SettingsManager {
           savedSettings.assemblyAiMaxTurnSilence = 1000
           needsSave = true
         }
+        if (
+          !savedSettings.llmOpenAICompatibleApiKey &&
+          savedSettings.llmProvider === 'openai-compatible' &&
+          savedSettings.llmApiKey
+        ) {
+          savedSettings.llmOpenAICompatibleApiKey = savedSettings.llmApiKey
+          needsSave = true
+        }
+        if (
+          !savedSettings.llmAnthropicCompatibleApiKey &&
+          savedSettings.llmProvider === 'anthropic-compatible' &&
+          savedSettings.llmApiKey
+        ) {
+          savedSettings.llmAnthropicCompatibleApiKey = savedSettings.llmApiKey
+          needsSave = true
+        }
         // Decrypt API keys if encryption is available
         if (safeStorage.isEncryptionAvailable()) {
           if (!savedSettings.llmApiKeyEncrypted && savedSettings.openaiApiKeyEncrypted) {
@@ -284,6 +365,28 @@ export class SettingsManager {
               needsSave = true
             } catch {
               savedSettings.llmApiKey = ''
+            }
+          }
+          if (savedSettings.llmOpenAICompatibleApiKeyEncrypted) {
+            try {
+              savedSettings.llmOpenAICompatibleApiKey = safeStorage.decryptString(
+                Buffer.from(savedSettings.llmOpenAICompatibleApiKeyEncrypted, 'base64')
+              )
+              delete savedSettings.llmOpenAICompatibleApiKeyEncrypted
+              needsSave = true
+            } catch {
+              savedSettings.llmOpenAICompatibleApiKey = ''
+            }
+          }
+          if (savedSettings.llmAnthropicCompatibleApiKeyEncrypted) {
+            try {
+              savedSettings.llmAnthropicCompatibleApiKey = safeStorage.decryptString(
+                Buffer.from(savedSettings.llmAnthropicCompatibleApiKeyEncrypted, 'base64')
+              )
+              delete savedSettings.llmAnthropicCompatibleApiKeyEncrypted
+              needsSave = true
+            } catch {
+              savedSettings.llmAnthropicCompatibleApiKey = ''
             }
           }
           if (savedSettings.llmOauthTokenEncrypted) {
@@ -347,6 +450,18 @@ export class SettingsManager {
             .encryptString(settingsToSave.llmApiKey)
             .toString('base64')
           settingsToSave.llmApiKey = ''
+        }
+        if (settingsToSave.llmOpenAICompatibleApiKey) {
+          ;(settingsToSave as Record<string, unknown>).llmOpenAICompatibleApiKeyEncrypted =
+            safeStorage.encryptString(settingsToSave.llmOpenAICompatibleApiKey).toString('base64')
+          settingsToSave.llmOpenAICompatibleApiKey = ''
+        }
+        if (settingsToSave.llmAnthropicCompatibleApiKey) {
+          ;(settingsToSave as Record<string, unknown>).llmAnthropicCompatibleApiKeyEncrypted =
+            safeStorage
+              .encryptString(settingsToSave.llmAnthropicCompatibleApiKey)
+              .toString('base64')
+          settingsToSave.llmAnthropicCompatibleApiKey = ''
         }
         if (settingsToSave.llmOauthToken) {
           ;(settingsToSave as Record<string, unknown>).llmOauthTokenEncrypted = safeStorage

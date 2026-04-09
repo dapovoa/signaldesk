@@ -33,6 +33,8 @@ export interface AppSettings {
   llmProvider: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp' | 'anthropic-compatible'
   llmAuthMode: 'api-key' | 'oauth-token'
   llmApiKey: string
+  llmOpenAICompatibleApiKey: string
+  llmAnthropicCompatibleApiKey: string
   llmOauthToken: string
   llmOauthRefreshToken: string
   llmOauthExpiresAt: number
@@ -40,6 +42,12 @@ export interface AppSettings {
   llmBaseUrl: string
   llmCustomHeaders: string
   llmModel: string
+  llmOpenAIModel: string
+  llmOpenAIOAuthModel: string
+  llmOpenAICompatibleModel: string
+  llmAnthropicCompatibleModel: string
+  llmLlamaCppModel: string
+  llmModelDir: string
   llamaBinDir: string
   transcriptionLanguage: 'auto' | 'en' | 'pt'
   alwaysOnTop: boolean

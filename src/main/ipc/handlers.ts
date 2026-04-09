@@ -39,6 +39,7 @@ import {
   ensureLlamaBinDirectory,
   ensureModelsDirectory,
   getDefaultLlamaBinDirectory,
+  getDefaultModelsDirectory,
   listEmbeddingModels,
   listLlmModels
 } from '../services/localEmbeddingPaths'
@@ -133,6 +134,7 @@ const IPC_HANDLE_CHANNELS = [
   'fetch-embedding-models',
   'test-embedding-model',
   'select-embedding-model-dir',
+  'select-llm-model-dir',
   'open-llama-bin-folder',
   'select-llama-bin-dir',
   'test-provider-connection',
@@ -267,13 +269,17 @@ const isAnthropicProvider = (
 
 const ANTHROPIC_BASE_URL = 'https://api.minimax.io/anthropic'
 
-const ensureLocalLlmModelReady = async (model?: string): Promise<void> => {
+const ensureLocalLlmModelReady = async (
+  model?: string,
+  modelDir?: string,
+  binaryDir?: string
+): Promise<void> => {
   const normalizedModel = model?.trim()
   if (!normalizedModel) {
     throw new Error('Select a local llama.cpp model before continuing.')
   }
 
-  await llamaCppLlmServer.ensureRunning(normalizedModel)
+  await llamaCppLlmServer.ensureRunning(normalizedModel, modelDir, binaryDir)
 }
 
 const getPostUtteranceDebounceMs = (): number =>
@@ -711,7 +717,7 @@ const classifyTurnWithModel = async (turnText: string): Promise<ModelClassifierR
 
   const providerConfig = getProviderConfig(settings)
   if (settings.llmProvider === 'llama.cpp') {
-    await ensureLocalLlmModelReady(settings.llmModel)
+    await ensureLocalLlmModelReady(settings.llmModel, settings.llmModelDir, settings.llamaBinDir)
   }
   if (settings.llmProvider === 'openai-oauth') {
     providerConfig.apiKey = (await ensureOpenAIOAuthToken()) || ''
@@ -1100,9 +1106,10 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
   ipcMain.handle('update-settings', (_event, updates: Partial<AppSettings>) => {
     const llamaBinDirChanged = updates.llamaBinDir !== undefined
+    const llmModelDirChanged = updates.llmModelDir !== undefined
     settingsManager?.updateSettings(updates)
 
-    if (llamaBinDirChanged) {
+    if (llamaBinDirChanged || llmModelDirChanged) {
       void llamaCppLlmServer.dispose()
       void llamaCppServer.dispose()
     }
@@ -1248,11 +1255,12 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         authMode?: 'api-key' | 'oauth-token'
         baseURL?: string
         customHeaders?: string
+        llmModelDir?: string
       }
     ) => {
       const { provider, usesOAuthCredential, credential } = getProviderPayloadState(payload)
 
-      if (provider === 'openai-oauth') {
+      if (usesOAuthCredential) {
         return {
           success: true,
           models: OPENAI_OAUTH_MODEL_OPTIONS.map((id) => ({ id, name: id }))
@@ -1260,9 +1268,14 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       }
 
       if (isLlamaCppProvider(provider)) {
+        const modelDirectory = ensureModelsDirectory(
+          payload?.llmModelDir?.trim() ||
+            settingsManager?.getSettings().llmModelDir ||
+            getDefaultModelsDirectory()
+        )
         return {
           success: true,
-          models: listLlmModels()
+          models: listLlmModels(modelDirectory)
         }
       }
 
@@ -1348,8 +1361,10 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
   ipcMain.handle(
     'select-embedding-model-dir',
-    async () => {
-      const defaultPath = ensureModelsDirectory()
+    async (_event, directory?: string) => {
+      const defaultPath = ensureModelsDirectory(
+        directory || getDefaultModelsDirectory()
+      )
       const result = await dialog.showOpenDialog(mainWindow!, {
         defaultPath,
         properties: ['openDirectory']
@@ -1362,6 +1377,22 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       return { success: true, directory: result.filePaths[0] }
     }
   )
+
+  ipcMain.handle('select-llm-model-dir', async (_event, directory?: string) => {
+    const defaultPath = ensureModelsDirectory(
+      directory || settingsManager?.getSettings().llmModelDir || getDefaultModelsDirectory()
+    )
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      defaultPath,
+      properties: ['openDirectory']
+    })
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { success: false, directory: '' }
+    }
+
+    return { success: true, directory: result.filePaths[0] }
+  })
 
   ipcMain.handle('open-llama-bin-folder', async (_event, directory?: string) => {
     const targetDirectory = ensureLlamaBinDirectory(
@@ -1376,9 +1407,9 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     }
   })
 
-  ipcMain.handle('select-llama-bin-dir', async () => {
+  ipcMain.handle('select-llama-bin-dir', async (_event, directory?: string) => {
     const defaultPath = ensureLlamaBinDirectory(
-      settingsManager?.getSettings().llamaBinDir || getDefaultLlamaBinDirectory()
+      directory || settingsManager?.getSettings().llamaBinDir || getDefaultLlamaBinDirectory()
     )
     const result = await dialog.showOpenDialog(mainWindow!, {
       defaultPath,
@@ -1404,6 +1435,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         baseURL?: string
         customHeaders?: string
         model?: string
+        llmModelDir?: string
         llamaBinDir?: string
       }
     ) => {
@@ -1468,6 +1500,9 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         if (provider === 'llama.cpp') {
           const validation = await llamaCppLlmServer.validateModel(
             preferredModel || '',
+            payload?.llmModelDir?.trim() ||
+              storedSettings?.llmModelDir ||
+              getDefaultModelsDirectory(),
             payload?.llamaBinDir?.trim() || undefined
           )
           if (!validation.valid) {
@@ -1552,6 +1587,22 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
               break
             }
           }
+
+          return {
+            success: true,
+            message: 'LLM connection established.',
+            modelCount: 0,
+            hasPreferredModel: true
+          }
+        }
+
+        if (provider === 'openai' && usesOAuthCredential) {
+          await client.chat.completions.create({
+            model: preferredModel || OPENAI_OAUTH_MODEL_OPTIONS[0],
+            messages: [{ role: 'user', content: 'ping' }],
+            max_completion_tokens: 1,
+            temperature: 0
+          } as never)
 
           return {
             success: true,
@@ -1698,7 +1749,11 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
       const providerConfig = getProviderConfig(settings)
       if (settings.llmProvider === 'llama.cpp') {
-        await ensureLocalLlmModelReady(settings.llmModel)
+        await ensureLocalLlmModelReady(
+          settings.llmModel,
+          settings.llmModelDir,
+          settings.llamaBinDir
+        )
       }
       if (settings.llmProvider === 'openai-oauth') {
         providerConfig.apiKey = (await ensureOpenAIOAuthToken()) || ''
@@ -2108,7 +2163,11 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     const providerConfig = getProviderConfig(settings)
     if (settings.llmProvider === 'llama.cpp') {
       try {
-        await ensureLocalLlmModelReady(settings.llmModel)
+        await ensureLocalLlmModelReady(
+          settings.llmModel,
+          settings.llmModelDir,
+          settings.llamaBinDir
+        )
       } catch (err) {
         console.warn('[LlamaCpp] startup failed:', err)
       }
