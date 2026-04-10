@@ -58,10 +58,12 @@ const api = {
     model?: string
     llmModelDir?: string
     llamaBinDir?: string
+    testKind?: 'connect' | 'llm'
   }): Promise<{
     success: boolean
     message: string
     modelCount?: number
+    models?: string[]
     hasPreferredModel?: boolean
   }> => ipcRenderer.invoke('test-provider-connection', payload),
   testTranscriptionConnection: (payload: {

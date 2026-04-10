@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle, Eye, EyeOff, FolderOpen, Loader2, Save, X } from 'lucide-react'
+import { AlertCircle, CheckCircle, Eye, EyeOff, FolderOpen, Save, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { AppSettings, useInterviewStore } from '../store/interviewStore'
 import {
@@ -147,7 +147,7 @@ export function SettingsModal(): React.ReactNode | null {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [models, setModels] = useState<ModelOption[]>([])
   const [modelsLoading, setModelsLoading] = useState(false)
-  const [modelsError, setModelsError] = useState<string | null>(null)
+  const [, setModelsError] = useState<string | null>(null)
   const [transcriptionStatus, setTranscriptionStatus] = useState<
     'idle' | 'testing' | 'ok' | 'error'
   >('idle')
@@ -156,8 +156,12 @@ export function SettingsModal(): React.ReactNode | null {
     'idle'
   )
   const [connectionMessage, setConnectionMessage] = useState<string>('')
+  const [llmTestStatus, setLlmTestStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>(
+    'idle'
+  )
   const [oauthStatus, setOauthStatus] = useState<'idle' | 'connecting' | 'ok' | 'error'>('idle')
   const [oauthMessage, setOauthMessage] = useState<string>('')
+  const [connectedModels, setConnectedModels] = useState<string[]>([])
   const [windowCapabilities, setWindowCapabilities] = useState({
     isWayland: false,
     supportsAlwaysOnTop: true,
@@ -232,7 +236,7 @@ export function SettingsModal(): React.ReactNode | null {
       llmOauthToken
     })
     const baseURL = llmBaseUrl.trim()
-    if (usesLocalLlama || usesAnthropic) {
+    if (usesLocalLlama || (usesAnthropic && credential)) {
       setModelsLoading(true)
       setModelsError(null)
 
@@ -241,11 +245,15 @@ export function SettingsModal(): React.ReactNode | null {
           const result = await window.api.fetchLlmModels({
             provider,
             authMode,
+            apiKey: usesOAuth ? undefined : credential,
+            oauthToken: usesOAuth ? credential : undefined,
+            baseURL: usesAnthropic ? baseURL : undefined,
             llmModelDir: provider === 'llama.cpp' ? localSettings.llmModelDir : undefined
           })
 
           if (result.success) {
             setModels(result.models)
+            setConnectedModels(result.models.map(m => m.id))
             setModelsError(null)
           } else {
             setModels([])
@@ -464,17 +472,37 @@ export function SettingsModal(): React.ReactNode | null {
         oauthToken: usesOAuth ? credential : undefined,
         provider,
         authMode,
-        baseURL: provider === 'openai-compatible' ? baseURL : undefined,
+        baseURL:
+          provider === 'openai-compatible' || provider === 'anthropic-compatible'
+            ? baseURL
+            : undefined,
         customHeaders:
           provider === 'openai-compatible' ? localSettings.llmCustomHeaders : undefined,
         model: getActiveLlmModel(localSettings),
         llmModelDir: provider === 'llama.cpp' ? localSettings.llmModelDir : undefined,
-        llamaBinDir: provider === 'llama.cpp' ? localSettings.llamaBinDir : undefined
+        llamaBinDir: provider === 'llama.cpp' ? localSettings.llamaBinDir : undefined,
+        testKind: 'connect'
       })
 
       if (result.success) {
         setConnectionStatus('ok')
         setConnectionMessage(result.message)
+        if (result.models && result.models.length > 0) {
+          setConnectedModels(result.models)
+        } else if (provider === 'anthropic-compatible' || provider === 'openai-compatible') {
+          const modelsResult = await window.api.fetchLlmModels({
+            provider,
+            apiKey: credential,
+            baseURL:
+              provider === 'openai-compatible' || provider === 'anthropic-compatible'
+                ? baseURL
+                : undefined,
+            customHeaders: provider === 'openai-compatible' ? localSettings.llmCustomHeaders : undefined
+          })
+          if (modelsResult.success && modelsResult.models.length > 0) {
+            setConnectedModels(modelsResult.models.map(m => m.id))
+          }
+        }
       } else {
         setConnectionStatus('error')
         setConnectionMessage(result.message || 'Connection test failed.')
@@ -482,6 +510,62 @@ export function SettingsModal(): React.ReactNode | null {
     } catch (err) {
       setConnectionStatus('error')
       setConnectionMessage(err instanceof Error ? err.message : 'Connection test failed.')
+    }
+  }
+
+  const handleTestLlm = async (): Promise<void> => {
+    const { provider, authMode, credential, baseURL, usesOAuth } = getLlmFormState(localSettings)
+
+    if (provider !== 'llama.cpp' && !credential) {
+      setLlmTestStatus('error')
+      setConnectionMessage(
+        provider === 'openai-oauth'
+          ? 'Connect via browser before testing the OAuth provider.'
+          : 'Credential is required before testing the LLM.'
+      )
+      return
+    }
+
+    if (provider === 'openai-compatible' && !baseURL) {
+      setLlmTestStatus('error')
+      setConnectionMessage('Base URL is required for OpenAI compatible provider.')
+      return
+    }
+
+    try {
+      setLlmTestStatus('testing')
+      setConnectionMessage('')
+      const result = await window.api.testProviderConnection({
+        apiKey: usesOAuth ? undefined : credential,
+        oauthToken: usesOAuth ? credential : undefined,
+        provider,
+        authMode,
+        baseURL:
+          provider === 'openai-compatible' || provider === 'anthropic-compatible'
+            ? baseURL
+            : undefined,
+        customHeaders:
+          provider === 'openai-compatible' ? localSettings.llmCustomHeaders : undefined,
+        model: getActiveLlmModel(localSettings),
+        llmModelDir: provider === 'llama.cpp' ? localSettings.llmModelDir : undefined,
+        llamaBinDir: provider === 'llama.cpp' ? localSettings.llamaBinDir : undefined,
+        testKind: 'llm'
+      })
+
+      if (result.success) {
+        setLlmTestStatus('ok')
+        setConnectionMessage('LLM connection working.')
+      } else {
+        setLlmTestStatus('error')
+        setConnectionMessage(result.message || 'Connection test failed.')
+      }
+    } catch (err) {
+      setLlmTestStatus('error')
+      setConnectionMessage(err instanceof Error ? err.message : 'Connection test failed.')
+    } finally {
+      setTimeout(() => {
+        setLlmTestStatus((current) => current === 'testing' ? 'idle' : current)
+      }, 10000)
     }
   }
 
@@ -568,21 +652,9 @@ export function SettingsModal(): React.ReactNode | null {
     setShowSettings(false)
   }
 
-  const suggestedModels = toModelOptions(getSuggestedLlmModels(localSettings))
   const activeLlmModel = getActiveLlmModel(localSettings)
   const hasStoredOAuthSession = Boolean(
     localSettings.llmOauthToken || localSettings.llmOauthRefreshToken
-  )
-  const providerModelOptions = models.length > 0 ? models : suggestedModels
-  const answerModelOptions = Array.from(
-    new Map(
-      [
-        ...(activeLlmModel
-          ? [{ id: activeLlmModel, name: activeLlmModel }]
-          : []),
-        ...providerModelOptions
-      ].map((model) => [model.id, model] as const)
-    ).values()
   )
   const usesManualCredentialInput =
     localSettings.llmProvider !== 'openai-oauth' &&
@@ -612,6 +684,13 @@ export function SettingsModal(): React.ReactNode | null {
       setLocalSettings(nextSettings)
       setOauthStatus('ok')
       setOauthMessage('OpenAI browser sign-in completed.')
+      const modelsResult = await window.api.fetchLlmModels({
+        provider: 'openai-oauth',
+        oauthToken: result.settings.llmOauthToken
+      })
+      if (modelsResult.success && modelsResult.models.length > 0) {
+        setConnectedModels(modelsResult.models.map(m => m.id))
+      }
     } catch (err) {
       setOauthStatus('error')
       setOauthMessage(err instanceof Error ? err.message : 'OpenAI sign-in failed.')
@@ -622,6 +701,7 @@ export function SettingsModal(): React.ReactNode | null {
     try {
       setModels([])
       setModelsError(null)
+      setConnectedModels([])
       setConnectionStatus('idle')
       setConnectionMessage('')
       const result = await window.api.disconnectOpenAIOAuth()
@@ -858,7 +938,7 @@ export function SettingsModal(): React.ReactNode | null {
               value={localSettings.llmProvider}
               onChange={(e) => {
                 const nextProvider = e.target.value as AppSettings['llmProvider']
-                const nextSettings = normalizeSettingsForUi({
+                const nextSettings: AppSettings = {
                   ...localSettings,
                   llmProvider: nextProvider,
                   llmAuthMode:
@@ -869,14 +949,16 @@ export function SettingsModal(): React.ReactNode | null {
                           nextProvider === 'llama.cpp'
                         ? 'api-key'
                         : 'oauth-token'
-                })
+                }
                 setModels([])
                 setModelsError(null)
+                setConnectedModels([])
                 setConnectionStatus('idle')
                 setConnectionMessage('')
+                setLlmTestStatus('idle')
                 setOauthStatus('idle')
                 setOauthMessage('')
-                setLocalSettings(nextSettings)
+                setLocalSettings(normalizeSettingsForUi(nextSettings))
               }}
               className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors"
             >
@@ -950,43 +1032,34 @@ export function SettingsModal(): React.ReactNode | null {
             )}
             {localSettings.llmProvider === 'openai-oauth' && (
               <div className="space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="w-full">
-                    {oauthStatus === 'connecting' ? (
-                      <button
-                        type="button"
-                        disabled
-                        className="settings-action w-full px-3 py-2 text-sm disabled:opacity-60"
-                      >
-                        Opening browser...
-                      </button>
-                    ) : hasStoredOAuthSession ? (
-                      <button
-                        type="button"
-                        onClick={handleDisconnectOpenAI}
-                        className="settings-action w-full px-3 py-2 text-sm transition-colors hover:border-red-400/20 hover:bg-red-500/10 hover:text-red-300"
-                      >
-                        Disconnect
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={handleConnectOpenAI}
-                        className="settings-action w-full px-3 py-2 text-sm transition-colors"
-                      >
-                        Connect via browser
-                      </button>
-                    )}
-                  </div>
+                {!hasStoredOAuthSession ? (
                   <button
                     type="button"
-                    onClick={handleTestConnection}
-                    disabled={connectionStatus === 'testing'}
+                    onClick={handleConnectOpenAI}
+                    disabled={oauthStatus === 'connecting'}
                     className="settings-action w-full px-3 py-2 text-sm transition-colors disabled:opacity-60"
                   >
-                    {connectionStatus === 'testing' ? 'Testing LLM...' : 'Test LLM'}
+                    {oauthStatus === 'connecting' ? 'Opening browser...' : 'Connect via browser'}
                   </button>
-                </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={handleDisconnectOpenAI}
+                      className="settings-action px-3 py-2 text-sm transition-colors hover:border-red-400/20 hover:bg-red-500/10 hover:text-red-300"
+                    >
+                      Disconnect
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleTestLlm}
+                      disabled={llmTestStatus === 'testing'}
+                      className="settings-action px-3 py-2 text-sm transition-colors disabled:opacity-60"
+                    >
+                      {llmTestStatus === 'testing' ? 'Testing...' : 'Test LLM'}
+                    </button>
+                  </div>
+                )}
                 {oauthStatus === 'ok' && (
                   <div className="settings-status-ok flex items-center gap-1.5 text-xs">
                     <CheckCircle size={12} />
@@ -999,31 +1072,21 @@ export function SettingsModal(): React.ReactNode | null {
                     <span>{oauthMessage}</span>
                   </div>
                 )}
+                {llmTestStatus === 'ok' && (
+                  <div className="settings-status-ok flex items-center gap-1.5 text-xs">
+                    <CheckCircle size={12} />
+                    <span>{connectionMessage || 'LLM test passed.'}</span>
+                  </div>
+                )}
+                {llmTestStatus === 'error' && (
+                  <div className="settings-status-error flex items-center gap-1.5 text-xs">
+                    <AlertCircle size={12} />
+                    <span>{connectionMessage || 'LLM test failed.'}</span>
+                  </div>
+                )}
               </div>
             )}
-            {localSettings.llmProvider !== 'openai-oauth' && (
-              <button
-                type="button"
-                onClick={handleTestConnection}
-                disabled={connectionStatus === 'testing'}
-                className="settings-action mt-2 w-full px-3 py-2 text-sm transition-colors disabled:opacity-60"
-              >
-                {connectionStatus === 'testing' ? 'Testing LLM...' : 'Test LLM'}
-              </button>
-            )}
-            {connectionStatus === 'ok' && (
-              <div className="settings-status-ok flex items-center gap-1.5 text-xs">
-                <CheckCircle size={12} />
-                <span>{connectionMessage}</span>
-              </div>
-            )}
-            {connectionStatus === 'error' && (
-              <div className="settings-status-error flex items-center gap-1.5 text-xs">
-                <AlertCircle size={12} />
-                <span>{connectionMessage}</span>
-              </div>
-            )}
-          </div>
+            </div>
 
           {(localSettings.llmProvider === 'openai-compatible' || localSettings.llmProvider === 'anthropic-compatible') && (
             <>
@@ -1111,37 +1174,79 @@ export function SettingsModal(): React.ReactNode | null {
             <label className="block text-sm font-medium text-dark-200">
               Answer Generation Model
             </label>
-            <select
-              value={activeLlmModel}
-              onChange={(e) =>
-                setLocalSettings(normalizeSettingsForUi(setActiveLlmModel(localSettings, e.target.value)))
-              }
-              disabled={answerModelOptions.length === 0}
-              className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors disabled:opacity-60"
-            >
-              {answerModelOptions.length > 0 ? (
-                answerModelOptions.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.name}
+            {connectedModels.length > 0 ? (
+              <select
+                value={activeLlmModel}
+                onChange={(e) =>
+                  setLocalSettings(normalizeSettingsForUi(setActiveLlmModel(localSettings, e.target.value)))
+                }
+                className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors"
+              >
+                {connectedModels.map((model) => (
+                  <option key={model} value={model}>
+                    {model}
                   </option>
-                ))
-              ) : (
-                <option value="">No models available</option>
-              )}
-            </select>
-            {modelsLoading && (
-              <div className="flex items-center gap-2 text-xs text-dark-400">
-                <Loader2 size={14} className="animate-spin text-blue-400" />
-                <span>Loading models...</span>
-              </div>
-            )}
-            {modelsError && (
-              <div className="settings-status-error flex items-center gap-1.5 text-xs">
-                <AlertCircle size={12} />
-                <span>{modelsError}</span>
-              </div>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={activeLlmModel}
+                onChange={(e) =>
+                  setLocalSettings(normalizeSettingsForUi(setActiveLlmModel(localSettings, e.target.value)))
+                }
+                placeholder="Enter model name (e.g. gpt-4o-mini)"
+                className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
+              />
             )}
           </div>
+
+          {localSettings.llmProvider !== 'openai-oauth' && (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={handleTestConnection}
+                  disabled={connectionStatus === 'testing'}
+                  className="settings-action px-3 py-2 text-sm transition-colors disabled:opacity-60"
+                >
+                  {connectionStatus === 'testing' ? 'Connecting...' : 'Connect'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleTestLlm}
+                  disabled={llmTestStatus === 'testing'}
+                  className="settings-action px-3 py-2 text-sm transition-colors disabled:opacity-60"
+                >
+                  {llmTestStatus === 'testing' ? 'Testing...' : 'Test LLM'}
+                </button>
+              </div>
+              {connectionStatus === 'ok' && (
+                <div className="settings-status-ok flex items-center gap-1.5 text-xs">
+                  <CheckCircle size={12} />
+                  <span>{connectionMessage}</span>
+                </div>
+              )}
+              {connectionStatus === 'error' && (
+                <div className="settings-status-error flex items-center gap-1.5 text-xs">
+                  <AlertCircle size={12} />
+                  <span>{connectionMessage}</span>
+                </div>
+              )}
+              {llmTestStatus === 'ok' && (
+                <div className="settings-status-ok flex items-center gap-1.5 text-xs">
+                  <CheckCircle size={12} />
+                  <span>{connectionMessage || 'LLM test passed.'}</span>
+                </div>
+              )}
+              {llmTestStatus === 'error' && (
+                <div className="settings-status-error flex items-center gap-1.5 text-xs">
+                  <AlertCircle size={12} />
+                  <span>{connectionMessage || 'LLM test failed.'}</span>
+                </div>
+              )}
+            </>
+          )}
 
           {localSettings.transcriptionProvider !== 'assemblyai' && (
             <>

@@ -54,10 +54,12 @@ export interface Api {
     model?: string
     llmModelDir?: string
     llamaBinDir?: string
+    testKind?: 'connect' | 'llm'
   }) => Promise<{
     success: boolean
     message: string
     modelCount?: number
+    models?: string[]
     hasPreferredModel?: boolean
   }>
   testTranscriptionConnection: (payload: {

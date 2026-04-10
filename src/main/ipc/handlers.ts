@@ -1280,14 +1280,29 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       }
 
       if (isAnthropicProvider(provider)) {
-        return {
-          success: true,
-          models: [
-            { id: 'MiniMax-M2.7', name: 'MiniMax-M2.7' },
-            { id: 'MiniMax-M2.7-highspeed', name: 'MiniMax-M2.7-highspeed' },
-            { id: 'MiniMax-M2.5', name: 'MiniMax-M2.5' },
-            { id: 'MiniMax-M2.5-highspeed', name: 'MiniMax-M2.5-highspeed' }
-          ]
+        const baseURL = payload?.baseURL?.trim() || ANTHROPIC_BASE_URL
+        const apiKey = credential || ''
+        try {
+          const client = createOpenAIClient({
+            apiKey,
+            baseURL,
+            customHeaders: payload?.customHeaders
+          })
+          const response = await client.models.list()
+          const models = response.data.map((model) => ({
+            id: model.id,
+            name: model.id
+          }))
+          return { success: true, models }
+        } catch (error) {
+          if (isNotFoundError(error)) {
+            return { success: true, models: [] }
+          }
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Failed to fetch models',
+            models: []
+          }
         }
       }
 
@@ -1437,6 +1452,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         model?: string
         llmModelDir?: string
         llamaBinDir?: string
+        testKind?: 'connect' | 'llm'
       }
     ) => {
       const {
@@ -1460,6 +1476,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
                 ? payload?.baseURL?.trim() || ANTHROPIC_BASE_URL
                 : undefined
       const preferredModel = payload?.model?.trim()
+      const testKind = payload?.testKind === 'llm' ? 'llm' : 'connect'
 
       if (!credential && !isLlamaCppProvider(provider) && !isAnthropicProvider(provider)) {
         return {
@@ -1543,7 +1560,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
           return {
             success: true,
-            message: 'LLM connection established.',
+            message: testKind === 'llm' ? 'LLM test passed.' : 'LLM connection established.',
             modelCount: 0,
             hasPreferredModel: true
           }
@@ -1561,36 +1578,75 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         })
 
         if (provider === 'openai-oauth') {
-          const oauthModel = preferredModel || 'gpt-5.4'
-          const stream = streamChatGPTCodexResponse({
-            accessToken: credential || '',
-            accountId: storedSettings?.llmOauthAccountId || '',
-            baseURL,
-            body: {
-              model: oauthModel,
-              instructions: 'Reply with exactly: pong',
-              input: [
-                {
-                  role: 'user',
-                  content: [{ type: 'input_text', text: 'ping' }]
-                }
-              ],
-              tools: [],
-              tool_choice: 'auto',
-              parallel_tool_calls: false,
-              store: false,
-              include: []
+          if (!credential || !storedSettings?.llmOauthAccountId?.trim()) {
+            return {
+              success: false,
+              message: 'OAuth not connected. Please sign in again.',
+              modelCount: 0,
+              hasPreferredModel: false
             }
-          })
-          for await (const event of stream) {
-            if (event.type === 'response.output_text.delta') {
-              break
+          }
+
+          const now = Date.now()
+          const expiresAt = storedSettings.llmOauthExpiresAt || 0
+          if (expiresAt > 0 && expiresAt < now) {
+            return {
+              success: false,
+              message: 'OAuth token expired. Please sign in again.',
+              modelCount: 0,
+              hasPreferredModel: false
+            }
+          }
+
+          if (testKind === 'llm') {
+            const oauthModel = preferredModel || 'gpt-5.4'
+            const stream = streamChatGPTCodexResponse({
+              accessToken: credential,
+              accountId: storedSettings.llmOauthAccountId,
+              baseURL,
+              body: {
+                model: oauthModel,
+                instructions: 'Reply with exactly: pong',
+                input: [
+                  {
+                    role: 'user',
+                    content: [{ type: 'input_text', text: 'ping' }]
+                  }
+                ],
+                tools: [],
+                tool_choice: 'auto',
+                parallel_tool_calls: false,
+                store: false,
+                include: []
+              }
+            })
+
+            let sawOutput = false
+            for await (const event of stream) {
+              if (
+                event.type === 'response.output_text.delta' ||
+                event.type === 'response.completed'
+              ) {
+                sawOutput = true
+                break
+              }
+            }
+
+            if (!sawOutput) {
+              throw new Error('OAuth LLM test did not produce output.')
+            }
+
+            return {
+              success: true,
+              message: 'LLM test passed.',
+              modelCount: 0,
+              hasPreferredModel: true
             }
           }
 
           return {
             success: true,
-            message: 'LLM connection established.',
+            message: 'OAuth token valid.',
             modelCount: 0,
             hasPreferredModel: true
           }
@@ -1606,7 +1662,32 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
           return {
             success: true,
-            message: 'LLM connection established.',
+            message: testKind === 'llm' ? 'LLM test passed.' : 'LLM connection established.',
+            modelCount: 0,
+            hasPreferredModel: true
+          }
+        }
+
+        if (testKind === 'llm') {
+          if (!preferredModel) {
+            return {
+              success: false,
+              message: 'Select or enter a model before testing the LLM.',
+              modelCount: 0,
+              hasPreferredModel: false
+            }
+          }
+
+          await client.chat.completions.create({
+            model: preferredModel,
+            messages: [{ role: 'user', content: 'ping' }],
+            max_completion_tokens: 1,
+            temperature: 0
+          } as never)
+
+          return {
+            success: true,
+            message: 'LLM test passed.',
             modelCount: 0,
             hasPreferredModel: true
           }
@@ -1618,7 +1699,26 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           models = response.data.map((model) => model.id)
         } catch (error) {
           if (!isNotFoundError(error)) {
-            throw error
+            if (!preferredModel) {
+              throw error
+            }
+
+            const probeRequest: Record<string, unknown> = {
+              model: preferredModel,
+              messages: [{ role: 'user', content: 'ping' }],
+              max_completion_tokens: 1,
+              temperature: 0
+            }
+
+            await client.chat.completions.create(probeRequest as never)
+
+            return {
+              success: true,
+              message: 'LLM connection established. Model listing unavailable.',
+              modelCount: 0,
+              models: [],
+              hasPreferredModel: true
+            }
           }
 
           // Fallback probe for endpoints that don't support GET /models
@@ -1645,6 +1745,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           success: true,
           message,
           modelCount: models.length,
+          models,
           hasPreferredModel
         }
       } catch (error) {
