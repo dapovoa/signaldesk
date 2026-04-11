@@ -11,7 +11,7 @@ Desktop app for live interview support. Captures interviewer audio, transcribes 
 - Node.js 22
 - npm
 - Linux, macOS, or Windows
-- For `GGUF Models`: `.gguf` files plus `llama-server` and `llama-cli`
+- For `GGUF Models`: `.gguf` files plus the local `llama.cpp` runtime in `~/.config/signaldesk/llama/bin`
 
 ---
 
@@ -121,13 +121,23 @@ sudo dpkg -r signaldesk
 - settings: `~/.config/signaldesk/settings.json`
 - avatar sources: `~/.config/signaldesk/avatar/sources`
 - default GGUF models folder: `~/.config/signaldesk/models`
-- default llama.cpp binaries folder: `~/.config/signaldesk/llama/bin`
+- llama.cpp runtime folder: `~/.config/signaldesk/llama/bin`
+
+Required files in `~/.config/signaldesk/llama/bin`:
+
+- `llama-server`
+- `llama-cli`
+- `libllama.so*`
+- `libggml.so*`
+- `libggml-base.so*`
+- `libggml-cpu.so*`
+- `libmtmd.so*`
+- any extra shared libraries produced by your `llama.cpp` build
 
 Notes:
 
 - Avatar embedding models use the Avatar embedding folder picker.
-- `GGUF Models` uses the `GGUF Models Folder` picker.
-- `llama.cpp` binaries use the `Llama.cpp Binaries Folder` picker.
+- `GGUF Models` uses the folder selector beside `Answer Generation Model`.
 - If you keep defaults, embeddings and GGUF generation models both resolve under `~/.config/signaldesk/models`.
 
 ---
@@ -152,15 +162,15 @@ Notes:
 - `LLM Provider`:
   - `OpenAI`
   - `OpenAI OAuth`
-  - `OpenAI Compatible`
-  - `Anthropic Compatible`
-  - `GGUF Models`
+- `OpenAI Compatible`
+- `Anthropic Compatible`
+- `GGUF Models`
 - `OpenAI Auth Mode`:
   - `API Key`
   - `OAuth Token`
 - `Answer Generation Model`
-- `GGUF Models Folder`
-- `Llama.cpp Binaries Folder`
+
+For `GGUF Models`, the folder selector lives beside `Answer Generation Model`.
 
 The `Answer Generation Model` picker follows the active `LLM Provider`.
 

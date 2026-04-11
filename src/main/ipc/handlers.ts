@@ -36,9 +36,7 @@ import { llamaCppLlmServer } from '../services/llamaCppLlmServer'
 import { llamaCppServer } from '../services/llamaCppServer'
 import {
   DEFAULT_LLM_BASE_URL,
-  ensureLlamaBinDirectory,
   ensureModelsDirectory,
-  getDefaultLlamaBinDirectory,
   getDefaultModelsDirectory,
   listEmbeddingModels,
   listLlmModels
@@ -135,8 +133,6 @@ const IPC_HANDLE_CHANNELS = [
   'test-embedding-model',
   'select-embedding-model-dir',
   'select-llm-model-dir',
-  'open-llama-bin-folder',
-  'select-llama-bin-dir',
   'test-provider-connection',
   'test-transcription-connection',
   'start-capture',
@@ -717,7 +713,7 @@ const classifyTurnWithModel = async (turnText: string): Promise<ModelClassifierR
 
   const providerConfig = getProviderConfig(settings)
   if (settings.llmProvider === 'llama.cpp') {
-    await ensureLocalLlmModelReady(settings.llmModel, settings.llmModelDir, settings.llamaBinDir)
+    await ensureLocalLlmModelReady(settings.llmModel, settings.llmModelDir)
   }
   if (settings.llmProvider === 'openai-oauth') {
     providerConfig.apiKey = (await ensureOpenAIOAuthToken()) || ''
@@ -1105,11 +1101,10 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
   })
 
   ipcMain.handle('update-settings', (_event, updates: Partial<AppSettings>) => {
-    const llamaBinDirChanged = updates.llamaBinDir !== undefined
     const llmModelDirChanged = updates.llmModelDir !== undefined
     settingsManager?.updateSettings(updates)
 
-    if (llamaBinDirChanged || llmModelDirChanged) {
+    if (llmModelDirChanged) {
       void llamaCppLlmServer.dispose()
       void llamaCppServer.dispose()
     }
@@ -1179,6 +1174,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
   ipcMain.handle('get-window-capabilities', () => {
     return {
+      platform: process.platform,
       isWayland: isWaylandSession,
       supportsAlwaysOnTop: !isWaylandSession,
       supportsWindowOpacity: !isWaylandSession,
@@ -1409,35 +1405,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     return { success: true, directory: result.filePaths[0] }
   })
 
-  ipcMain.handle('open-llama-bin-folder', async (_event, directory?: string) => {
-    const targetDirectory = ensureLlamaBinDirectory(
-      directory || settingsManager?.getSettings().llamaBinDir || getDefaultLlamaBinDirectory()
-    )
-    const error = await shell.openPath(targetDirectory)
-
-    return {
-      success: !error,
-      path: targetDirectory,
-      error: error || undefined
-    }
-  })
-
-  ipcMain.handle('select-llama-bin-dir', async (_event, directory?: string) => {
-    const defaultPath = ensureLlamaBinDirectory(
-      directory || settingsManager?.getSettings().llamaBinDir || getDefaultLlamaBinDirectory()
-    )
-    const result = await dialog.showOpenDialog(mainWindow!, {
-      defaultPath,
-      properties: ['openDirectory']
-    })
-
-    if (result.canceled || result.filePaths.length === 0) {
-      return { success: false, directory: '' }
-    }
-
-    return { success: true, directory: result.filePaths[0] }
-  })
-
   ipcMain.handle(
     'test-provider-connection',
     async (
@@ -1451,7 +1418,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         customHeaders?: string
         model?: string
         llmModelDir?: string
-        llamaBinDir?: string
         testKind?: 'connect' | 'llm'
       }
     ) => {
@@ -1519,8 +1485,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
             preferredModel || '',
             payload?.llmModelDir?.trim() ||
               storedSettings?.llmModelDir ||
-              getDefaultModelsDirectory(),
-            payload?.llamaBinDir?.trim() || undefined
+              getDefaultModelsDirectory()
           )
           if (!validation.valid) {
             return {
@@ -1850,11 +1815,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
       const providerConfig = getProviderConfig(settings)
       if (settings.llmProvider === 'llama.cpp') {
-        await ensureLocalLlmModelReady(
-          settings.llmModel,
-          settings.llmModelDir,
-          settings.llamaBinDir
-        )
+        await ensureLocalLlmModelReady(settings.llmModel, settings.llmModelDir)
       }
       if (settings.llmProvider === 'openai-oauth') {
         providerConfig.apiKey = (await ensureOpenAIOAuthToken()) || ''
@@ -2264,11 +2225,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     const providerConfig = getProviderConfig(settings)
     if (settings.llmProvider === 'llama.cpp') {
       try {
-        await ensureLocalLlmModelReady(
-          settings.llmModel,
-          settings.llmModelDir,
-          settings.llamaBinDir
-        )
+        await ensureLocalLlmModelReady(settings.llmModel, settings.llmModelDir)
       } catch (err) {
         console.warn('[LlamaCpp] startup failed:', err)
       }

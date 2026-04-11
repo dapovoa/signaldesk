@@ -127,7 +127,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   llmAnthropicCompatibleModel: 'MiniMax-M2.7',
   llmLlamaCppModel: '',
   llmModelDir: '',
-  llamaBinDir: '',
   transcriptionLanguage: 'auto',
   alwaysOnTop: true,
   windowOpacity: 1.0,

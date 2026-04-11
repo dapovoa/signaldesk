@@ -48,7 +48,6 @@ export interface AppSettings {
   llmAnthropicCompatibleModel: string
   llmLlamaCppModel: string
   llmModelDir: string
-  llamaBinDir: string
   transcriptionLanguage: 'auto' | 'en' | 'pt'
   alwaysOnTop: boolean
   windowOpacity: number
@@ -111,6 +110,7 @@ export interface AnswerEntry {
 }
 
 export interface WindowCapabilities {
+  platform: NodeJS.Platform
   isWayland: boolean
   supportsAlwaysOnTop: boolean
   supportsWindowOpacity: boolean

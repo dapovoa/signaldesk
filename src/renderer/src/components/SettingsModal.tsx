@@ -1,6 +1,7 @@
 import { AlertCircle, CheckCircle, Eye, EyeOff, FolderOpen, Save, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { AppSettings, useInterviewStore } from '../store/interviewStore'
+import type { WindowCapabilities } from '../../../shared/contracts'
 import {
   getActiveLlmModel,
   getSuggestedLlmModels,
@@ -162,7 +163,8 @@ export function SettingsModal(): React.ReactNode | null {
   const [oauthStatus, setOauthStatus] = useState<'idle' | 'connecting' | 'ok' | 'error'>('idle')
   const [oauthMessage, setOauthMessage] = useState<string>('')
   const [connectedModels, setConnectedModels] = useState<string[]>([])
-  const [windowCapabilities, setWindowCapabilities] = useState({
+  const [windowCapabilities, setWindowCapabilities] = useState<WindowCapabilities>({
+    platform: 'linux',
     isWayland: false,
     supportsAlwaysOnTop: true,
     supportsWindowOpacity: true,
@@ -480,7 +482,6 @@ export function SettingsModal(): React.ReactNode | null {
           provider === 'openai-compatible' ? localSettings.llmCustomHeaders : undefined,
         model: getActiveLlmModel(localSettings),
         llmModelDir: provider === 'llama.cpp' ? localSettings.llmModelDir : undefined,
-        llamaBinDir: provider === 'llama.cpp' ? localSettings.llamaBinDir : undefined,
         testKind: 'connect'
       })
 
@@ -548,7 +549,6 @@ export function SettingsModal(): React.ReactNode | null {
           provider === 'openai-compatible' ? localSettings.llmCustomHeaders : undefined,
         model: getActiveLlmModel(localSettings),
         llmModelDir: provider === 'llama.cpp' ? localSettings.llmModelDir : undefined,
-        llamaBinDir: provider === 'llama.cpp' ? localSettings.llamaBinDir : undefined,
         testKind: 'llm'
       })
 
@@ -600,22 +600,6 @@ export function SettingsModal(): React.ReactNode | null {
     }
     setLocalSettings({ ...localSettings, windowOpacity: value })
     await window.api.setWindowOpacity(value)
-  }
-
-  const handleChooseLlamaBinFolder = async (): Promise<void> => {
-    try {
-      const result = await window.api.selectLlamaBinDir(localSettings.llamaBinDir)
-      if (result.success && result.directory) {
-        setLocalSettings({ ...localSettings, llamaBinDir: result.directory })
-        setConnectionStatus('idle')
-        setConnectionMessage('')
-      }
-    } catch (err) {
-      setConnectionStatus('error')
-      setConnectionMessage(
-        err instanceof Error ? err.message : 'Failed to choose llama.cpp binaries folder.'
-      )
-    }
   }
 
   const handleChooseLlmModelFolder = async (): Promise<void> => {
@@ -1122,117 +1106,99 @@ export function SettingsModal(): React.ReactNode | null {
             </>
           )}
 
-          {localSettings.llmProvider === 'llama.cpp' && (
-            <>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-dark-200">
-                  Llama.cpp Binaries Folder
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={localSettings.llamaBinDir || 'Default'}
-                    className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
-                    placeholder="Default"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleChooseLlamaBinFolder}
-                    className="settings-action flex items-center justify-center px-3 py-2 text-sm transition-colors"
-                    title="Choose binaries folder"
-                  >
-                    <FolderOpen size={16} />
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-dark-200">GGUF Models Folder</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={localSettings.llmModelDir || 'Default'}
-                    className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
-                    placeholder="Default"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleChooseLlmModelFolder}
-                    className="settings-action flex items-center justify-center px-3 py-2 text-sm transition-colors"
-                    title="Choose GGUF models folder"
-                  >
-                    <FolderOpen size={16} />
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
-
           <div className="space-y-2">
             <label className="block text-sm font-medium text-dark-200">
               Answer Generation Model
             </label>
-            {connectedModels.length > 0 ? (
-              <select
-                value={activeLlmModel}
-                onChange={(e) =>
-                  setLocalSettings(normalizeSettingsForUi(setActiveLlmModel(localSettings, e.target.value)))
-                }
-                className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors"
-              >
-                {connectedModels.map((model) => (
-                  <option key={model} value={model}>
-                    {model}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="text"
-                value={activeLlmModel}
-                onChange={(e) =>
-                  setLocalSettings(normalizeSettingsForUi(setActiveLlmModel(localSettings, e.target.value)))
-                }
-                placeholder="Enter model name (e.g. gpt-4o-mini)"
-                className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
-              />
+            <div className="flex gap-2">
+              {connectedModels.length > 0 ? (
+                <select
+                  value={activeLlmModel}
+                  onChange={(e) =>
+                    setLocalSettings(normalizeSettingsForUi(setActiveLlmModel(localSettings, e.target.value)))
+                  }
+                  className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors"
+                >
+                  {connectedModels.map((model) => (
+                    <option key={model} value={model}>
+                      {model}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={activeLlmModel}
+                  onChange={(e) =>
+                    setLocalSettings(normalizeSettingsForUi(setActiveLlmModel(localSettings, e.target.value)))
+                  }
+                  placeholder="Enter model name (e.g. gpt-4o-mini)"
+                  className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
+                />
+              )}
+              {localSettings.llmProvider === 'llama.cpp' && (
+                <button
+                  type="button"
+                  onClick={handleChooseLlmModelFolder}
+                  className="settings-action flex items-center justify-center px-3 py-2 text-sm transition-colors"
+                  title="Choose GGUF models folder"
+                >
+                  <FolderOpen size={16} />
+                </button>
+              )}
+            </div>
+            {localSettings.llmProvider === 'llama.cpp' && (
+              <p className="text-xs text-dark-400">{localSettings.llmModelDir}</p>
             )}
           </div>
 
           {localSettings.llmProvider !== 'openai-oauth' && (
             <>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={handleTestConnection}
-                  disabled={connectionStatus === 'testing'}
-                  className="settings-action px-3 py-2 text-sm transition-colors disabled:opacity-60"
-                >
-                  {connectionStatus === 'testing' ? 'Connecting...' : 'Connect'}
-                </button>
+            {localSettings.llmProvider === 'llama.cpp' ? (
+              <div>
                 <button
                   type="button"
                   onClick={handleTestLlm}
                   disabled={llmTestStatus === 'testing'}
-                  className="settings-action px-3 py-2 text-sm transition-colors disabled:opacity-60"
+                  className="settings-action w-full px-3 py-2 text-sm transition-colors disabled:opacity-60"
                 >
                   {llmTestStatus === 'testing' ? 'Testing...' : 'Test LLM'}
                 </button>
               </div>
-              {connectionStatus === 'ok' && (
-                <div className="settings-status-ok flex items-center gap-1.5 text-xs">
-                  <CheckCircle size={12} />
-                  <span>{connectionMessage}</span>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={handleTestConnection}
+                    disabled={connectionStatus === 'testing'}
+                    className="settings-action px-3 py-2 text-sm transition-colors disabled:opacity-60"
+                  >
+                    {connectionStatus === 'testing' ? 'Connecting...' : 'Connect'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleTestLlm}
+                    disabled={llmTestStatus === 'testing'}
+                    className="settings-action px-3 py-2 text-sm transition-colors disabled:opacity-60"
+                  >
+                    {llmTestStatus === 'testing' ? 'Testing...' : 'Test LLM'}
+                  </button>
                 </div>
-              )}
-              {connectionStatus === 'error' && (
-                <div className="settings-status-error flex items-center gap-1.5 text-xs">
-                  <AlertCircle size={12} />
-                  <span>{connectionMessage}</span>
-                </div>
-              )}
+                {connectionStatus === 'ok' && (
+                  <div className="settings-status-ok flex items-center gap-1.5 text-xs">
+                    <CheckCircle size={12} />
+                    <span>{connectionMessage}</span>
+                  </div>
+                )}
+                {connectionStatus === 'error' && (
+                  <div className="settings-status-error flex items-center gap-1.5 text-xs">
+                    <AlertCircle size={12} />
+                    <span>{connectionMessage}</span>
+                  </div>
+                )}
+              </>
+            )}
               {llmTestStatus === 'ok' && (
                 <div className="settings-status-ok flex items-center gap-1.5 text-xs">
                   <CheckCircle size={12} />
@@ -1292,31 +1258,35 @@ export function SettingsModal(): React.ReactNode | null {
             </>
           )}
 
-          <SectionDivider label="Window" />
+          {windowCapabilities.platform !== 'linux' && (
+            <>
+              <SectionDivider label="Window" />
 
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-dark-200">
-              Window Opacity
-              <span className="ml-2 text-xs text-dark-400">
-                {Math.round(localSettings.windowOpacity * 100)}%
-              </span>
-            </label>
-            {!windowCapabilities.supportsWindowOpacity && (
-              <p className="text-xs text-dark-500">{windowCapabilities.warning}</p>
-            )}
-            <input
-              type="range"
-              min="0.3"
-              max="1"
-              step="0.05"
-              value={localSettings.windowOpacity}
-              onChange={(e) => handleOpacityChange(Number(e.target.value))}
-              disabled={!windowCapabilities.supportsWindowOpacity}
-              className={`w-full accent-blue-500 ${
-                windowCapabilities.supportsWindowOpacity ? '' : 'opacity-50 cursor-not-allowed'
-              }`}
-            />
-          </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-dark-200">
+                  Window Opacity
+                  <span className="ml-2 text-xs text-dark-400">
+                    {Math.round(localSettings.windowOpacity * 100)}%
+                  </span>
+                </label>
+                {!windowCapabilities.supportsWindowOpacity && (
+                  <p className="text-xs text-dark-500">{windowCapabilities.warning}</p>
+                )}
+                <input
+                  type="range"
+                  min="0.3"
+                  max="1"
+                  step="0.05"
+                  value={localSettings.windowOpacity}
+                  onChange={(e) => handleOpacityChange(Number(e.target.value))}
+                  disabled={!windowCapabilities.supportsWindowOpacity}
+                  className={`w-full accent-blue-500 ${
+                    windowCapabilities.supportsWindowOpacity ? '' : 'opacity-50 cursor-not-allowed'
+                  }`}
+                />
+              </div>
+            </>
+          )}
         </div>
 
         <div className="flex items-center justify-between border-t border-white/5 px-4 py-3.5">

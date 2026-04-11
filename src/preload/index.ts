@@ -57,7 +57,6 @@ const api = {
     customHeaders?: string
     model?: string
     llmModelDir?: string
-    llamaBinDir?: string
     testKind?: 'connect' | 'llm'
   }): Promise<{
     success: boolean
@@ -90,10 +89,6 @@ const api = {
     ipcRenderer.invoke('update-avatar-profile', updates),
   openAvatarMemoryFolder: (): Promise<{ success: boolean; path: string; error?: string }> =>
     ipcRenderer.invoke('open-avatar-memory-folder'),
-  openLlamaBinFolder: (
-    directory?: string
-  ): Promise<{ success: boolean; path: string; error?: string }> =>
-    ipcRenderer.invoke('open-llama-bin-folder', directory),
   getAvatarIndexStatus: (): Promise<AvatarIndexStatus> =>
     ipcRenderer.invoke('get-avatar-index-status'),
   reindexAvatarSources: (): Promise<AvatarIndexStatus> =>
@@ -104,8 +99,6 @@ const api = {
     ipcRenderer.invoke('select-embedding-model-dir', directory),
   selectLlmModelDir: (directory?: string): Promise<{ success: boolean; directory: string }> =>
     ipcRenderer.invoke('select-llm-model-dir', directory),
-  selectLlamaBinDir: (directory?: string): Promise<{ success: boolean; directory: string }> =>
-    ipcRenderer.invoke('select-llama-bin-dir', directory),
   startCapture: (): Promise<{ success: boolean }> => ipcRenderer.invoke('start-capture'),
   stopCapture: (): Promise<{ success: boolean }> => ipcRenderer.invoke('stop-capture'),
   sendAudioData: (audioData: ArrayBuffer): void => ipcRenderer.send('audio-data', audioData),

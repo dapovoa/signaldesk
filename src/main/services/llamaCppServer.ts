@@ -1,6 +1,7 @@
 import { spawn } from 'child_process'
 import * as fs from 'fs'
 import {
+  buildLlamaRuntimeEnv,
   buildLlamaBinaryNotFoundError,
   resolveEmbeddingModelPath,
   resolveLlamaServerBinary
@@ -156,7 +157,7 @@ class LlamaCppServerManager {
     }
 
     const child = spawn(serverBinary, args, {
-      env: process.env,
+      env: buildLlamaRuntimeEnv(serverBinary, binaryDir),
       stdio: ['ignore', 'pipe', 'pipe']
     })
 

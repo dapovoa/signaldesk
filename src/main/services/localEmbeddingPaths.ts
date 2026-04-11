@@ -154,7 +154,15 @@ const getBundledLlamaDirectories = (): string[] =>
   )
 
 const getConfiguredLlamaBinDirectory = (configuredDir?: string): string =>
-  configuredDir?.trim() || process.env.SIGNALDESK_LLAMA_BIN_DIR?.trim() || ''
+  configuredDir?.trim() ||
+  process.env.SIGNALDESK_LLAMA_BIN_DIR?.trim() ||
+  getDefaultLlamaBinDirectory()
+
+const normalizePathEntries = (value?: string): string[] =>
+  (value || '')
+    .split(path.delimiter)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
 
 const collectLlamaBinaryCandidates = (
   binaryName: LlamaBinaryName,
@@ -216,3 +224,27 @@ export const resolveLlamaServerBinary = (configuredDir?: string): string =>
   resolveLlamaBinary('llama-server', configuredDir)
 export const resolveLlamaCliBinary = (configuredDir?: string): string =>
   resolveLlamaBinary('llama-cli', configuredDir)
+
+export const buildLlamaRuntimeEnv = (
+  binaryPath: string,
+  configuredDir?: string,
+  baseEnv: NodeJS.ProcessEnv = process.env
+): NodeJS.ProcessEnv => {
+  const binaryDir = path.dirname(binaryPath)
+  const configuredBinDir = getConfiguredLlamaBinDirectory(configuredDir)
+  const existingLibraryPath = normalizePathEntries(baseEnv.LD_LIBRARY_PATH)
+  const extraLibraryDirs = unique([
+    binaryDir,
+    configuredBinDir,
+    ...getBundledLlamaDirectories(),
+    '/opt/rocm/lib',
+    '/opt/rocm/lib64',
+    '/opt/rocm-6.2.4/lib',
+    '/opt/rocm-6.2.4/lib64'
+  ]).filter((candidate) => fs.existsSync(candidate))
+
+  return {
+    ...baseEnv,
+    LD_LIBRARY_PATH: unique([...extraLibraryDirs, ...existingLibraryPath]).join(path.delimiter)
+  }
+}

@@ -9,9 +9,7 @@ import {
   OPENAI_OAUTH_MODEL_OPTIONS
 } from '../../shared/llmSettings'
 import {
-  ensureLlamaBinDirectory,
   ensureModelsDirectory,
-  getDefaultLlamaBinDirectory,
   getDefaultModelsDirectory
 } from './localEmbeddingPaths'
 export type { AppSettings } from '../../shared/contracts'
@@ -158,7 +156,6 @@ const DEFAULT_SETTINGS: AppSettings = {
       : 'MiniMax-M2.7',
   llmLlamaCppModel: DEFAULT_LLM_PROVIDER === 'llama.cpp' ? DEFAULT_ENV_LLM_MODEL : '',
   llmModelDir: process.env.SIGNALDESK_LLM_MODEL_DIR || '',
-  llamaBinDir: process.env.SIGNALDESK_LLAMA_BIN_DIR || '',
   transcriptionLanguage:
     process.env.TRANSCRIPTION_LANGUAGE === 'pt' || process.env.VITE_TRANSCRIPTION_LANGUAGE === 'pt'
       ? 'pt'
@@ -176,8 +173,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 const normalizeSettings = (settings: AppSettings): AppSettings =>
   normalizeLlmSettings({
     ...settings,
-    llmModelDir: settings.llmModelDir?.trim() || getDefaultModelsDirectory(),
-    llamaBinDir: settings.llamaBinDir?.trim() || getDefaultLlamaBinDirectory()
+    llmModelDir: settings.llmModelDir?.trim() || getDefaultModelsDirectory()
   })
 
 export class SettingsManager {
@@ -198,9 +194,7 @@ export class SettingsManager {
     const normalized = normalizeSettings(this.settings)
     this.settings = normalized
     process.env.SIGNALDESK_LLM_MODEL_DIR = normalized.llmModelDir
-    process.env.SIGNALDESK_LLAMA_BIN_DIR = normalized.llamaBinDir
     ensureModelsDirectory(normalized.llmModelDir)
-    ensureLlamaBinDirectory(normalized.llamaBinDir)
   }
 
   private loadSettings(): { settings: AppSettings; needsSave: boolean } {
@@ -263,9 +257,6 @@ export class SettingsManager {
             savedSettings[inferredModelKey] = legacyModel
             needsSave = true
           }
-        }
-        if (typeof savedSettings.llamaBinDir !== 'string' || !savedSettings.llamaBinDir.trim()) {
-          needsSave = true
         }
         if (typeof savedSettings.llmModelDir !== 'string' || !savedSettings.llmModelDir.trim()) {
           needsSave = true
