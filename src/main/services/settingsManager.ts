@@ -9,6 +9,7 @@ import {
   OPENAI_OAUTH_MODEL_OPTIONS
 } from '../../shared/llmSettings'
 import {
+  ensureLlamaBinDirectory,
   ensureModelsDirectory,
   getDefaultModelsDirectory
 } from './localEmbeddingPaths'
@@ -195,6 +196,7 @@ export class SettingsManager {
     this.settings = normalized
     process.env.SIGNALDESK_LLM_MODEL_DIR = normalized.llmModelDir
     ensureModelsDirectory(normalized.llmModelDir)
+    ensureLlamaBinDirectory()
   }
 
   private loadSettings(): { settings: AppSettings; needsSave: boolean } {
