@@ -602,31 +602,16 @@ export function SettingsModal(): React.ReactNode | null {
     await window.api.setWindowOpacity(value)
   }
 
-  const handleChooseLlmModelFolder = async (): Promise<void> => {
+  const handleOpenLlmModelFolder = async (): Promise<void> => {
     try {
-      const result = await window.api.selectLlmModelDir(localSettings.llmModelDir)
-      if (result.success && result.directory) {
-        const nextSettings =
-          localSettings.llmProvider === 'llama.cpp'
-            ? normalizeSettingsForUi(
-                setActiveLlmModel(
-                  {
-                    ...localSettings,
-                    llmModelDir: result.directory
-                  },
-                  ''
-                )
-              )
-            : { ...localSettings, llmModelDir: result.directory }
-
-        setLocalSettings(nextSettings)
-        setConnectionStatus('idle')
-        setConnectionMessage('')
+      const result = await window.api.openLlmModelsFolder()
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to open GGUF models folder.')
       }
     } catch (err) {
       setConnectionStatus('error')
       setConnectionMessage(
-        err instanceof Error ? err.message : 'Failed to choose GGUF models folder.'
+        err instanceof Error ? err.message : 'Failed to open GGUF models folder.'
       )
     }
   }
@@ -1143,17 +1128,14 @@ export function SettingsModal(): React.ReactNode | null {
               {localSettings.llmProvider === 'llama.cpp' && (
                 <button
                   type="button"
-                  onClick={handleChooseLlmModelFolder}
+                  onClick={handleOpenLlmModelFolder}
                   className="settings-action flex items-center justify-center px-3 py-2 text-sm transition-colors"
-                  title="Choose GGUF models folder"
+                  title="Open GGUF models folder"
                 >
                   <FolderOpen size={16} />
                 </button>
               )}
             </div>
-            {localSettings.llmProvider === 'llama.cpp' && (
-              <p className="text-xs text-dark-400">{localSettings.llmModelDir}</p>
-            )}
           </div>
 
           {localSettings.llmProvider !== 'openai-oauth' && (

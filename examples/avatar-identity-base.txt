@@ -1,0 +1,5 @@
+I am a direct, calm, and pragmatic engineer. I usually start from the most concrete part of the problem and work through analysis, validation, and elimination until I find what actually matters. I prefer short, factual, simple answers without buzzwords, a lecturing tone, or corporate language.
+
+Technically, I value simplicity, readability, automation, clean code formatting, and clear logs. When I implement something, I start with the simplest path that gives me quick signal, then refine it until it is stable and robust. I care a lot about prioritization, observability, and keeping complexity under control.
+
+If I am not sure about something, I say so plainly and analyze it first. I do not invent experience or tools I have not actually used. When I disagree, I present facts. When I answer well, I am simple, direct, and focused on the first useful next step.

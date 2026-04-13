@@ -145,8 +145,16 @@ export function AvatarModal(): React.ReactNode | null {
           if (localProfile.embeddingModel || localProfile.embeddingModelDir) {
             setLocalProfile(prev => ({ ...prev, embeddingModel: '', embeddingModelDir: '' }))
           }
+        } else if (!localProfile.embeddingModel) {
+          setLocalProfile(prev => ({
+            ...prev,
+            embeddingModel: result.models[0]?.id.trim() || ''
+          }))
         } else if (localProfile.embeddingModel && !hasSelectedModel) {
-          setLocalProfile(prev => ({ ...prev, embeddingModel: '' }))
+          setLocalProfile(prev => ({
+            ...prev,
+            embeddingModel: result.models[0]?.id.trim() || ''
+          }))
         }
       } catch (error) {
         console.error('Failed to load local embedding models:', error)
@@ -445,57 +453,48 @@ export function AvatarModal(): React.ReactNode | null {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
                 <label className={fieldLabelClassName}>Embedding Model</label>
-                <select
-                  value={localProfile.embeddingModel}
-                  onChange={(e) =>
-                    setLocalProfile({
-                      ...localProfile,
-                      embeddingModel: e.target.value
-                    })
-                  }
-                  className={inputClassName}
-                >
-                  {(embeddingModels.length > 0
-                    ? embeddingModels
-                    : localProfile.embeddingModel
-                    ? [localProfile.embeddingModel]
-                    : []
-                  ).map((model) => (
-                    <option key={model} value={model}>
-                      {model}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex gap-2">
+                  <select
+                    value={localProfile.embeddingModel}
+                    onChange={(e) =>
+                      setLocalProfile({
+                        ...localProfile,
+                        embeddingModel: e.target.value
+                      })
+                    }
+                    className={inputClassName}
+                  >
+                    {(embeddingModels.length > 0
+                      ? embeddingModels
+                      : localProfile.embeddingModel
+                      ? [localProfile.embeddingModel]
+                      : []
+                    ).map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const result = await window.api.openEmbeddingModelsFolder()
+                      if (!result.success) {
+                        setEmbeddingModelsError(result.error || 'Failed to open embedding models folder.')
+                      }
+                    }}
+                    className="flex items-center justify-center rounded-lg border border-white/5 bg-white/[0.04] px-3 py-2 text-sm font-medium text-dark-200 transition-colors hover:border-cyan-400/15 hover:bg-cyan-400/8 hover:text-dark-100"
+                    title="Open embedding models folder"
+                  >
+                    <FolderOpen size={16} />
+                  </button>
+                </div>
                 {embeddingModelsLoading && (
                   <p className="text-xs text-dark-500">Loading local embedding models...</p>
                 )}
                 {embeddingModelsError && (
                   <p className="text-xs text-dark-400">{embeddingModelsError}</p>
                 )}
-              </div>
-              <div className="space-y-2">
-                <label className={fieldLabelClassName}>Model Directory</label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={localProfile.embeddingModelDir || 'Default'}
-                    className={inputClassName}
-                    placeholder="Default"
-                  />
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const result = await window.api.selectEmbeddingModelDir()
-                      if (result.success && result.directory) {
-                        setLocalProfile({ ...localProfile, embeddingModelDir: result.directory })
-                      }
-                    }}
-                    className="flex items-center justify-center rounded-lg border border-white/5 bg-white/[0.04] px-3 py-2 text-sm font-medium text-dark-200 transition-colors hover:border-cyan-400/15 hover:bg-cyan-400/8 hover:text-dark-100"
-                  >
-                    <FolderOpen size={16} />
-                  </button>
-                </div>
               </div>
               <div className="space-y-2">
                 <label className={fieldLabelClassName}>Last Indexed</label>

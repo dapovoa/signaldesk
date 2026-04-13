@@ -77,11 +77,11 @@ export interface Api {
   getAvatarProfile: () => Promise<AvatarProfile>
   updateAvatarProfile: (updates: Partial<AvatarProfile>) => Promise<AvatarProfile>
   openAvatarMemoryFolder: () => Promise<{ success: boolean; path: string; error?: string }>
+  openEmbeddingModelsFolder: () => Promise<{ success: boolean; path: string; error?: string }>
+  openLlmModelsFolder: () => Promise<{ success: boolean; path: string; error?: string }>
   getAvatarIndexStatus: () => Promise<AvatarIndexStatus>
   reindexAvatarSources: () => Promise<AvatarIndexStatus>
   testEmbeddingModel: (model: string, userDir?: string) => Promise<{ valid: boolean; error?: string }>
-  selectEmbeddingModelDir: (directory?: string) => Promise<{ success: boolean; directory: string }>
-  selectLlmModelDir: (directory?: string) => Promise<{ success: boolean; directory: string }>
   startCapture: () => Promise<{ success: boolean }>
   stopCapture: () => Promise<{ success: boolean }>
   sendAudioData: (audioData: ArrayBuffer) => void

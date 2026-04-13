@@ -89,16 +89,16 @@ const api = {
     ipcRenderer.invoke('update-avatar-profile', updates),
   openAvatarMemoryFolder: (): Promise<{ success: boolean; path: string; error?: string }> =>
     ipcRenderer.invoke('open-avatar-memory-folder'),
+  openEmbeddingModelsFolder: (): Promise<{ success: boolean; path: string; error?: string }> =>
+    ipcRenderer.invoke('open-embedding-models-folder'),
+  openLlmModelsFolder: (): Promise<{ success: boolean; path: string; error?: string }> =>
+    ipcRenderer.invoke('open-llm-models-folder'),
   getAvatarIndexStatus: (): Promise<AvatarIndexStatus> =>
     ipcRenderer.invoke('get-avatar-index-status'),
   reindexAvatarSources: (): Promise<AvatarIndexStatus> =>
     ipcRenderer.invoke('reindex-avatar-sources'),
   testEmbeddingModel: (model: string, userDir?: string): Promise<{ valid: boolean; error?: string }> =>
     ipcRenderer.invoke('test-embedding-model', model, userDir),
-  selectEmbeddingModelDir: (directory?: string): Promise<{ success: boolean; directory: string }> =>
-    ipcRenderer.invoke('select-embedding-model-dir', directory),
-  selectLlmModelDir: (directory?: string): Promise<{ success: boolean; directory: string }> =>
-    ipcRenderer.invoke('select-llm-model-dir', directory),
   startCapture: (): Promise<{ success: boolean }> => ipcRenderer.invoke('start-capture'),
   stopCapture: (): Promise<{ success: boolean }> => ipcRenderer.invoke('stop-capture'),
   sendAudioData: (audioData: ArrayBuffer): void => ipcRenderer.send('audio-data', audioData),

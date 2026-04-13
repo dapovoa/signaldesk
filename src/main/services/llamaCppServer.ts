@@ -17,7 +17,7 @@ const EMBED_BASE_URL = normalizeBaseUrl(
 const EMBED_URL = new URL(EMBED_BASE_URL)
 const EMBED_HOST = EMBED_URL.hostname || '127.0.0.1'
 const EMBED_PORT = EMBED_URL.port || (EMBED_URL.protocol === 'https:' ? '443' : '80')
-const EMBED_GPU_LAYERS = (process.env.SIGNALDESK_EMBED_GPU_LAYERS || '20').trim()
+const EMBED_GPU_LAYERS = (process.env.SIGNALDESK_EMBED_GPU_LAYERS || 'all').trim()
 const EMBED_POOLING = (process.env.SIGNALDESK_EMBED_POOLING || 'mean').trim() || 'mean'
 const START_TIMEOUT_MS = Number(process.env.SIGNALDESK_EMBED_START_TIMEOUT_MS || 30_000)
 const SHUTDOWN_TIMEOUT_MS = Number(process.env.SIGNALDESK_EMBED_SHUTDOWN_TIMEOUT_MS || 3_000)

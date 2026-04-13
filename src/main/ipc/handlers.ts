@@ -1,4 +1,4 @@
-import { BrowserWindow, clipboard, desktopCapturer, dialog, ipcMain, shell } from 'electron'
+import { BrowserWindow, clipboard, desktopCapturer, ipcMain, shell } from 'electron'
 import * as fs from 'fs'
 import type { AnswerEntry } from '../../shared/contracts'
 import {
@@ -276,6 +276,23 @@ const ensureLocalLlmModelReady = async (
   }
 
   await llamaCppLlmServer.ensureRunning(normalizedModel, modelDir, binaryDir)
+}
+
+const warmupConfiguredLocalLlm = async (): Promise<void> => {
+  if (!settingsManager) {
+    return
+  }
+
+  const settings = settingsManager.getSettings()
+  if (settings.llmProvider !== 'llama.cpp' || !settings.llmModel?.trim()) {
+    return
+  }
+
+  try {
+    await ensureLocalLlmModelReady(settings.llmModel, settings.llmModelDir)
+  } catch (error) {
+    console.warn('[LlamaCpp] startup warmup failed:', error)
+  }
 }
 
 const getPostUtteranceDebounceMs = (): number =>
@@ -1095,6 +1112,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
   settingsManager.flushPendingMigrations()
   avatarKnowledgeService = new AvatarKnowledgeService(avatarProfileManager.getProfile())
   avatarKnowledgeService.warmup().catch((err) => console.warn('[Avatar] warmup failed:', err))
+  warmupConfiguredLocalLlm().catch((err) => console.warn('[LlamaCpp] warmup failed:', err))
 
   ipcMain.handle('get-settings', () => {
     return settingsManager?.getSettings()
@@ -1136,6 +1154,30 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
   ipcMain.handle('open-avatar-memory-folder', async () => {
     const targetDirectory = getDefaultAvatarSourceDirectory()
     ensureDirectory(targetDirectory)
+    const error = await shell.openPath(targetDirectory)
+
+    return {
+      success: !error,
+      path: targetDirectory,
+      error: error || undefined
+    }
+  })
+
+  ipcMain.handle('open-embedding-models-folder', async () => {
+    const targetDirectory = ensureModelsDirectory(getDefaultModelsDirectory())
+    const error = await shell.openPath(targetDirectory)
+
+    return {
+      success: !error,
+      path: targetDirectory,
+      error: error || undefined
+    }
+  })
+
+  ipcMain.handle('open-llm-models-folder', async () => {
+    const targetDirectory = ensureModelsDirectory(
+      settingsManager?.getSettings().llmModelDir || getDefaultModelsDirectory()
+    )
     const error = await shell.openPath(targetDirectory)
 
     return {
@@ -1369,41 +1411,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       }
     }
   )
-
-  ipcMain.handle(
-    'select-embedding-model-dir',
-    async (_event, directory?: string) => {
-      const defaultPath = ensureModelsDirectory(
-        directory || getDefaultModelsDirectory()
-      )
-      const result = await dialog.showOpenDialog(mainWindow!, {
-        defaultPath,
-        properties: ['openDirectory']
-      })
-
-      if (result.canceled || result.filePaths.length === 0) {
-        return { success: false, directory: '' }
-      }
-
-      return { success: true, directory: result.filePaths[0] }
-    }
-  )
-
-  ipcMain.handle('select-llm-model-dir', async (_event, directory?: string) => {
-    const defaultPath = ensureModelsDirectory(
-      directory || settingsManager?.getSettings().llmModelDir || getDefaultModelsDirectory()
-    )
-    const result = await dialog.showOpenDialog(mainWindow!, {
-      defaultPath,
-      properties: ['openDirectory']
-    })
-
-    if (result.canceled || result.filePaths.length === 0) {
-      return { success: false, directory: '' }
-    }
-
-    return { success: true, directory: result.filePaths[0] }
-  })
 
   ipcMain.handle(
     'test-provider-connection',
