@@ -1132,7 +1132,11 @@ export function SettingsModal(): React.ReactNode | null {
                   onChange={(e) =>
                     setLocalSettings(normalizeSettingsForUi(setActiveLlmModel(localSettings, e.target.value)))
                   }
-                  placeholder="Enter model name (e.g. gpt-4o-mini)"
+                  placeholder={
+                    localSettings.llmProvider === 'llama.cpp'
+                      ? 'Enter GGUF model filename'
+                      : 'Enter model name (e.g. gpt-4o-mini)'
+                  }
                   className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
                 />
               )}
