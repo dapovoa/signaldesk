@@ -29,8 +29,6 @@ const AVATAR_LIMITS = {
   companyContext: 250
 } as const
 
-const DEFAULT_IDENTITY_BASE = ``
-
 const normalizeText = (value: string | undefined): string =>
   typeof value === 'string' ? value.replace(/\r\n/g, '\n').replace(/\r/g, '\n') : ''
 
@@ -51,22 +49,18 @@ const pickIdentityBase = (
   legacyIdentityBase: string | undefined
 ): string => {
   const normalizedProfileIdentityBase = normalizeText(profileIdentityBase).trim()
-  const normalizedDefaultIdentityBase = normalizeText(DEFAULT_IDENTITY_BASE).trim()
 
   return pickFirstNonEmpty(
-    normalizedProfileIdentityBase &&
-      normalizedProfileIdentityBase !== normalizedDefaultIdentityBase
-      ? profileIdentityBase
-      : '',
+    normalizedProfileIdentityBase ? profileIdentityBase : '',
     legacyIdentityBase,
-    DEFAULT_IDENTITY_BASE
+    ''
   )
 }
 
 const buildDefaultProfile = (): AvatarProfile => {
   return {
     id: 'default',
-    identityBase: DEFAULT_IDENTITY_BASE,
+    identityBase: '',
     cvSummary: '',
     jobTitle: '',
     companyName: '',

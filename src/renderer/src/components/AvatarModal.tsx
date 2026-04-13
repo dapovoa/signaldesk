@@ -20,8 +20,6 @@ const AVATAR_LIMITS = {
   companyContext: 250
 } as const
 
-const DEFAULT_IDENTITY_BASE = ``
-
 const normalizeText = (value: string): string => value.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
 
 const clampField = (field: keyof typeof AVATAR_LIMITS, value: string): string =>
@@ -290,23 +288,9 @@ export function AvatarModal(): React.ReactNode | null {
             <div className="space-y-2 pb-1">
               <div className="flex items-center justify-between gap-3">
                 <label className={fieldLabelClassName}>Identity Base</label>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setLocalProfile({
-                        ...localProfile,
-                        identityBase: clampField('identityBase', DEFAULT_IDENTITY_BASE)
-                      })
-                    }
-                    className="text-xs text-dark-400 transition-colors hover:text-dark-200"
-                  >
-                    Use starter
-                  </button>
-                  <span className="text-xs text-dark-400">
-                    {getLength(localProfile.identityBase)}/{AVATAR_LIMITS.identityBase}
-                  </span>
-                </div>
+                <span className="text-xs text-dark-400">
+                  {getLength(localProfile.identityBase)}/{AVATAR_LIMITS.identityBase}
+                </span>
               </div>
               <AutoResizeTextarea
                 value={localProfile.identityBase}

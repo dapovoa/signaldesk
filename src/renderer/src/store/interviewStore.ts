@@ -135,11 +135,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   captureSourceType: 'auto'
 }
 
-const DEFAULT_IDENTITY_BASE = ``
-
 const DEFAULT_AVATAR_PROFILE: AvatarProfile = {
   id: 'default',
-  identityBase: DEFAULT_IDENTITY_BASE,
+  identityBase: '',
   cvSummary: '',
   jobTitle: '',
   companyName: '',
