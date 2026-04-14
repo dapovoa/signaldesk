@@ -13,6 +13,7 @@ import { AvatarProfile, useInterviewStore } from '../store/interviewStore'
 
 const AVATAR_LIMITS = {
   identityBase: 2400,
+  answerStyle: 700,
   cvSummary: 700,
   jobTitle: 60,
   companyName: 30,
@@ -311,6 +312,28 @@ export function AvatarModal(): React.ReactNode | null {
                 rows={7}
                 maxLength={AVATAR_LIMITS.identityBase}
                 placeholder="How you work, your real strengths, and your factual limits."
+                className={textareaClassName}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <label className={fieldLabelClassName}>Answer Style</label>
+                <span className="text-xs text-dark-400">
+                  {getLength(localProfile.answerStyle)}/{AVATAR_LIMITS.answerStyle}
+                </span>
+              </div>
+              <AutoResizeTextarea
+                value={localProfile.answerStyle}
+                onChange={(e) =>
+                  setLocalProfile({
+                    ...localProfile,
+                    answerStyle: clampField('answerStyle', e.target.value)
+                  })
+                }
+                rows={4}
+                maxLength={AVATAR_LIMITS.answerStyle}
+                placeholder="How the answer should sound out loud: short sentences, natural wording, calm and direct tone."
                 className={textareaClassName}
               />
             </div>

@@ -474,6 +474,7 @@ const buildInterviewContext = (profile: AvatarProfile): string => {
 }
 
 const buildIdentityBase = (profile: AvatarProfile): string => profile.identityBase.trim()
+const buildAnswerStyle = (profile: AvatarProfile): string => profile.answerStyle.trim()
 const SIGNALDESK_VERBOSE = process.env.SIGNALDESK_VERBOSE === '1'
 const AVATAR_VERBOSE_LOGS = SIGNALDESK_VERBOSE || process.env.SIGNALDESK_AVATAR_VERBOSE === '1'
 
@@ -943,6 +944,7 @@ const generateAnswerForQuestion = async (
         trimmedQuestion,
         {
           identityBase: profile ? buildIdentityBase(profile) : '',
+          answerStyle: profile ? buildAnswerStyle(profile) : '',
           interviewContext: profile ? buildInterviewContext(profile) : '',
           avatarContext: avatarContext?.promptContext
         },
@@ -953,6 +955,7 @@ const generateAnswerForQuestion = async (
         trimmedQuestion,
         {
           identityBase: profile ? buildIdentityBase(profile) : '',
+          answerStyle: profile ? buildAnswerStyle(profile) : '',
           interviewContext: profile ? buildInterviewContext(profile) : '',
           avatarContext: avatarContext?.promptContext
         },
@@ -2296,6 +2299,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
             analysis.questionType,
             {
               identityBase: profile ? buildIdentityBase(profile) : '',
+              answerStyle: profile ? buildAnswerStyle(profile) : '',
               interviewContext: profile ? buildInterviewContext(profile) : '',
               avatarContext: avatarContext?.promptContext
             },
@@ -2344,6 +2348,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
               analysis.questionType || 'other',
               {
                 identityBase: profile ? buildIdentityBase(profile) : '',
+                answerStyle: profile ? buildAnswerStyle(profile) : '',
                 interviewContext: profile ? buildInterviewContext(profile) : '',
                 avatarContext: avatarContext?.promptContext
               },

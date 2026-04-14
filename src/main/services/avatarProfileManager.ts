@@ -12,6 +12,7 @@ export const getDefaultAvatarSourceDirectory = (): string =>
 const getLegacySettingsPath = (): string => path.join(app.getPath('userData'), 'settings.json')
 const LEGACY_PROFILE_SETTING_KEYS = [
   'identityBase',
+  'answerStyle',
   'cvSummary',
   'jobTitle',
   'companyName',
@@ -22,6 +23,7 @@ const LEGACY_PROFILE_SETTING_KEYS = [
 
 const AVATAR_LIMITS = {
   identityBase: 2400,
+  answerStyle: 700,
   cvSummary: 700,
   jobTitle: 60,
   companyName: 30,
@@ -61,6 +63,7 @@ const buildDefaultProfile = (): AvatarProfile => {
   return {
     id: 'default',
     identityBase: '',
+    answerStyle: '',
     cvSummary: '',
     jobTitle: '',
     companyName: '',
@@ -76,6 +79,7 @@ const buildDefaultProfile = (): AvatarProfile => {
 const normalizeProfile = (profile: AvatarProfile): AvatarProfile => ({
   ...profile,
   identityBase: clampText(profile.identityBase, AVATAR_LIMITS.identityBase),
+  answerStyle: clampText(profile.answerStyle, AVATAR_LIMITS.answerStyle),
   cvSummary: clampText(profile.cvSummary, AVATAR_LIMITS.cvSummary),
   jobTitle: clampText(profile.jobTitle, AVATAR_LIMITS.jobTitle),
   companyName: clampText(profile.companyName, AVATAR_LIMITS.companyName),
@@ -101,6 +105,7 @@ const loadLegacyProfileFields = (): {
     return {
       fields: {
         identityBase: typeof raw.identityBase === 'string' ? raw.identityBase : undefined,
+        answerStyle: typeof raw.answerStyle === 'string' ? raw.answerStyle : undefined,
         cvSummary:
           typeof raw.cvSummary === 'string'
             ? raw.cvSummary
@@ -129,6 +134,7 @@ const mergeLegacyProfileFields = (
     profile: {
       ...profile,
       identityBase: pickIdentityBase(profile.identityBase, legacy.fields.identityBase),
+      answerStyle: pickFirstNonEmpty(profile.answerStyle, legacy.fields.answerStyle),
       cvSummary: pickFirstNonEmpty(profile.cvSummary, legacy.fields.cvSummary),
       jobTitle: pickFirstNonEmpty(profile.jobTitle, legacy.fields.jobTitle),
       companyName: pickFirstNonEmpty(profile.companyName, legacy.fields.companyName),

@@ -138,6 +138,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 const DEFAULT_AVATAR_PROFILE: AvatarProfile = {
   id: 'default',
   identityBase: '',
+  answerStyle: '',
   cvSummary: '',
   jobTitle: '',
   companyName: '',

@@ -25,6 +25,7 @@ export interface OpenAIConfig {
 
 export interface GenerateAnswerOptions {
   identityBase?: string
+  answerStyle?: string
   interviewContext?: string
   avatarContext?: string
 }
@@ -157,16 +158,19 @@ const shouldFallbackFromResponsesApi = (error: unknown): boolean => {
 
 interface AvatarPromptVariables {
   identityBase: string
+  answerStyle: string
   interviewContext: string
   retrievedCandidateMemory: string
 }
 
 const buildAvatarPromptVariables = (
   identityBase = '',
+  answerStyle = '',
   interviewContext = '',
   avatarContext = ''
 ): AvatarPromptVariables => ({
   identityBase: identityBase.trim(),
+  answerStyle: answerStyle.trim(),
   interviewContext: interviewContext.trim(),
   retrievedCandidateMemory: avatarContext.trim()
 })
@@ -174,6 +178,7 @@ const buildAvatarPromptVariables = (
 const renderAvatarPromptVariables = (variables: AvatarPromptVariables): string => {
   const sections = [
     { label: 'Identity Base', value: variables.identityBase },
+    { label: 'Answer Style', value: variables.answerStyle },
     { label: 'Interview Context', value: variables.interviewContext },
     { label: 'Retrieved Candidate Memory', value: variables.retrievedCandidateMemory }
   ].filter((section) => section.value)
@@ -186,10 +191,16 @@ const renderAvatarPromptVariables = (variables: AvatarPromptVariables): string =
 const getSharedInterviewPrompt = (
   question = '',
   identityBase = '',
+  answerStyle = '',
   interviewContext = '',
   avatarContext = ''
 ): string => {
-  const promptVariables = buildAvatarPromptVariables(identityBase, interviewContext, avatarContext)
+  const promptVariables = buildAvatarPromptVariables(
+    identityBase,
+    answerStyle,
+    interviewContext,
+    avatarContext
+  )
   const structuredContext = renderAvatarPromptVariables(promptVariables)
   const languageOverlay = getLanguageOverlay(question)
 
@@ -206,6 +217,7 @@ ${structuredContext}
 
 Grounding rules:
 - Identity Base is the source of truth for how I speak, reason, and position myself.
+- Answer Style is the source of truth for how my answer should sound out loud.
 - Interview Context is the source of truth for the role, company, and current interview setup.
 - Retrieved Candidate Memory is supporting evidence from my past work. Use it only when it is relevant.
 - Do not present role requirements or company context as if they were already my own past experience.
@@ -315,12 +327,14 @@ const isGenericPythonScriptQuestion = (question: string): boolean => {
 const getSystemPrompt = (
   question = '',
   identityBase = '',
+  answerStyle = '',
   interviewContext = '',
   avatarContext = ''
 ): string => {
   return `${getSharedInterviewPrompt(
     question,
     identityBase,
+    answerStyle,
     interviewContext,
     avatarContext
   )}
@@ -351,6 +365,7 @@ ${isGenericPythonScriptQuestion(question) ? '- For generic Python/script questio
 const getSolutionSystemPrompt = (
   question = '',
   identityBase = '',
+  answerStyle = '',
   interviewContext = '',
   avatarContext = '',
   questionType?: 'leetcode' | 'system-design' | 'other'
@@ -358,6 +373,7 @@ const getSolutionSystemPrompt = (
   const sharedPrompt = getSharedInterviewPrompt(
     question,
     identityBase,
+    answerStyle,
     interviewContext,
     avatarContext
   )
@@ -416,6 +432,7 @@ export class OpenAIService extends EventEmitter {
     const systemPrompt = getSystemPrompt(
       question,
       options?.identityBase || '',
+      options?.answerStyle || '',
       options?.interviewContext || '',
       options?.avatarContext || ''
     )
@@ -427,6 +444,7 @@ export class OpenAIService extends EventEmitter {
       })
       console.log('[OpenAIService] system prompt variables:', buildAvatarPromptVariables(
         options?.identityBase || '',
+        options?.answerStyle || '',
         options?.interviewContext || '',
         options?.avatarContext || ''
       ))
@@ -486,6 +504,7 @@ export class OpenAIService extends EventEmitter {
     const solutionPrompt = getSolutionSystemPrompt(
       questionText || '',
       options?.identityBase || '',
+      options?.answerStyle || '',
       options?.interviewContext || '',
       options?.avatarContext || '',
       questionType
@@ -493,6 +512,7 @@ export class OpenAIService extends EventEmitter {
     if (OPENAI_VERBOSE_LOGS) {
       console.log('[OpenAIService] screenshot prompt variables:', buildAvatarPromptVariables(
         options?.identityBase || '',
+        options?.answerStyle || '',
         options?.interviewContext || '',
         options?.avatarContext || ''
       ))

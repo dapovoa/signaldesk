@@ -15,6 +15,7 @@ export interface AnthropicConfig {
 
 export interface GenerateAnswerOptions {
   identityBase?: string
+  answerStyle?: string
   interviewContext?: string
   avatarContext?: string
 }
@@ -82,6 +83,7 @@ export class AnthropicService extends EventEmitter {
     const systemPrompt = this.buildSystemPrompt(
       question,
       options?.identityBase || '',
+      options?.answerStyle || '',
       options?.interviewContext || '',
       options?.avatarContext || ''
     )
@@ -124,16 +126,18 @@ export class AnthropicService extends EventEmitter {
   private buildSystemPrompt(
     question: string,
     identityBase: string,
+    answerStyle: string,
     interviewContext: string,
     avatarContext: string
   ): string {
-    const structuredContext = [identityBase, interviewContext, avatarContext]
+    const structuredContext = [identityBase, answerStyle, interviewContext, avatarContext]
       .filter(Boolean)
       .join('\n\n')
 
     return `You are conducting a professional job interview as a candidate.
 
 Identity Base is the source of truth for how I speak, reason, and position myself.
+Answer Style is the source of truth for how my answer should sound out loud.
 Interview Context is the source of truth for the role, company, and current interview setup.
 Retrieved Candidate Memory is supporting evidence from my past work. Use it only when it is relevant.
 
