@@ -203,11 +203,7 @@ export const buildLlamaRuntimeEnv = (
   const extraLibraryDirs = unique([
     binaryDir,
     configuredBinDir,
-    ...getBundledLlamaDirectories(),
-    '/opt/rocm/lib',
-    '/opt/rocm/lib64',
-    '/opt/rocm-6.2.4/lib',
-    '/opt/rocm-6.2.4/lib64'
+    ...getBundledLlamaDirectories()
   ]).filter((candidate) => fs.existsSync(candidate))
 
   return {
