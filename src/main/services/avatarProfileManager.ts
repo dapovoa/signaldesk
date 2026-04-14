@@ -147,14 +147,6 @@ export class AvatarProfileManager {
     }
   }
 
-  getAvatarRoot(): string {
-    return path.dirname(this.profilePath)
-  }
-
-  getProfilePath(): string {
-    return this.profilePath
-  }
-
   getProfile(): AvatarProfile {
     this.profile = normalizeProfile(this.profile)
     return { ...this.profile }
