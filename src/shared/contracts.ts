@@ -65,29 +65,7 @@ export interface AvatarProfile {
   jobDescription: string
   companyContext: string
   candidateKnowledge: string
-  sourceDirectory: string
-  embeddingModel: string
-  embeddingModelDir: string
   updatedAt: number
-}
-
-export interface AvatarIndexStatus {
-  available: boolean
-  sourceDirectory: string
-  embeddingModel: string
-  documentCount: number
-  chunkCount: number
-  lastIndexedAt: number | null
-  databasePath: string
-  lastError: string | null
-}
-
-export interface AvatarReindexProgress {
-  totalDocuments: number
-  processedDocuments: number
-  embeddedChunks: number
-  embeddingModel: string
-  currentFile: string | null
 }
 
 export interface AudioSource {

@@ -30,7 +30,6 @@ import {
 } from '../services/avatarProfileManager'
 import { streamChatGPTCodexResponse } from '../services/chatgptCodexClient'
 import { llamaCppLlmServer } from '../services/llamaCppLlmServer'
-import { llamaCppServer } from '../services/llamaCppServer'
 import {
   DEFAULT_LLM_BASE_URL,
   ensureModelsDirectory,
@@ -1070,7 +1069,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
     if (llmModelDirChanged) {
       void llamaCppLlmServer.dispose()
-      void llamaCppServer.dispose()
     }
 
     if (updates.alwaysOnTop !== undefined && mainWindow && !isWaylandSession) {

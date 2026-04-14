@@ -2,12 +2,9 @@ import { app } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
 import type { AvatarProfile } from '../../shared/contracts'
-export type { AvatarIndexStatus, AvatarProfile } from '../../shared/contracts'
+export type { AvatarProfile } from '../../shared/contracts'
 
 export const getDefaultAvatarRoot = (): string => path.join(app.getPath('userData'), 'avatar')
-
-export const getDefaultAvatarSourceDirectory = (): string =>
-  path.join(getDefaultAvatarRoot(), 'sources')
 
 const getLegacySettingsPath = (): string => path.join(app.getPath('userData'), 'settings.json')
 const LEGACY_PROFILE_SETTING_KEYS = [
@@ -68,9 +65,6 @@ const buildDefaultProfile = (): AvatarProfile => {
     jobDescription: '',
     companyContext: '',
     candidateKnowledge: '',
-    sourceDirectory: getDefaultAvatarSourceDirectory(),
-    embeddingModel: '',
-    embeddingModelDir: '',
     updatedAt: Date.now()
   }
 }
@@ -84,9 +78,6 @@ const normalizeProfile = (profile: AvatarProfile): AvatarProfile => ({
   jobDescription: clampText(profile.jobDescription, AVATAR_LIMITS.jobDescription),
   companyContext: clampText(profile.companyContext, AVATAR_LIMITS.companyContext),
   candidateKnowledge: clampText(profile.candidateKnowledge, AVATAR_LIMITS.candidateKnowledge),
-  sourceDirectory: getDefaultAvatarSourceDirectory(),
-  embeddingModel: profile.embeddingModel?.trim() || buildDefaultProfile().embeddingModel,
-  embeddingModelDir: profile.embeddingModelDir?.trim() || buildDefaultProfile().embeddingModelDir,
   updatedAt: profile.updatedAt || Date.now()
 })
 

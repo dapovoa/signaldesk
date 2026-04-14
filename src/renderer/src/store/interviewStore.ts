@@ -128,9 +128,6 @@ const DEFAULT_AVATAR_PROFILE: AvatarProfile = {
   jobDescription: '',
   companyContext: '',
   candidateKnowledge: '',
-  sourceDirectory: '',
-  embeddingModel: '',
-  embeddingModelDir: '',
   updatedAt: 0
 }
 

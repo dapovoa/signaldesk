@@ -33,20 +33,6 @@ export const ensureLlamaBinDirectory = (dir?: string): string => {
   return resolvedDir
 }
 
-export const resolveEmbeddingModelDirectory = (userDir?: string): string => {
-  const configuredDirectory =
-    userDir?.trim() || process.env.SIGNALDESK_EMBED_MODEL_DIR?.trim() || ''
-  const candidates = unique([
-    configuredDirectory,
-    getDefaultModelsDirectory()
-  ])
-
-  return pickFirstExisting(candidates)
-}
-
-export const resolveEmbeddingModelPath = (model: string, userDir?: string): string =>
-  path.join(resolveEmbeddingModelDirectory(userDir), model)
-
 export const resolveLlmModelDirectory = (userDir?: string): string => {
   const configuredDirectory = userDir?.trim() || process.env.SIGNALDESK_LLM_MODEL_DIR?.trim() || ''
   const candidates = unique([configuredDirectory, getDefaultModelsDirectory()])
@@ -64,25 +50,6 @@ const pickFirstExisting = (candidates: string[]): string => {
     }
   }
   return candidates[0] || ''
-}
-
-export const listEmbeddingModels = (userDir?: string): Array<{ id: string; name: string }> => {
-  const directory = resolveEmbeddingModelDirectory(userDir)
-  if (!directory || !fs.existsSync(directory)) {
-    return []
-  }
-
-  const allModels = fs
-    .readdirSync(directory, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.gguf'))
-    .map((entry) => ({
-      id: entry.name,
-      name: entry.name
-    }))
-    .sort((left, right) => left.id.localeCompare(right.id))
-
-  const embeddingModels = allModels.filter((model) => EMBEDDING_MODEL_PATTERN.test(model.id))
-  return embeddingModels.length > 0 ? embeddingModels : allModels
 }
 
 export const listLlmModels = (userDir?: string): Array<{ id: string; name: string }> => {
