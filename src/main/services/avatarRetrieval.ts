@@ -283,7 +283,7 @@ const sanitizeSnippetForPrompt = (content: string): string => {
     .trim()
 }
 
-const limitSnippetLength = (content: string, maxChars = 420): string => {
+const limitSnippetLength = (content: string, maxChars = 220): string => {
   if (content.length <= maxChars) {
     return content
   }
@@ -298,16 +298,31 @@ const limitSnippetLength = (content: string, maxChars = 420): string => {
   return (lastSpace > 80 ? cut.slice(0, lastSpace) : cut).trim()
 }
 
+const buildPromptSnippet = (snippet: AvatarRetrievedSnippet, index: number): string => {
+  const sourceParts = [snippet.title.trim()]
+
+  if (snippet.sectionTitle.trim() && snippet.sectionTitle.trim() !== snippet.title.trim()) {
+    sourceParts.push(snippet.sectionTitle.trim())
+  }
+
+  const facts = limitSnippetLength(sanitizeSnippetForPrompt(snippet.content), 220)
+
+  return [
+    `Memory ${index + 1}`,
+    `Source: ${sourceParts.join(' / ')}`,
+    `Kind: ${snippet.kind}`,
+    `Facts: ${facts}`
+  ].join('\n')
+}
+
 const buildPromptContext = (snippets: AvatarRetrievedSnippet[]): string => {
   if (snippets.length === 0) {
     return ''
   }
 
   return snippets
-    .map((snippet) => {
-      const normalizedContent = sanitizeSnippetForPrompt(snippet.content)
-      return limitSnippetLength(normalizedContent)
-    })
+    .slice(0, 3)
+    .map((snippet, index) => buildPromptSnippet(snippet, index))
     .join('\n\n')
 }
 

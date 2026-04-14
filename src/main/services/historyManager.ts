@@ -67,8 +67,16 @@ export class HistoryManager {
     const history = this.loadHistory()
     // Add new entries at the beginning
     const newHistory = [...entries, ...history]
-    // Remove duplicates based on id
-    const uniqueHistory = Array.from(new Map(newHistory.map((entry) => [entry.id, entry])).values())
+    // Remove duplicates based on id while preserving first occurrence priority.
+    const seenIds = new Set<string>()
+    const uniqueHistory = newHistory.filter((entry) => {
+      if (seenIds.has(entry.id)) {
+        return false
+      }
+
+      seenIds.add(entry.id)
+      return true
+    })
     // Keep only last 500 entries
     const trimmedHistory = uniqueHistory.slice(0, this.maxHistoryLength)
     this.saveHistory(trimmedHistory)

@@ -475,7 +475,12 @@ export class AvatarIngestionService {
       }
 
       const chunkIds = this.store.replaceDocumentChunks(result.documentId, chunks)
-      const embeddings = await this.embeddingProvider.embedDocuments(chunks.map((chunk) => chunk.content))
+      const embeddings = await this.embeddingProvider.embedDocuments(
+        chunks.map((chunk) => ({
+          title: chunk.sectionTitle || title,
+          content: chunk.content
+        }))
+      )
       const dimensions = embeddings[0]?.length
 
       if (!dimensions) continue

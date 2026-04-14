@@ -1,5 +1,10 @@
 import { EventEmitter } from 'events'
 import OpenAI from 'openai'
+import {
+  AvatarPromptVariables,
+  buildAvatarAnswerPrompt,
+  buildAvatarSolutionPrompt
+} from './avatarAnswerFlow'
 import { streamChatGPTCodexResponse } from './chatgptCodexClient'
 import { getDefaultOutputTokens } from './llmDefaults'
 import { createOpenAIClient } from './openaiClient'
@@ -156,13 +161,6 @@ const shouldFallbackFromResponsesApi = (error: unknown): boolean => {
   return false
 }
 
-interface AvatarPromptVariables {
-  identityBase: string
-  answerStyle: string
-  interviewContext: string
-  retrievedCandidateMemory: string
-}
-
 const buildAvatarPromptVariables = (
   identityBase = '',
   answerStyle = '',
@@ -175,155 +173,6 @@ const buildAvatarPromptVariables = (
   retrievedCandidateMemory: avatarContext.trim()
 })
 
-const renderAvatarPromptVariables = (variables: AvatarPromptVariables): string => {
-  const sections = [
-    { label: 'Identity Base', value: variables.identityBase },
-    { label: 'Answer Style', value: variables.answerStyle },
-    { label: 'Interview Context', value: variables.interviewContext },
-    { label: 'Retrieved Candidate Memory', value: variables.retrievedCandidateMemory }
-  ].filter((section) => section.value)
-
-  if (sections.length === 0) return ''
-
-  return sections.map((section) => `${section.label}:\n${section.value}`).join('\n\n')
-}
-
-const getSharedInterviewPrompt = (
-  question = '',
-  identityBase = '',
-  answerStyle = '',
-  interviewContext = '',
-  avatarContext = ''
-): string => {
-  const promptVariables = buildAvatarPromptVariables(
-    identityBase,
-    answerStyle,
-    interviewContext,
-    avatarContext
-  )
-  const structuredContext = renderAvatarPromptVariables(promptVariables)
-  const languageOverlay = getLanguageOverlay(question)
-
-  return `
-You are me in a real technical interview.
-
-${
-  structuredContext
-    ? `Use this context when it is relevant:
-${structuredContext}
-`
-    : ''
-}
-
-Grounding rules:
-- Identity Base is the source of truth for how I speak, reason, and position myself.
-- Answer Style is the source of truth for how my answer should sound out loud.
-- Interview Context is the source of truth for the role, company, and current interview setup.
-- Retrieved Candidate Memory is supporting evidence from my past work. Use it only when it is relevant.
-- Do not present role requirements or company context as if they were already my own past experience.
-- Do not invent company facts, product details, team details, or business context if they are not provided.
-- Do not claim I have used a specific tool, service, framework, or platform unless it is grounded in the provided context as my own past experience.
-- If the interviewer mentions a tool, framework, or platform, treat that as a hypothetical or target environment unless my own prior use is grounded in the provided context.
-- Never invent named tools, products, services, or frameworks just to make the answer sound more complete.
-- If something is not grounded, keep it generic or say what I would check first.
-
-${languageOverlay}
-`
-}
-
-type PromptLanguage = 'pt' | 'en' | 'mixed'
-
-const detectPromptLanguage = (question: string): PromptLanguage => {
-  const lower = question.toLowerCase()
-  const ptSignals = [
-    ' como ',
-    ' porque ',
-    ' porquê ',
-    ' qual ',
-    ' quais ',
-    ' onde ',
-    ' quando ',
-    ' experiência ',
-    ' equipa ',
-    ' empresa ',
-    ' função ',
-    ' sistema ',
-    ' infraestrutura ',
-    ' desempenho '
-  ]
-  const enSignals = [
-    ' how ',
-    ' why ',
-    ' what ',
-    ' which ',
-    ' where ',
-    ' when ',
-    ' experience ',
-    ' team ',
-    ' company ',
-    ' role ',
-    ' system ',
-    ' infrastructure ',
-    ' performance '
-  ]
-
-  const normalized = ` ${lower} `
-  const ptCount = ptSignals.filter((signal) => normalized.includes(signal)).length
-  const enCount = enSignals.filter((signal) => normalized.includes(signal)).length
-
-  if (ptCount > 0 && enCount > 0) return 'mixed'
-  if (ptCount > 0) return 'pt'
-  return 'en'
-}
-
-const getLanguageOverlay = (question: string): string => {
-  const language = detectPromptLanguage(question)
-
-  if (language === 'pt') {
-    return `
-Language overlay for this answer:
-- Respond in European Portuguese (pt-PT).`
-  }
-
-  if (language === 'mixed') {
-    return `
-Language overlay for this answer:
-- Mirror the interviewer's mixed PT/EN style naturally.`
-  }
-
-  return `
-Language overlay for this answer:
-- Respond in English.`
-}
-
-const isExperienceStyleQuestion = (question: string): boolean => {
-  const normalized = ` ${question.toLowerCase()} `
-  const signals = [
-    ' tell me about yourself ',
-    ' walk me through your experience ',
-    ' your experience ',
-    ' your background ',
-    ' what have you been doing ',
-    ' what you have been doing ',
-    ' can you walk me through ',
-    ' fala-me de ti ',
-    ' fala me de ti ',
-    ' a tua experiência ',
-    ' seu percurso ',
-    ' teu percurso ',
-    ' teu background '
-  ]
-
-  return signals.some((signal) => normalized.includes(signal))
-}
-
-const isGenericPythonScriptQuestion = (question: string): boolean => {
-  const lower = question.toLowerCase()
-  const asksPythonOrScript = /(python|script|automation script)/.test(lower)
-  const explicitlyDataPipeline = /(data pipeline|data flow|ingestion|warehouse|batch)/.test(lower)
-  return asksPythonOrScript && !explicitlyDataPipeline
-}
-
 const getSystemPrompt = (
   question = '',
   identityBase = '',
@@ -331,35 +180,10 @@ const getSystemPrompt = (
   interviewContext = '',
   avatarContext = ''
 ): string => {
-  return `${getSharedInterviewPrompt(
+  return buildAvatarAnswerPrompt(
     question,
-    identityBase,
-    answerStyle,
-    interviewContext,
-    avatarContext
-  )}
-
-Execution rules:
-- Identity Base is mandatory and has higher priority than interviewer style or wording.
-- Answer the current interview question directly.
-- Default to first-person singular ("I"), not "we", unless the interviewer is clearly asking about team coordination.
-- Keep the answer grounded in Identity Base, Interview Context, and Retrieved Candidate Memory.
-- If the provided context does not support a factual claim, do not invent it.
-- Prefer real work experience and production incidents over personal projects.
-- Mention personal projects only when the interviewer explicitly asks about projects, portfolio, or side work.
-- Keep the answer short, light, and human. This is a real interview answer, not a lecture or script.
-- Output contract (mandatory):
-  1) Plain text only. No markdown, no bullets, no numbered lists, no headings.
-  2) Default to 2 sentences. Hard maximum: 3 sentences.
-  3) Keep vocabulary simple and natural.
-  4) Focus on one concrete path and stop. Do not expand with optional sections.
-  5) No filler, no motivational language, no coaching tone.
-  6) Keep sentence flow natural and spoken.
-  7) Avoid heavy jargon and acronyms unless the interviewer explicitly used them.
-  8) Prefer plain wording over specialist labels when both are correct.
-${isExperienceStyleQuestion(question) ? '- For background/experience questions: use past tense by default and keep it plain.' : ''}
-${isGenericPythonScriptQuestion(question) ? '- For generic Python/script questions: do not default to data pipeline examples unless the interviewer asks for that context.' : ''}
-`
+    buildAvatarPromptVariables(identityBase, answerStyle, interviewContext, avatarContext)
+  )
 }
 
 const getSolutionSystemPrompt = (
@@ -370,41 +194,11 @@ const getSolutionSystemPrompt = (
   avatarContext = '',
   questionType?: 'leetcode' | 'system-design' | 'other'
 ): string => {
-  const sharedPrompt = getSharedInterviewPrompt(
+  return buildAvatarSolutionPrompt(
     question,
-    identityBase,
-    answerStyle,
-    interviewContext,
-    avatarContext
+    buildAvatarPromptVariables(identityBase, answerStyle, interviewContext, avatarContext),
+    questionType
   )
-
-  if (questionType === 'leetcode') {
-    return `${sharedPrompt}
-
-This is a coding problem from a live interview.
-- Answer as a candidate speaking out loud, not as a tutor writing a solution sheet.
-- Start with the approach and the key data structure or algorithm.
-- Keep it concise and practical.
-- Do not output markdown, bullets, headings, or code unless the interviewer explicitly asks to write code.
-- Mention complexity only if it materially supports the answer.`
-  } else if (questionType === 'system-design') {
-    return `${sharedPrompt}
-
-This is a system design discussion from a live interview.
-- Clarify assumptions when needed.
-- Walk through the design in a practical order.
-- Mention trade-offs only when they matter to the design choice.
-- Keep the explanation grounded and conversational.
-- Do not output markdown, bullets, headings, or long structured sections.`
-  } else {
-    return `${sharedPrompt}
-
-This is a live technical interview question.
-- Answer it directly.
-- Keep the explanation practical.
-- Add extra detail only when the question clearly needs it.
-- Do not output markdown, bullets, headings, or long structured sections.`
-  }
 }
 
 export class OpenAIService extends EventEmitter {

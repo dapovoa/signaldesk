@@ -17,7 +17,7 @@ function App(): React.JSX.Element {
 
   // Apply window opacity from settings
   useEffect(() => {
-    if (settings.windowOpacity && settings.windowOpacity !== 1) {
+    if (Number.isFinite(settings.windowOpacity) && settings.windowOpacity !== 1) {
       window.api.setWindowOpacity(settings.windowOpacity)
     }
   }, [settings.windowOpacity])

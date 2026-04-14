@@ -13,7 +13,6 @@ const getLegacySettingsPath = (): string => path.join(app.getPath('userData'), '
 const LEGACY_PROFILE_SETTING_KEYS = [
   'identityBase',
   'answerStyle',
-  'cvSummary',
   'jobTitle',
   'companyName',
   'jobDescription',
@@ -24,7 +23,6 @@ const LEGACY_PROFILE_SETTING_KEYS = [
 const AVATAR_LIMITS = {
   identityBase: 2400,
   answerStyle: 700,
-  cvSummary: 700,
   jobTitle: 60,
   companyName: 30,
   jobDescription: 1600,
@@ -64,7 +62,6 @@ const buildDefaultProfile = (): AvatarProfile => {
     id: 'default',
     identityBase: '',
     answerStyle: '',
-    cvSummary: '',
     jobTitle: '',
     companyName: '',
     jobDescription: '',
@@ -80,7 +77,6 @@ const normalizeProfile = (profile: AvatarProfile): AvatarProfile => ({
   ...profile,
   identityBase: clampText(profile.identityBase, AVATAR_LIMITS.identityBase),
   answerStyle: clampText(profile.answerStyle, AVATAR_LIMITS.answerStyle),
-  cvSummary: clampText(profile.cvSummary, AVATAR_LIMITS.cvSummary),
   jobTitle: clampText(profile.jobTitle, AVATAR_LIMITS.jobTitle),
   companyName: clampText(profile.companyName, AVATAR_LIMITS.companyName),
   jobDescription: clampText(profile.jobDescription, AVATAR_LIMITS.jobDescription),
@@ -106,12 +102,6 @@ const loadLegacyProfileFields = (): {
       fields: {
         identityBase: typeof raw.identityBase === 'string' ? raw.identityBase : undefined,
         answerStyle: typeof raw.answerStyle === 'string' ? raw.answerStyle : undefined,
-        cvSummary:
-          typeof raw.cvSummary === 'string'
-            ? raw.cvSummary
-            : typeof raw.resumeDescription === 'string'
-              ? raw.resumeDescription
-              : undefined,
         jobTitle: typeof raw.jobTitle === 'string' ? raw.jobTitle : undefined,
         companyName: typeof raw.companyName === 'string' ? raw.companyName : undefined,
         jobDescription: typeof raw.jobDescription === 'string' ? raw.jobDescription : undefined,
@@ -135,7 +125,6 @@ const mergeLegacyProfileFields = (
       ...profile,
       identityBase: pickIdentityBase(profile.identityBase, legacy.fields.identityBase),
       answerStyle: pickFirstNonEmpty(profile.answerStyle, legacy.fields.answerStyle),
-      cvSummary: pickFirstNonEmpty(profile.cvSummary, legacy.fields.cvSummary),
       jobTitle: pickFirstNonEmpty(profile.jobTitle, legacy.fields.jobTitle),
       companyName: pickFirstNonEmpty(profile.companyName, legacy.fields.companyName),
       jobDescription: pickFirstNonEmpty(profile.jobDescription, legacy.fields.jobDescription),

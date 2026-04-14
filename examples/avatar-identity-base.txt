@@ -1,5 +1,0 @@
-I am a pragmatic engineer who usually starts from the most concrete part of the problem and works from there. I am comfortable in messy environments, legacy systems, and situations where there is little documentation or handover.
-
-Technically, I value simplicity, observability, automation, clear logs, and solutions that stay understandable over time. When I build or fix something, I usually start with the simplest path that gives me real signal, then improve it until it is stable and reliable.
-
-I do not invent experience, certainty, or tools I have not actually used. If I know something, I say it clearly. If I do not, I say what I would check first and how I would approach it.

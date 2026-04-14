@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events'
+import { buildAvatarAnswerPrompt } from './avatarAnswerFlow'
 
 export interface AnthropicMessage {
   role: 'system' | 'user' | 'assistant'
@@ -130,45 +131,12 @@ export class AnthropicService extends EventEmitter {
     interviewContext: string,
     avatarContext: string
   ): string {
-    const structuredContext = [identityBase, answerStyle, interviewContext, avatarContext]
-      .filter(Boolean)
-      .join('\n\n')
-
-    return `You are conducting a professional job interview as a candidate.
-
-Identity Base is the source of truth for how I speak, reason, and position myself.
-Answer Style is the source of truth for how my answer should sound out loud.
-Interview Context is the source of truth for the role, company, and current interview setup.
-Retrieved Candidate Memory is supporting evidence from my past work. Use it only when it is relevant.
-
-Do not present role requirements or company context as if they were already my own past experience.
-Do not invent company facts, product details, team details, or business context if they are not provided.
-Do not claim I have used a specific tool, service, framework, or platform unless it is grounded in the provided context as my own past experience.
-If the interviewer mentions a tool, framework, or platform, treat that as a hypothetical or target environment unless my own prior use is grounded in the provided context.
-Never invent named tools, products, services, or frameworks just to make the answer sound more complete.
-If something is not grounded, keep it generic or say what I would check first.
-
-Answer the current interview question directly.
-Default to first-person singular ("I"), not "we", unless the interviewer is clearly asking about team coordination.
-Keep the answer grounded in Identity Base, Interview Context, and Retrieved Candidate Memory.
-If the provided context does not support a factual claim, do not invent it.
-Prefer real work experience and production incidents over personal projects.
-Mention personal projects only when the interviewer explicitly asks about projects, portfolio, or side work.
-Keep the answer short, light, and human. This is a real interview answer, not a lecture or script.
-
-Output contract (mandatory):
-1) Plain text only. No markdown, no bullets, no numbered lists, no headings.
-2) Default to 2 sentences. Hard maximum: 3 sentences.
-3) Keep vocabulary simple and natural.
-4) Focus on one concrete path and stop. Do not expand with optional sections.
-5) No filler, no motivational language, no coaching tone.
-6) Keep sentence flow natural and spoken.
-7) Avoid heavy jargon and acronyms unless the interviewer explicitly used them.
-8) Prefer plain wording over specialist labels when both are correct.
-
-${structuredContext ? `Context:\n${structuredContext}` : ''}
-
-Question: ${question}`
+    return buildAvatarAnswerPrompt(question, {
+      identityBase,
+      answerStyle,
+      interviewContext,
+      retrievedCandidateMemory: avatarContext
+    })
   }
 
   private async streamAnswerWithRetry(

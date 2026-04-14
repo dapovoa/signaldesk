@@ -14,7 +14,6 @@ import { AvatarProfile, useInterviewStore } from '../store/interviewStore'
 const AVATAR_LIMITS = {
   identityBase: 2400,
   answerStyle: 700,
-  cvSummary: 700,
   jobTitle: 60,
   companyName: 30,
   jobDescription: 1600,
@@ -95,6 +94,7 @@ export function AvatarModal(): React.ReactNode | null {
   const [embeddingModelsError, setEmbeddingModelsError] = useState<string | null>(null)
   const [embeddingTestStatus, setEmbeddingTestStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle')
   const [embeddingTestMessage, setEmbeddingTestMessage] = useState('')
+  const [embeddingRefreshTick, setEmbeddingRefreshTick] = useState(0)
 
   useEffect(() => {
     setLocalProfile(avatarProfile)
@@ -169,7 +169,29 @@ export function AvatarModal(): React.ReactNode | null {
     }
 
     loadEmbeddingModels()
-  }, [showAvatar, localProfile.embeddingModel, localProfile.embeddingModelDir])
+  }, [showAvatar, localProfile.embeddingModel, localProfile.embeddingModelDir, embeddingRefreshTick])
+
+  useEffect(() => {
+    if (!showAvatar) return
+
+    const refreshModels = (): void => {
+      setEmbeddingRefreshTick((value) => value + 1)
+    }
+
+    const handleVisibilityChange = (): void => {
+      if (document.visibilityState === 'visible') {
+        refreshModels()
+      }
+    }
+
+    window.addEventListener('focus', refreshModels)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener('focus', refreshModels)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [showAvatar])
 
   if (!showAvatar) return null
 
@@ -266,6 +288,23 @@ export function AvatarModal(): React.ReactNode | null {
     setTimeout(() => setEmbeddingTestStatus('idle'), 3000)
   }
 
+  const handleOpenEmbeddingModelsFolder = async (): Promise<void> => {
+    try {
+      const result = await window.api.openEmbeddingModelsFolder()
+      if (!result.success) {
+        setEmbeddingModelsError(result.error || 'Failed to open embedding models folder.')
+        return
+      }
+
+      setEmbeddingRefreshTick((value) => value + 1)
+    } catch (error) {
+      console.error('Failed to open embedding models folder:', error)
+      setEmbeddingModelsError(
+        error instanceof Error ? error.message : 'Failed to open embedding models folder.'
+      )
+    }
+  }
+
   const status = avatarIndexStatus
   const isReindexing = reindexStatus === 'running'
   const visibleDocumentCount = isReindexing
@@ -339,28 +378,6 @@ export function AvatarModal(): React.ReactNode | null {
             </div>
 
             <SectionDivider label="Interview Context" />
-
-            <div className="space-y-2 pt-1">
-              <div className="flex items-center justify-between gap-3">
-                <label className={fieldLabelClassName}>CV Summary</label>
-                <span className="text-xs text-dark-400">
-                  {getLength(localProfile.cvSummary)}/{AVATAR_LIMITS.cvSummary}
-                </span>
-              </div>
-              <AutoResizeTextarea
-                value={localProfile.cvSummary}
-                onChange={(e) =>
-                  setLocalProfile({
-                    ...localProfile,
-                    cvSummary: clampField('cvSummary', e.target.value)
-                  })
-                }
-                rows={5}
-                maxLength={AVATAR_LIMITS.cvSummary}
-                placeholder="Summarize your background, strengths, and relevant experience..."
-                className={textareaClassName}
-              />
-            </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-2">
@@ -500,12 +517,7 @@ export function AvatarModal(): React.ReactNode | null {
                   </select>
                   <button
                     type="button"
-                    onClick={async () => {
-                      const result = await window.api.openEmbeddingModelsFolder()
-                      if (!result.success) {
-                        setEmbeddingModelsError(result.error || 'Failed to open embedding models folder.')
-                      }
-                    }}
+                    onClick={() => void handleOpenEmbeddingModelsFolder()}
                     className="flex items-center justify-center rounded-lg border border-white/5 bg-white/[0.04] px-3 py-2 text-sm font-medium text-dark-200 transition-colors hover:border-cyan-400/15 hover:bg-cyan-400/8 hover:text-dark-100"
                     title="Open embedding models folder"
                   >

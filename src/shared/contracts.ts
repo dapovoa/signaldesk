@@ -60,7 +60,6 @@ export interface AvatarProfile {
   id: string
   identityBase: string
   answerStyle: string
-  cvSummary: string
   jobTitle: string
   companyName: string
   jobDescription: string

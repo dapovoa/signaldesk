@@ -40,6 +40,7 @@ export class WhisperService extends EventEmitter {
   private isProcessing = false
   private isRunning = false
   private processInterval: NodeJS.Timeout | null = null
+  private processingPromise: Promise<void> | null = null
   private lastAudioTime = 0
   private readonly SAMPLE_RATE = 16000
   private readonly BYTES_PER_SAMPLE = 2 // 16-bit audio
@@ -112,12 +113,10 @@ export class WhisperService extends EventEmitter {
       this.processInterval = null
     }
 
-    // Process any remaining audio
-    if (this.audioBuffer.length > 0) {
-      this.processAudioBuffer()
-    }
-
     this.audioBuffer = []
+    if (this.processingPromise) {
+      await this.processingPromise.catch(() => undefined)
+    }
     if (WHISPER_VERBOSE) {
       console.log('WhisperService stopped')
     }
@@ -191,7 +190,7 @@ export class WhisperService extends EventEmitter {
           `===> Processing: ${(bufferDuration / 1000).toFixed(2)}s audio, ${(timeSinceLastAudio / 1000).toFixed(2)}s since last audio`
         )
       }
-      this.processAudioBuffer()
+      void this.processAudioBuffer()
     }
   }
 
@@ -215,7 +214,7 @@ export class WhisperService extends EventEmitter {
     }
 
     let tempFile: string | null = null
-    try {
+    const processing = (async () => {
       // Create WAV file from raw PCM data
       const wavBuffer = this.createWavBuffer(combinedBuffer)
 
@@ -229,6 +228,10 @@ export class WhisperService extends EventEmitter {
 
       // Send to Whisper API
       const transcription = await this.transcribeWithRetry(tempFile)
+
+      if (!this.isRunning) {
+        return
+      }
 
       const text = transcription.text?.trim()
 
@@ -253,9 +256,17 @@ export class WhisperService extends EventEmitter {
           this.emit('utteranceEnd')
         }
       }
+    })()
+
+    this.processingPromise = processing
+
+    try {
+      await processing
     } catch (error) {
       console.error('Transcription error:', error)
-      this.emit('error', error instanceof Error ? error : new Error('Transcription failed'))
+      if (this.isRunning) {
+        this.emit('error', error instanceof Error ? error : new Error('Transcription failed'))
+      }
     } finally {
       if (tempFile && fs.existsSync(tempFile)) {
         try {
@@ -264,6 +275,7 @@ export class WhisperService extends EventEmitter {
           // Ignore temp file cleanup errors
         }
       }
+      this.processingPromise = null
       this.isProcessing = false
     }
   }

@@ -171,6 +171,7 @@ export function SettingsModal(): React.ReactNode | null {
     warning: ''
   })
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const [llmModelsRefreshTick, setLlmModelsRefreshTick] = useState(0)
   const {
     llmProvider,
     llmAuthMode,
@@ -342,8 +343,31 @@ export function SettingsModal(): React.ReactNode | null {
     llmAuthMode,
     llmBaseUrl,
     llmCustomHeaders,
-    localSettings.llmModelDir
+    localSettings.llmModelDir,
+    llmModelsRefreshTick
   ])
+
+  useEffect(() => {
+    if (!showSettings) return
+
+    const refreshModels = (): void => {
+      setLlmModelsRefreshTick((value) => value + 1)
+    }
+
+    const handleVisibilityChange = (): void => {
+      if (document.visibilityState === 'visible') {
+        refreshModels()
+      }
+    }
+
+    window.addEventListener('focus', refreshModels)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener('focus', refreshModels)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [showSettings])
 
   useEffect(() => {
     if (modelsLoading) {
@@ -608,6 +632,8 @@ export function SettingsModal(): React.ReactNode | null {
       if (!result.success) {
         throw new Error(result.error || 'Failed to open GGUF models folder.')
       }
+
+      setLlmModelsRefreshTick((value) => value + 1)
     } catch (err) {
       setConnectionStatus('error')
       setConnectionMessage(

@@ -463,7 +463,6 @@ const validateTranscriptionSettings = (settings: AppSettings): string | null => 
 
 const buildInterviewContext = (profile: AvatarProfile): string => {
   const sections = [
-    { label: 'Candidate Background', value: profile.cvSummary.trim() },
     { label: 'Target Role', value: profile.jobTitle.trim() },
     { label: 'Company', value: profile.companyName.trim() },
     { label: 'Job Description', value: profile.jobDescription.trim() },

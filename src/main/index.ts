@@ -36,6 +36,25 @@ const resolveLinuxWindowIcon = (): string | undefined => {
   return candidates.find((candidate) => existsSync(candidate))
 }
 
+const isTrustedRendererUrl = (url: string): boolean => {
+  if (!url) return false
+
+  if (url.startsWith('file://')) {
+    return true
+  }
+
+  if (!is.dev) {
+    return false
+  }
+
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'http:' && (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1')
+  } catch {
+    return false
+  }
+}
+
 function createWindow(): void {
   const settingsManager = new SettingsManager()
   const settings = settingsManager.getSettings()
@@ -93,13 +112,19 @@ function createWindow(): void {
   initializeIpcHandlers(mainWindow, isWaylandSession)
 
   // Grant microphone permissions
-  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
-    const allowedPermissions = ['media', 'mediaKeySystem', 'audioCapture']
-    if (allowedPermissions.includes(permission)) {
-      callback(true)
-    } else {
-      callback(false)
+  const allowedPermissions = new Set(['media', 'audioCapture'])
+  const isTrustedWebContents = (url: string): boolean => isTrustedRendererUrl(url)
+
+  session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
+    if (!webContents) {
+      return false
     }
+
+    return allowedPermissions.has(permission) && isTrustedWebContents(webContents.getURL())
+  })
+
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(allowedPermissions.has(permission) && isTrustedWebContents(_webContents.getURL()))
   })
 
   // HMR for renderer base on electron-vite cli.

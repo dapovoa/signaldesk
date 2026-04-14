@@ -33,10 +33,15 @@ export interface IngestedChunk {
   metadata?: Record<string, unknown>
 }
 
+export interface EmbeddingDocumentInput {
+  content: string
+  title?: string
+}
+
 export interface EmbeddingProvider {
   readonly provider: string
   readonly model: string
   embedQuery(input: string): Promise<number[]>
-  embedDocuments(input: string[]): Promise<number[][]>
+  embedDocuments(input: EmbeddingDocumentInput[]): Promise<number[][]>
   warmup?(): Promise<void>
 }

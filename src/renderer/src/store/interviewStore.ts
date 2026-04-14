@@ -139,7 +139,6 @@ const DEFAULT_AVATAR_PROFILE: AvatarProfile = {
   id: 'default',
   identityBase: '',
   answerStyle: '',
-  cvSummary: '',
   jobTitle: '',
   companyName: '',
   jobDescription: '',

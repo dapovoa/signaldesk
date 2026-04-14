@@ -1,4 +1,4 @@
-import { EmbeddingProvider } from './avatarTypes'
+import { EmbeddingDocumentInput, EmbeddingProvider } from './avatarTypes'
 import { llamaCppServer } from './llamaCppServer'
 
 interface EmbeddingResponse {
@@ -38,12 +38,12 @@ export class LlamaCppEmbeddingProvider implements EmbeddingProvider {
   }
 
   async embedQuery(input: string): Promise<number[]> {
-    const results = await this.embed([this.applyPrefix(this.queryPrefix, input)])
+    const results = await this.embed([this.formatQueryInput(input)])
     return results[0] || []
   }
 
-  async embedDocuments(input: string[]): Promise<number[][]> {
-    return this.embed(input.map((value) => this.applyPrefix(this.documentPrefix, value)))
+  async embedDocuments(input: EmbeddingDocumentInput[]): Promise<number[][]> {
+    return this.embed(input.map((value) => this.formatDocumentInput(value)))
   }
 
   async warmup(): Promise<void> {
@@ -56,6 +56,27 @@ export class LlamaCppEmbeddingProvider implements EmbeddingProvider {
   private applyPrefix(prefix: string, value: string): string {
     const trimmedPrefix = prefix.trim()
     return trimmedPrefix ? `${trimmedPrefix} ${value}` : value
+  }
+
+  private isEmbeddingGemmaModel(): boolean {
+    return /embeddinggemma/i.test(this.model)
+  }
+
+  private formatQueryInput(value: string): string {
+    if (this.isEmbeddingGemmaModel()) {
+      return `task: search result | query: ${value}`
+    }
+
+    return this.applyPrefix(this.queryPrefix, value)
+  }
+
+  private formatDocumentInput(input: EmbeddingDocumentInput): string {
+    if (this.isEmbeddingGemmaModel()) {
+      const title = input.title?.trim() || 'none'
+      return `title: ${title} | text: ${input.content}`
+    }
+
+    return this.applyPrefix(this.documentPrefix, input.content)
   }
 
   private async embed(input: string[]): Promise<number[][]> {
