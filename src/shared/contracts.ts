@@ -64,6 +64,7 @@ export interface AvatarProfile {
   companyName: string
   jobDescription: string
   companyContext: string
+  candidateKnowledge: string
   sourceDirectory: string
   embeddingModel: string
   embeddingModelDir: string

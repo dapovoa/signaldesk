@@ -4,9 +4,7 @@ import type {
   AnswerEntry,
   AppSettings,
   AudioSourceSelectionResult,
-  AvatarIndexStatus,
   AvatarProfile,
-  AvatarReindexProgress,
   DetectedQuestion,
   DetectedQuestionFromImage,
   TranscriptEvent,
@@ -17,9 +15,7 @@ export type {
   AppSettings,
   AudioSource,
   AudioSourceSelectionResult,
-  AvatarIndexStatus,
   AvatarProfile,
-  AvatarReindexProgress,
   DetectedQuestion,
   DetectedQuestionFromImage,
   TranscriptEvent,
@@ -42,12 +38,6 @@ const api = {
     llmModelDir?: string
   }): Promise<{ success: boolean; models: Array<{ id: string; name: string }>; error?: string }> =>
     ipcRenderer.invoke('fetch-llm-models', payload),
-  fetchEmbeddingModels: (userDir?: string): Promise<{
-    success: boolean
-    models: Array<{ id: string; name: string }>
-    directory: string
-    error?: string
-  }> => ipcRenderer.invoke('fetch-embedding-models', userDir),
   testProviderConnection: (payload: {
     apiKey?: string
     oauthToken?: string
@@ -87,18 +77,8 @@ const api = {
   getAvatarProfile: (): Promise<AvatarProfile> => ipcRenderer.invoke('get-avatar-profile'),
   updateAvatarProfile: (updates: Partial<AvatarProfile>): Promise<AvatarProfile> =>
     ipcRenderer.invoke('update-avatar-profile', updates),
-  openAvatarMemoryFolder: (): Promise<{ success: boolean; path: string; error?: string }> =>
-    ipcRenderer.invoke('open-avatar-memory-folder'),
-  openEmbeddingModelsFolder: (): Promise<{ success: boolean; path: string; error?: string }> =>
-    ipcRenderer.invoke('open-embedding-models-folder'),
   openLlmModelsFolder: (): Promise<{ success: boolean; path: string; error?: string }> =>
     ipcRenderer.invoke('open-llm-models-folder'),
-  getAvatarIndexStatus: (): Promise<AvatarIndexStatus> =>
-    ipcRenderer.invoke('get-avatar-index-status'),
-  reindexAvatarSources: (): Promise<AvatarIndexStatus> =>
-    ipcRenderer.invoke('reindex-avatar-sources'),
-  testEmbeddingModel: (model: string, userDir?: string): Promise<{ valid: boolean; error?: string }> =>
-    ipcRenderer.invoke('test-embedding-model', model, userDir),
   startCapture: (): Promise<{ success: boolean }> => ipcRenderer.invoke('start-capture'),
   stopCapture: (): Promise<{ success: boolean }> => ipcRenderer.invoke('stop-capture'),
   sendAudioData: (audioData: ArrayBuffer): void => ipcRenderer.send('audio-data', audioData),
@@ -227,13 +207,6 @@ const api = {
       callback(data)
     ipcRenderer.on('screenshot-no-question', handler)
     return () => ipcRenderer.removeListener('screenshot-no-question', handler)
-  },
-
-  onAvatarReindexProgress: (callback: (progress: AvatarReindexProgress) => void): (() => void) => {
-    const handler = (_event: Electron.IpcRendererEvent, progress: AvatarReindexProgress): void =>
-      callback(progress)
-    ipcRenderer.on('avatar-reindex-progress', handler)
-    return () => ipcRenderer.removeListener('avatar-reindex-progress', handler)
   },
 
   onGenerationStart: (callback: () => void): (() => void) => {

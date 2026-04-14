@@ -3,9 +3,7 @@ import type {
   AnswerEntry,
   AppSettings,
   AudioSourceSelectionResult,
-  AvatarIndexStatus,
   AvatarProfile,
-  AvatarReindexProgress,
   DetectedQuestion,
   DetectedQuestionFromImage,
   TranscriptEvent,
@@ -16,9 +14,7 @@ export type {
   AppSettings,
   AudioSource,
   AudioSourceSelectionResult,
-  AvatarIndexStatus,
   AvatarProfile,
-  AvatarReindexProgress,
   DetectedQuestion,
   DetectedQuestionFromImage,
   TranscriptEvent,
@@ -38,12 +34,6 @@ export interface Api {
     customHeaders?: string
     llmModelDir?: string
   }) => Promise<{ success: boolean; models: Array<{ id: string; name: string }>; error?: string }>
-  fetchEmbeddingModels: (userDir?: string) => Promise<{
-    success: boolean
-    models: Array<{ id: string; name: string }>
-    directory: string
-    error?: string
-  }>
   testProviderConnection: (payload: {
     apiKey?: string
     oauthToken?: string
@@ -76,12 +66,7 @@ export interface Api {
   disconnectOpenAIOAuth: () => Promise<{ success: boolean; settings?: AppSettings; error?: string }>
   getAvatarProfile: () => Promise<AvatarProfile>
   updateAvatarProfile: (updates: Partial<AvatarProfile>) => Promise<AvatarProfile>
-  openAvatarMemoryFolder: () => Promise<{ success: boolean; path: string; error?: string }>
-  openEmbeddingModelsFolder: () => Promise<{ success: boolean; path: string; error?: string }>
   openLlmModelsFolder: () => Promise<{ success: boolean; path: string; error?: string }>
-  getAvatarIndexStatus: () => Promise<AvatarIndexStatus>
-  reindexAvatarSources: () => Promise<AvatarIndexStatus>
-  testEmbeddingModel: (model: string, userDir?: string) => Promise<{ valid: boolean; error?: string }>
   startCapture: () => Promise<{ success: boolean }>
   stopCapture: () => Promise<{ success: boolean }>
   sendAudioData: (audioData: ArrayBuffer) => void
@@ -127,7 +112,6 @@ export interface Api {
     callback: (question: DetectedQuestionFromImage) => void
   ) => () => void
   onScreenshotNoQuestion: (callback: (data: { message: string }) => void) => () => void
-  onAvatarReindexProgress: (callback: (progress: AvatarReindexProgress) => void) => () => void
   onGenerationStart: (callback: () => void) => () => void
   onGenerationEnd: (callback: () => void) => () => void
 }

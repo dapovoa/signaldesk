@@ -20,7 +20,7 @@ const renderAvatarPromptVariables = (variables: AvatarPromptVariables): string =
     { label: 'Answer Style', value: variables.answerStyle.trim() },
     { label: 'Interview Context', value: variables.interviewContext.trim() },
     {
-      label: 'Retrieved Candidate Memory',
+      label: 'Candidate Knowledge',
       value: variables.retrievedCandidateMemory.trim()
     }
   ].filter((section) => section.value)

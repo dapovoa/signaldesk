@@ -1,18 +1,6 @@
 import { create } from 'zustand'
-import type {
-  AnswerEntry,
-  AppSettings,
-  AvatarIndexStatus,
-  AvatarProfile,
-  AvatarReindexProgress
-} from '../../../shared/contracts'
-export type {
-  AnswerEntry,
-  AppSettings,
-  AvatarIndexStatus,
-  AvatarProfile,
-  AvatarReindexProgress
-} from '../../../shared/contracts'
+import type { AnswerEntry, AppSettings, AvatarProfile } from '../../../shared/contracts'
+export type { AnswerEntry, AppSettings, AvatarProfile } from '../../../shared/contracts'
 
 export interface TranscriptEntry {
   id: string
@@ -44,8 +32,6 @@ interface InterviewState {
   settings: AppSettings
   showSettings: boolean
   avatarProfile: AvatarProfile
-  avatarIndexStatus: AvatarIndexStatus | null
-  avatarReindexProgress: AvatarReindexProgress | null
   showAvatar: boolean
 
   // History view
@@ -84,8 +70,6 @@ interface InterviewState {
   setShowSettings: (show: boolean) => void
   setAvatarProfile: (profile: AvatarProfile) => void
   updateAvatarProfile: (updates: Partial<AvatarProfile>) => void
-  setAvatarIndexStatus: (status: AvatarIndexStatus | null) => void
-  setAvatarReindexProgress: (progress: AvatarReindexProgress | null) => void
   setShowAvatar: (show: boolean) => void
 
   setShowHistory: (show: boolean) => void
@@ -143,6 +127,7 @@ const DEFAULT_AVATAR_PROFILE: AvatarProfile = {
   companyName: '',
   jobDescription: '',
   companyContext: '',
+  candidateKnowledge: '',
   sourceDirectory: '',
   embeddingModel: '',
   embeddingModelDir: '',
@@ -169,8 +154,6 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
   settings: DEFAULT_SETTINGS,
   showSettings: false,
   avatarProfile: DEFAULT_AVATAR_PROFILE,
-  avatarIndexStatus: null,
-  avatarReindexProgress: null,
   showAvatar: false,
   showHistory: false,
   isTranscriptHidden: false,
@@ -274,8 +257,6 @@ export const useInterviewStore = create<InterviewState>((set, get) => ({
     set((state) => ({
       avatarProfile: { ...state.avatarProfile, ...updates }
     })),
-  setAvatarIndexStatus: (avatarIndexStatus) => set({ avatarIndexStatus }),
-  setAvatarReindexProgress: (avatarReindexProgress) => set({ avatarReindexProgress }),
   setShowAvatar: (show) => set({ showAvatar: show }),
 
   setShowHistory: (show) => set({ showHistory: show }),

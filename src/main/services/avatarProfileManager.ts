@@ -26,7 +26,8 @@ const AVATAR_LIMITS = {
   jobTitle: 60,
   companyName: 30,
   jobDescription: 1600,
-  companyContext: 250
+  companyContext: 250,
+  candidateKnowledge: 50000
 } as const
 
 const normalizeText = (value: string | undefined): string =>
@@ -66,6 +67,7 @@ const buildDefaultProfile = (): AvatarProfile => {
     companyName: '',
     jobDescription: '',
     companyContext: '',
+    candidateKnowledge: '',
     sourceDirectory: getDefaultAvatarSourceDirectory(),
     embeddingModel: '',
     embeddingModelDir: '',
@@ -81,6 +83,7 @@ const normalizeProfile = (profile: AvatarProfile): AvatarProfile => ({
   companyName: clampText(profile.companyName, AVATAR_LIMITS.companyName),
   jobDescription: clampText(profile.jobDescription, AVATAR_LIMITS.jobDescription),
   companyContext: clampText(profile.companyContext, AVATAR_LIMITS.companyContext),
+  candidateKnowledge: clampText(profile.candidateKnowledge, AVATAR_LIMITS.candidateKnowledge),
   sourceDirectory: getDefaultAvatarSourceDirectory(),
   embeddingModel: profile.embeddingModel?.trim() || buildDefaultProfile().embeddingModel,
   embeddingModelDir: profile.embeddingModelDir?.trim() || buildDefaultProfile().embeddingModelDir,

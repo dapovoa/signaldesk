@@ -15,8 +15,6 @@ export function useInterviewEvents(): void {
     setCapturing,
     setSettings,
     setAvatarProfile,
-    setAvatarIndexStatus,
-    setAvatarReindexProgress,
     setGenerating
   } = useInterviewStore()
 
@@ -25,20 +23,18 @@ export function useInterviewEvents(): void {
   useEffect(() => {
     const loadSettings = async (): Promise<void> => {
       try {
-        const [savedSettings, avatarProfile, avatarIndexStatus] = await Promise.all([
+        const [savedSettings, avatarProfile] = await Promise.all([
           window.api.getSettings(),
-          window.api.getAvatarProfile(),
-          window.api.getAvatarIndexStatus()
+          window.api.getAvatarProfile()
         ])
         setSettings(savedSettings)
         setAvatarProfile(avatarProfile)
-        setAvatarIndexStatus(avatarIndexStatus)
       } catch (err) {
         console.error('Failed to load app state:', err)
       }
     }
     loadSettings()
-  }, [setAvatarIndexStatus, setAvatarProfile, setSettings])
+  }, [setAvatarProfile, setSettings])
 
   useEffect(() => {
     if (listenersSetUp.current) {
@@ -123,10 +119,6 @@ export function useInterviewEvents(): void {
       setError(data.message)
     })
 
-    const unsubAvatarReindexProgress = window.api.onAvatarReindexProgress((progress) => {
-      setAvatarReindexProgress(progress)
-    })
-
     const unsubGenerationStart = window.api.onGenerationStart(() => {
       setGenerating(true)
     })
@@ -148,7 +140,6 @@ export function useInterviewEvents(): void {
       unsubAnswerError()
       unsubQuestionDetectedFromImage()
       unsubScreenshotNoQuestion()
-      unsubAvatarReindexProgress()
       unsubGenerationStart()
       unsubGenerationEnd()
       listenersSetUp.current = false
@@ -164,7 +155,6 @@ export function useInterviewEvents(): void {
     finalizeAnswer,
     setError,
     setCapturing,
-    setAvatarReindexProgress,
     setGenerating
   ])
 }

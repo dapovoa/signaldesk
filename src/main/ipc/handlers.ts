@@ -1,5 +1,4 @@
-import { BrowserWindow, clipboard, desktopCapturer, ipcMain, shell } from 'electron'
-import * as fs from 'fs'
+import { BrowserWindow, clipboard, desktopCapturer, ipcMain } from 'electron'
 import type { AnswerEntry } from '../../shared/contracts'
 import {
   OPENAI_OAUTH_MODEL_OPTIONS,
@@ -25,11 +24,9 @@ import { QuestionDetector } from '../services/questionDetector'
 import { ScreenshotService } from '../services/screenshotService'
 import { AppSettings, SettingsManager } from '../services/settingsManager'
 import { testAssemblyAIConnection } from '../services/assemblyAIRealtime'
-import { AvatarKnowledgeService } from '../services/avatarKnowledgeService'
 import {
   AvatarProfile,
-  AvatarProfileManager,
-  getDefaultAvatarSourceDirectory
+  AvatarProfileManager
 } from '../services/avatarProfileManager'
 import { streamChatGPTCodexResponse } from '../services/chatgptCodexClient'
 import { llamaCppLlmServer } from '../services/llamaCppLlmServer'
@@ -38,7 +35,6 @@ import {
   DEFAULT_LLM_BASE_URL,
   ensureModelsDirectory,
   getDefaultModelsDirectory,
-  listEmbeddingModels,
   listLlmModels
 } from '../services/localEmbeddingPaths'
 import { VisionService } from '../services/visionService'
@@ -52,7 +48,6 @@ let settingsManager: SettingsManager | null = null
 let historyManager: HistoryManager | null = null
 let screenshotService: ScreenshotService | null = null
 let visionService: VisionService | null = null
-let avatarKnowledgeService: AvatarKnowledgeService | null = null
 let avatarProfileManager: AvatarProfileManager | null = null
 let mainWindow: BrowserWindow | null = null
 let isCapturing = false
@@ -121,17 +116,11 @@ const IPC_HANDLE_CHANNELS = [
   'update-settings',
   'get-avatar-profile',
   'update-avatar-profile',
-  'open-avatar-memory-folder',
-  'get-avatar-index-status',
-  'reindex-avatar-sources',
   'generate-answer-manually',
   'get-window-capabilities',
   'connect-openai-oauth',
   'disconnect-openai-oauth',
   'fetch-llm-models',
-  'fetch-embedding-models',
-  'test-embedding-model',
-  'select-embedding-model-dir',
   'select-llm-model-dir',
   'test-provider-connection',
   'test-transcription-connection',
@@ -474,47 +463,6 @@ const buildInterviewContext = (profile: AvatarProfile): string => {
 
 const buildIdentityBase = (profile: AvatarProfile): string => profile.identityBase.trim()
 const buildAnswerStyle = (profile: AvatarProfile): string => profile.answerStyle.trim()
-const SIGNALDESK_VERBOSE = process.env.SIGNALDESK_VERBOSE === '1'
-const AVATAR_VERBOSE_LOGS = SIGNALDESK_VERBOSE || process.env.SIGNALDESK_AVATAR_VERBOSE === '1'
-
-const ensureDirectory = (directory: string): void => {
-  fs.mkdirSync(directory, { recursive: true })
-}
-
-const logAvatarContext = (
-  question: string,
-  avatarContext?: {
-    snippets: Array<{
-      title: string
-      sectionTitle: string
-      kind: string
-      tags: string[]
-      distance: number
-    }>
-    promptContext: string
-  } | null
-): void => {
-  if (!AVATAR_VERBOSE_LOGS) {
-    return
-  }
-
-  if (!avatarContext) {
-    console.log('[AvatarRAG] no retrieved memory:', { question })
-    return
-  }
-
-  console.log('[AvatarRAG] retrieved memory:', {
-    question,
-    promptContextLength: avatarContext.promptContext.length,
-    snippets: avatarContext.snippets.map((snippet) => ({
-      title: snippet.title,
-      sectionTitle: snippet.sectionTitle,
-      kind: snippet.kind,
-      tags: snippet.tags,
-      distance: Number(snippet.distance.toFixed(4))
-    }))
-  })
-}
 
 type ClassifierQuestionType = 'direct' | 'indirect' | 'scenario' | 'none'
 
@@ -930,13 +878,11 @@ const generateAnswerForQuestion = async (
 
   try {
     const profile = avatarProfileManager?.getProfile()
-    const avatarContext = await avatarKnowledgeService?.buildContextPack(trimmedQuestion)
     if (epoch !== pipelineEpoch || !isCurrentAnswerRequest(requestId)) {
       releaseAnswerRequest(requestId)
       return
     }
     answerTimingTrace.ragReadyAt = Date.now()
-    logAvatarContext(trimmedQuestion, avatarContext)
 
     if (isAnthropic && anthropicService) {
       await anthropicService.generateAnswer(
@@ -945,7 +891,7 @@ const generateAnswerForQuestion = async (
           identityBase: profile ? buildIdentityBase(profile) : '',
           answerStyle: profile ? buildAnswerStyle(profile) : '',
           interviewContext: profile ? buildInterviewContext(profile) : '',
-          avatarContext: avatarContext?.promptContext
+          avatarContext: profile?.candidateKnowledge || ''
         },
         requestId
       )
@@ -956,7 +902,7 @@ const generateAnswerForQuestion = async (
           identityBase: profile ? buildIdentityBase(profile) : '',
           answerStyle: profile ? buildAnswerStyle(profile) : '',
           interviewContext: profile ? buildInterviewContext(profile) : '',
-          avatarContext: avatarContext?.promptContext
+          avatarContext: profile?.candidateKnowledge || ''
         },
         requestId
       )
@@ -1112,8 +1058,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
   questionDetector = new QuestionDetector()
   avatarProfileManager = new AvatarProfileManager()
   settingsManager.flushPendingMigrations()
-  avatarKnowledgeService = new AvatarKnowledgeService(avatarProfileManager.getProfile())
-  avatarKnowledgeService.warmup().catch((err) => console.warn('[Avatar] warmup failed:', err))
   warmupConfiguredLocalLlm().catch((err) => console.warn('[LlamaCpp] warmup failed:', err))
 
   ipcMain.handle('get-settings', () => {
@@ -1149,66 +1093,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     }
 
     const profile = avatarProfileManager.updateProfile(updates)
-    avatarKnowledgeService?.updateProfile(profile)
     return profile
-  })
-
-  ipcMain.handle('open-avatar-memory-folder', async () => {
-    const targetDirectory = getDefaultAvatarSourceDirectory()
-    ensureDirectory(targetDirectory)
-    const error = await shell.openPath(targetDirectory)
-
-    return {
-      success: !error,
-      path: targetDirectory,
-      error: error || undefined
-    }
-  })
-
-  ipcMain.handle('open-embedding-models-folder', async () => {
-    const targetDirectory = ensureModelsDirectory(getDefaultModelsDirectory())
-    const error = await shell.openPath(targetDirectory)
-
-    return {
-      success: !error,
-      path: targetDirectory,
-      error: error || undefined
-    }
-  })
-
-  ipcMain.handle('open-llm-models-folder', async () => {
-    const targetDirectory = ensureModelsDirectory(
-      settingsManager?.getSettings().llmModelDir || getDefaultModelsDirectory()
-    )
-    const error = await shell.openPath(targetDirectory)
-
-    return {
-      success: !error,
-      path: targetDirectory,
-      error: error || undefined
-    }
-  })
-
-  ipcMain.handle('get-avatar-index-status', async () => {
-    if (!avatarProfileManager || !avatarKnowledgeService) {
-      throw new Error('Avatar services not initialized')
-    }
-
-    return avatarKnowledgeService.getStatus(avatarProfileManager.getProfile())
-  })
-
-  ipcMain.handle('reindex-avatar-sources', async () => {
-    if (!avatarProfileManager || !avatarKnowledgeService) {
-      throw new Error('Avatar services not initialized')
-    }
-
-    return avatarKnowledgeService.reindex(avatarProfileManager.getProfile(), (progress) => {
-      mainWindow?.webContents.send('avatar-reindex-progress', progress)
-    })
-  })
-
-  ipcMain.handle('test-embedding-model', async (_event, model: string, userDir?: string) => {
-    return llamaCppServer.validateModel(model, userDir)
   })
 
   ipcMain.handle('generate-answer-manually', async (_event, questionText: string) => {
@@ -1390,26 +1275,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Failed to fetch models'
         return { success: false, error: errorMessage, models: [] }
-      }
-    }
-  )
-
-  ipcMain.handle(
-    'fetch-embedding-models',
-    async (_event, userDir?: string) => {
-      const directory = ensureModelsDirectory(userDir)
-      try {
-        const models = listEmbeddingModels(userDir)
-        return { success: true, models, directory }
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : 'Failed to list local embedding models'
-        return {
-          success: false,
-          error: errorMessage,
-          models: [] as Array<{ id: string; name: string }>,
-          directory
-        }
       }
     }
   )
@@ -2279,7 +2144,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       if (analysis.isQuestion) {
         const questionText = analysis.questionText?.trim() || 'Interview question from screenshot'
         const profile = avatarProfileManager?.getProfile()
-        const avatarContext = await avatarKnowledgeService?.buildContextPack(questionText)
 
         mainWindow?.webContents.send('question-detected-from-image', {
           text: questionText,
@@ -2300,7 +2164,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
               identityBase: profile ? buildIdentityBase(profile) : '',
               answerStyle: profile ? buildAnswerStyle(profile) : '',
               interviewContext: profile ? buildInterviewContext(profile) : '',
-              avatarContext: avatarContext?.promptContext
+              avatarContext: profile?.candidateKnowledge || ''
             },
             requestId
           )
@@ -2328,7 +2192,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         ) {
           const questionText = analysis.questionText?.trim() || 'Technical problem from screenshot'
           const profile = avatarProfileManager?.getProfile()
-          const avatarContext = await avatarKnowledgeService?.buildContextPack(questionText)
 
           mainWindow?.webContents.send('question-detected-from-image', {
             text: questionText,
@@ -2349,7 +2212,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
                 identityBase: profile ? buildIdentityBase(profile) : '',
                 answerStyle: profile ? buildAnswerStyle(profile) : '',
                 interviewContext: profile ? buildInterviewContext(profile) : '',
-                avatarContext: avatarContext?.promptContext
+                avatarContext: profile?.candidateKnowledge || ''
               },
               requestId
             )
@@ -2391,8 +2254,6 @@ export async function cleanupIpcHandlers(): Promise<void> {
   unregisterIpcHandlers()
   resetRuntimePipelineState()
   await llamaCppLlmServer.dispose()
-  avatarKnowledgeService?.dispose()
-  avatarKnowledgeService = null
   avatarProfileManager = null
   if (whisperService) {
     const service = whisperService

@@ -1,13 +1,4 @@
-import {
-  AlertCircle,
-  CheckCircle,
-  FolderOpen,
-  Loader2,
-  Play,
-  RefreshCw,
-  Save,
-  X
-} from 'lucide-react'
+import { AlertCircle, CheckCircle, Save, X } from 'lucide-react'
 import { TextareaHTMLAttributes, useEffect, useRef, useState } from 'react'
 import { AvatarProfile, useInterviewStore } from '../store/interviewStore'
 
@@ -17,7 +8,8 @@ const AVATAR_LIMITS = {
   jobTitle: 60,
   companyName: 30,
   jobDescription: 1600,
-  companyContext: 250
+  companyContext: 250,
+  candidateKnowledge: 50000
 } as const
 
 const normalizeText = (value: string): string => value.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
@@ -27,18 +19,13 @@ const clampField = (field: keyof typeof AVATAR_LIMITS, value: string): string =>
 
 const getLength = (value: string): number => normalizeText(value).length
 
-const formatTimestamp = (value: number | null): string =>
-  value ? new Date(value).toLocaleString() : 'Not indexed yet'
-
 const fieldLabelClassName = 'settings-field-label block'
 const textareaClassName =
   'w-full overflow-hidden px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors resize-y'
 const inputClassName =
   'w-full rounded-lg border border-dark-600 bg-dark-800 px-3 py-2 text-sm text-dark-100 placeholder-dark-500 transition-colors focus:outline-none focus:border-blue-500'
 
-function AutoResizeTextarea(
-  props: TextareaHTMLAttributes<HTMLTextAreaElement>
-): React.ReactNode {
+function AutoResizeTextarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>): React.ReactNode {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   const resize = (): void => {
@@ -75,123 +62,13 @@ function SectionDivider({ label }: { label: string }): React.ReactNode {
 }
 
 export function AvatarModal(): React.ReactNode | null {
-  const {
-    avatarProfile,
-    avatarIndexStatus,
-    avatarReindexProgress,
-    showAvatar,
-    setShowAvatar,
-    setAvatarProfile,
-    setAvatarIndexStatus,
-    setAvatarReindexProgress
-  } = useInterviewStore()
+  const { avatarProfile, showAvatar, setShowAvatar, setAvatarProfile } = useInterviewStore()
   const [localProfile, setLocalProfile] = useState<AvatarProfile>(avatarProfile)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const [reindexStatus, setReindexStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle')
-  const [statusMessage, setStatusMessage] = useState('')
-  const [embeddingModels, setEmbeddingModels] = useState<string[]>([])
-  const [embeddingModelsLoading, setEmbeddingModelsLoading] = useState(false)
-  const [embeddingModelsError, setEmbeddingModelsError] = useState<string | null>(null)
-  const [embeddingTestStatus, setEmbeddingTestStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle')
-  const [embeddingTestMessage, setEmbeddingTestMessage] = useState('')
-  const [embeddingRefreshTick, setEmbeddingRefreshTick] = useState(0)
 
   useEffect(() => {
     setLocalProfile(avatarProfile)
   }, [avatarProfile, showAvatar])
-
-  useEffect(() => {
-    if (!showAvatar) return
-
-    const loadStatus = async (): Promise<void> => {
-      try {
-        const status = await window.api.getAvatarIndexStatus()
-        setAvatarIndexStatus(status)
-      } catch (error) {
-        console.error('Failed to load avatar index status:', error)
-      }
-    }
-
-    loadStatus()
-  }, [setAvatarIndexStatus, showAvatar])
-
-  useEffect(() => {
-    if (!showAvatar) return
-
-    const loadEmbeddingModels = async (): Promise<void> => {
-      setEmbeddingModelsLoading(true)
-      setEmbeddingModelsError(null)
-      try {
-        const result = await window.api.fetchEmbeddingModels(localProfile.embeddingModelDir || undefined)
-        if (!result.success) {
-          throw new Error(result.error || 'Failed to load local embedding models.')
-        }
-
-        const uniqueModels = Array.from(
-          new Set(
-            result.models
-              .map((model) => model.id.trim())
-              .filter(Boolean)
-              .concat(localProfile.embeddingModel ? [localProfile.embeddingModel] : [])
-          )
-        ).sort((left, right) => left.localeCompare(right))
-
-        setEmbeddingModels(uniqueModels)
-
-        const hasSelectedModel = localProfile.embeddingModel && 
-          result.models.some(m => m.id === localProfile.embeddingModel)
-        
-        if (result.models.length === 0) {
-          setEmbeddingModelsError('No models found')
-          if (localProfile.embeddingModel || localProfile.embeddingModelDir) {
-            setLocalProfile(prev => ({ ...prev, embeddingModel: '', embeddingModelDir: '' }))
-          }
-        } else if (!localProfile.embeddingModel) {
-          setLocalProfile(prev => ({
-            ...prev,
-            embeddingModel: result.models[0]?.id.trim() || ''
-          }))
-        } else if (localProfile.embeddingModel && !hasSelectedModel) {
-          setLocalProfile(prev => ({
-            ...prev,
-            embeddingModel: result.models[0]?.id.trim() || ''
-          }))
-        }
-      } catch (error) {
-        console.error('Failed to load local embedding models:', error)
-        setEmbeddingModels(localProfile.embeddingModel ? [localProfile.embeddingModel] : [])
-        setEmbeddingModelsError(
-          error instanceof Error ? error.message : 'Failed to load local embedding models.'
-        )
-      } finally {
-        setEmbeddingModelsLoading(false)
-      }
-    }
-
-    loadEmbeddingModels()
-  }, [showAvatar, localProfile.embeddingModel, localProfile.embeddingModelDir, embeddingRefreshTick])
-
-  useEffect(() => {
-    if (!showAvatar) return
-
-    const refreshModels = (): void => {
-      setEmbeddingRefreshTick((value) => value + 1)
-    }
-
-    const handleVisibilityChange = (): void => {
-      if (document.visibilityState === 'visible') {
-        refreshModels()
-      }
-    }
-
-    window.addEventListener('focus', refreshModels)
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-
-    return () => {
-      window.removeEventListener('focus', refreshModels)
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-    }
-  }, [showAvatar])
 
   if (!showAvatar) return null
 
@@ -199,9 +76,6 @@ export function AvatarModal(): React.ReactNode | null {
     setLocalProfile(avatarProfile)
     setShowAvatar(false)
     setSaveStatus('idle')
-    setReindexStatus('idle')
-    setAvatarReindexProgress(null)
-    setStatusMessage('')
   }
 
   const handleSave = async (): Promise<void> => {
@@ -219,104 +93,6 @@ export function AvatarModal(): React.ReactNode | null {
       setTimeout(() => setSaveStatus('idle'), 2500)
     }
   }
-
-  const handleOpenMemoryFolder = async (): Promise<void> => {
-    try {
-      const result = await window.api.openAvatarMemoryFolder()
-      if (!result.success) {
-        setStatusMessage(result.error || 'Failed to open avatar memory folder.')
-        setReindexStatus('error')
-        setTimeout(() => setReindexStatus('idle'), 3000)
-      }
-    } catch (error) {
-      console.error('Failed to open avatar memory folder:', error)
-      setStatusMessage(error instanceof Error ? error.message : 'Failed to open memory folder.')
-      setReindexStatus('error')
-      setTimeout(() => setReindexStatus('idle'), 3000)
-    }
-  }
-
-  const handleReindex = async (): Promise<void> => {
-    try {
-      setReindexStatus('running')
-      setStatusMessage(`Rebuilding index with ${localProfile.embeddingModel}...`)
-      setAvatarReindexProgress({
-        totalDocuments: 0,
-        processedDocuments: 0,
-        embeddedChunks: 0,
-        embeddingModel: localProfile.embeddingModel,
-        currentFile: null
-      })
-
-      const savedProfile = await window.api.updateAvatarProfile(localProfile)
-      setAvatarProfile(savedProfile)
-      const status = await window.api.reindexAvatarSources()
-      setAvatarIndexStatus(status)
-      setAvatarReindexProgress(null)
-
-      setReindexStatus('done')
-      setStatusMessage(`Indexed ${status.documentCount} documents and ${status.chunkCount} chunks.`)
-      setTimeout(() => setReindexStatus('idle'), 2000)
-    } catch (error) {
-      console.error('Failed to reindex avatar sources:', error)
-      setReindexStatus('error')
-      setAvatarReindexProgress(null)
-      setStatusMessage(error instanceof Error ? error.message : 'Avatar reindex failed.')
-      setTimeout(() => setReindexStatus('idle'), 3000)
-    }
-  }
-
-  const handleTestEmbedding = async (): Promise<void> => {
-    try {
-      setEmbeddingTestStatus('testing')
-      setEmbeddingTestMessage('')
-      const result = await window.api.testEmbeddingModel(
-        localProfile.embeddingModel,
-        localProfile.embeddingModelDir || undefined
-      )
-      if (result.valid) {
-        setEmbeddingTestStatus('ok')
-        setEmbeddingTestMessage('Embedding model validated successfully')
-      } else {
-        setEmbeddingTestStatus('error')
-        setEmbeddingTestMessage(result.error || 'Validation failed')
-      }
-    } catch (error) {
-      setEmbeddingTestStatus('error')
-      setEmbeddingTestMessage(error instanceof Error ? error.message : 'Test failed')
-    }
-    setTimeout(() => setEmbeddingTestStatus('idle'), 3000)
-  }
-
-  const handleOpenEmbeddingModelsFolder = async (): Promise<void> => {
-    try {
-      const result = await window.api.openEmbeddingModelsFolder()
-      if (!result.success) {
-        setEmbeddingModelsError(result.error || 'Failed to open embedding models folder.')
-        return
-      }
-
-      setEmbeddingRefreshTick((value) => value + 1)
-    } catch (error) {
-      console.error('Failed to open embedding models folder:', error)
-      setEmbeddingModelsError(
-        error instanceof Error ? error.message : 'Failed to open embedding models folder.'
-      )
-    }
-  }
-
-  const status = avatarIndexStatus
-  const isReindexing = reindexStatus === 'running'
-  const visibleDocumentCount = isReindexing
-    ? avatarReindexProgress?.processedDocuments ?? 0
-    : status?.documentCount ?? 0
-  const visibleChunkCount = isReindexing
-    ? avatarReindexProgress?.embeddedChunks ?? 0
-    : status?.chunkCount ?? 0
-  const reindexDetail =
-    isReindexing && avatarReindexProgress
-      ? `${avatarReindexProgress.processedDocuments}/${avatarReindexProgress.totalDocuments || 0} documents, ${avatarReindexProgress.embeddedChunks} chunks`
-      : null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md">
@@ -373,6 +149,28 @@ export function AvatarModal(): React.ReactNode | null {
                 rows={4}
                 maxLength={AVATAR_LIMITS.answerStyle}
                 placeholder="How the answer should sound out loud: short sentences, natural wording, calm and direct tone."
+                className={textareaClassName}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <label className={fieldLabelClassName}>Candidate Knowledge</label>
+                <span className="text-xs text-dark-400">
+                  {getLength(localProfile.candidateKnowledge)}/{AVATAR_LIMITS.candidateKnowledge}
+                </span>
+              </div>
+              <AutoResizeTextarea
+                value={localProfile.candidateKnowledge}
+                onChange={(e) =>
+                  setLocalProfile({
+                    ...localProfile,
+                    candidateKnowledge: clampField('candidateKnowledge', e.target.value)
+                  })
+                }
+                rows={10}
+                maxLength={AVATAR_LIMITS.candidateKnowledge}
+                placeholder="Paste your full knowledge base here. This is your factual memory - experiences, projects, skills, background."
                 className={textareaClassName}
               />
             </div>
@@ -468,175 +266,6 @@ export function AvatarModal(): React.ReactNode | null {
                 className={textareaClassName}
               />
             </div>
-          </section>
-
-          <section className="space-y-4">
-            <SectionDivider label="Retrievable Memory" />
-
-            <div className="space-y-2">
-              <label className={fieldLabelClassName}>Memory Sources</label>
-              <div className="grid gap-2">
-                <button
-                  type="button"
-                  onClick={handleOpenMemoryFolder}
-                  className="flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.04] px-3 py-2 text-sm text-dark-200 transition-colors hover:border-cyan-400/15 hover:bg-cyan-400/8"
-                >
-                  <FolderOpen size={16} />
-                  <span>Open Folder</span>
-                </button>
-              </div>
-              <p className="text-xs text-dark-500">
-                Add your markdown notes to this folder, then click Reindex.
-              </p>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <label className={fieldLabelClassName}>Embedding Model</label>
-                <div className="flex gap-2">
-                  <select
-                    value={localProfile.embeddingModel}
-                    onChange={(e) =>
-                      setLocalProfile({
-                        ...localProfile,
-                        embeddingModel: e.target.value
-                      })
-                    }
-                    className={inputClassName}
-                  >
-                    {(embeddingModels.length > 0
-                      ? embeddingModels
-                      : localProfile.embeddingModel
-                      ? [localProfile.embeddingModel]
-                      : []
-                    ).map((model) => (
-                      <option key={model} value={model}>
-                        {model}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => void handleOpenEmbeddingModelsFolder()}
-                    className="flex items-center justify-center rounded-lg border border-white/5 bg-white/[0.04] px-3 py-2 text-sm font-medium text-dark-200 transition-colors hover:border-cyan-400/15 hover:bg-cyan-400/8 hover:text-dark-100"
-                    title="Open embedding models folder"
-                  >
-                    <FolderOpen size={16} />
-                  </button>
-                </div>
-                {embeddingModelsLoading && (
-                  <p className="text-xs text-dark-500">Loading local embedding models...</p>
-                )}
-                {embeddingModelsError && (
-                  <p className="text-xs text-dark-400">{embeddingModelsError}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <label className={fieldLabelClassName}>Last Indexed</label>
-                <input
-                  type="text"
-                  readOnly
-                  value={isReindexing ? 'Reindexing...' : formatTimestamp(status?.lastIndexedAt ?? null)}
-                  className={inputClassName}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className={fieldLabelClassName}>Documents</label>
-                <input
-                  type="text"
-                  readOnly
-                  value={String(visibleDocumentCount)}
-                  className={inputClassName}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className={fieldLabelClassName}>Chunks</label>
-                <input
-                  type="text"
-                  readOnly
-                  value={String(visibleChunkCount)}
-                  className={inputClassName}
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={handleTestEmbedding}
-                disabled={embeddingTestStatus === 'testing'}
-                className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/5 bg-white/[0.04] px-4 py-2 text-sm font-medium text-dark-200 transition-colors hover:border-green-400/15 hover:bg-green-400/8 hover:text-dark-100 disabled:opacity-60"
-              >
-                {embeddingTestStatus === 'testing' ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" />
-                    <span>Testing...</span>
-                  </>
-                ) : (
-                  <>
-                    <Play size={16} />
-                    <span>Test</span>
-                  </>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={handleReindex}
-                disabled={isReindexing}
-                className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/5 bg-white/[0.04] px-4 py-2 text-sm font-medium text-dark-200 transition-colors hover:border-cyan-400/15 hover:bg-cyan-400/8 hover:text-dark-100 disabled:opacity-60"
-              >
-                {isReindexing ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" />
-                    <span>Reindexing...</span>
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw size={16} />
-                    <span>Reindex</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            {embeddingTestStatus === 'ok' && embeddingTestMessage && (
-              <div className="settings-status-ok flex items-center gap-1.5 text-xs">
-                <CheckCircle size={12} />
-                <span>{embeddingTestMessage}</span>
-              </div>
-            )}
-            {embeddingTestStatus === 'error' && embeddingTestMessage && (
-              <div className="settings-status-error flex items-center gap-1.5 text-xs">
-                <AlertCircle size={12} />
-                <span>{embeddingTestMessage}</span>
-              </div>
-            )}
-
-            {status?.lastError && (
-              <div className="settings-status-error flex items-center gap-1.5 text-xs">
-                <AlertCircle size={12} />
-                <span>{status.lastError}</span>
-              </div>
-            )}
-            {reindexDetail && (
-              <div className="flex items-center gap-1.5 text-xs text-dark-400">
-                <Loader2 size={12} className="animate-spin" />
-                <span>{reindexDetail}</span>
-              </div>
-            )}
-            {statusMessage && reindexStatus === 'done' && (
-              <div className="settings-status-ok flex items-center gap-1.5 text-xs">
-                <CheckCircle size={12} />
-                <span>{statusMessage}</span>
-              </div>
-            )}
-            {statusMessage && reindexStatus === 'error' && (
-              <div className="settings-status-error flex items-center gap-1.5 text-xs">
-                <AlertCircle size={12} />
-                <span>{statusMessage}</span>
-              </div>
-            )}
           </section>
         </div>
 
