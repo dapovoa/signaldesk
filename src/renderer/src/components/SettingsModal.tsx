@@ -1210,10 +1210,10 @@ export function SettingsModal(): React.ReactNode | null {
           {localSettings.llmProvider !== 'openai-oauth' && (
             <>
             {localSettings.llmProvider === 'llama.cpp' ? (
-              <div className="space-y-2">
+              <div className="space-y-1">
                 <div className="grid grid-cols-3 gap-3">
                   <div className="space-y-1">
-                    <label className="block text-xs text-dark-400">Temperature</label>
+                    <label className="settings-subtitle block text-[11px]">Temperature</label>
                     <input
                       type="number"
                       min="0"
@@ -1230,7 +1230,7 @@ export function SettingsModal(): React.ReactNode | null {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="block text-xs text-dark-400">Top P</label>
+                    <label className="settings-subtitle block text-[11px]">Top P</label>
                     <input
                       type="number"
                       min="0"
@@ -1247,7 +1247,7 @@ export function SettingsModal(): React.ReactNode | null {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="block text-xs text-dark-400">Top K</label>
+                    <label className="settings-subtitle block text-[11px]">Top K</label>
                     <input
                       type="number"
                       min="1"

@@ -241,6 +241,7 @@ select {
 
 .settings-modal input[type='text'],
 .settings-modal input[type='password'],
+.settings-modal input[type='number'],
 .settings-modal select,
 .settings-modal textarea {
   border: 1px solid transparent !important;
@@ -274,6 +275,7 @@ select {
 
 .settings-modal input[type='text']::placeholder,
 .settings-modal input[type='password']::placeholder,
+.settings-modal input[type='number']::placeholder,
 .settings-modal textarea::placeholder {
   color: var(--dark-500);
 }
@@ -326,6 +328,15 @@ select {
 .settings-modal label {
   color: var(--dark-200);
   line-height: 1.4;
+}
+
+.settings-modal .settings-subtitle {
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dark-400);
+  line-height: 1.4;
+  font-weight: 500;
 }
 
 .settings-modal a {
