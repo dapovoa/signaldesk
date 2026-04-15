@@ -94,6 +94,23 @@ body::before {
   background-color: var(--dark-600);
 }
 
+.custom-scrollbar-subtle::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar-subtle::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar-subtle::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 174, 194, 0.18);
+  border-radius: 999px;
+}
+
+.custom-scrollbar-subtle::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(148, 174, 194, 0.28);
+}
+
 /* Selection */
 ::selection {
   background-color: rgba(59, 130, 246, 0.3);

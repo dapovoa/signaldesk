@@ -48,6 +48,10 @@ export interface AppSettings {
   llmAnthropicCompatibleModel: string
   llmLlamaCppModel: string
   llmModelDir: string
+  llmTemperature: number
+  llmTopP: number
+  llmTopK: number
+  historySession: number
   transcriptionLanguage: 'auto' | 'en' | 'pt'
   alwaysOnTop: boolean
   windowOpacity: number

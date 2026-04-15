@@ -1,5 +1,5 @@
 import { AlertCircle, CheckCircle, Save, X } from 'lucide-react'
-import { TextareaHTMLAttributes, useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AvatarProfile, useInterviewStore } from '../store/interviewStore'
 
 const AVATAR_LIMITS = {
@@ -21,35 +21,9 @@ const getLength = (value: string): number => normalizeText(value).length
 
 const fieldLabelClassName = 'settings-field-label block'
 const textareaClassName =
-  'w-full overflow-hidden px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors resize-y'
+  'custom-scrollbar-subtle w-full overflow-y-auto px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors resize-none'
 const inputClassName =
   'w-full rounded-lg border border-dark-600 bg-dark-800 px-3 py-2 text-sm text-dark-100 placeholder-dark-500 transition-colors focus:outline-none focus:border-blue-500'
-
-function AutoResizeTextarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>): React.ReactNode {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
-
-  const resize = (): void => {
-    const element = textareaRef.current
-    if (!element) return
-    element.style.height = 'auto'
-    element.style.height = `${element.scrollHeight}px`
-  }
-
-  useEffect(() => {
-    resize()
-  }, [props.value])
-
-  return (
-    <textarea
-      {...props}
-      ref={textareaRef}
-      onInput={(event) => {
-        resize()
-        props.onInput?.(event)
-      }}
-    />
-  )
-}
 
 function SectionDivider({ label }: { label: string }): React.ReactNode {
   return (
@@ -67,6 +41,7 @@ export function AvatarModal(): React.ReactNode | null {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLocalProfile(avatarProfile)
   }, [avatarProfile, showAvatar])
 
@@ -116,7 +91,7 @@ export function AvatarModal(): React.ReactNode | null {
                   {getLength(localProfile.identityBase)}/{AVATAR_LIMITS.identityBase}
                 </span>
               </div>
-              <AutoResizeTextarea
+              <textarea
                 value={localProfile.identityBase}
                 onChange={(e) =>
                   setLocalProfile({
@@ -127,7 +102,7 @@ export function AvatarModal(): React.ReactNode | null {
                 rows={7}
                 maxLength={AVATAR_LIMITS.identityBase}
                 placeholder="How you work, your real strengths, and your factual limits."
-                className={textareaClassName}
+                className={`${textareaClassName} h-40`}
               />
             </div>
 
@@ -138,7 +113,7 @@ export function AvatarModal(): React.ReactNode | null {
                   {getLength(localProfile.answerStyle)}/{AVATAR_LIMITS.answerStyle}
                 </span>
               </div>
-              <AutoResizeTextarea
+              <textarea
                 value={localProfile.answerStyle}
                 onChange={(e) =>
                   setLocalProfile({
@@ -149,7 +124,7 @@ export function AvatarModal(): React.ReactNode | null {
                 rows={4}
                 maxLength={AVATAR_LIMITS.answerStyle}
                 placeholder="How the answer should sound out loud: short sentences, natural wording, calm and direct tone."
-                className={textareaClassName}
+                className={`${textareaClassName} h-28`}
               />
             </div>
 
@@ -160,7 +135,7 @@ export function AvatarModal(): React.ReactNode | null {
                   {getLength(localProfile.candidateKnowledge)}/{AVATAR_LIMITS.candidateKnowledge}
                 </span>
               </div>
-              <AutoResizeTextarea
+              <textarea
                 value={localProfile.candidateKnowledge}
                 onChange={(e) =>
                   setLocalProfile({
@@ -171,7 +146,7 @@ export function AvatarModal(): React.ReactNode | null {
                 rows={10}
                 maxLength={AVATAR_LIMITS.candidateKnowledge}
                 placeholder="Paste your full knowledge base here. This is your factual memory - experiences, projects, skills, background."
-                className={textareaClassName}
+                className={`${textareaClassName} h-56`}
               />
             </div>
 
@@ -230,7 +205,7 @@ export function AvatarModal(): React.ReactNode | null {
                   {getLength(localProfile.jobDescription)}/{AVATAR_LIMITS.jobDescription}
                 </span>
               </div>
-              <AutoResizeTextarea
+              <textarea
                 value={localProfile.jobDescription}
                 onChange={(e) =>
                   setLocalProfile({
@@ -241,7 +216,7 @@ export function AvatarModal(): React.ReactNode | null {
                 rows={6}
                 maxLength={AVATAR_LIMITS.jobDescription}
                 placeholder="Paste the job description or the main requirements..."
-                className={textareaClassName}
+                className={`${textareaClassName} h-36`}
               />
             </div>
 
@@ -252,7 +227,7 @@ export function AvatarModal(): React.ReactNode | null {
                   {getLength(localProfile.companyContext)}/{AVATAR_LIMITS.companyContext}
                 </span>
               </div>
-              <AutoResizeTextarea
+              <textarea
                 value={localProfile.companyContext}
                 onChange={(e) =>
                   setLocalProfile({
@@ -263,7 +238,7 @@ export function AvatarModal(): React.ReactNode | null {
                 rows={5}
                 maxLength={AVATAR_LIMITS.companyContext}
                 placeholder="Add product, market, team, stack, culture, or other company details..."
-                className={textareaClassName}
+                className={`${textareaClassName} h-28`}
               />
             </div>
           </section>

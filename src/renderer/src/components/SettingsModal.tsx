@@ -881,9 +881,8 @@ export function SettingsModal(): React.ReactNode | null {
                   onChange={(e) =>
                     setLocalSettings({ ...localSettings, assemblyAiKeytermsPrompt: e.target.value })
                   }
-                  placeholder={'Metoprolol\nDextroamphetamine\nToyota\nAbercrombie and Fitch'}
                   rows={4}
-                  className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors resize-y"
+                  className="custom-scrollbar-subtle h-28 w-full overflow-y-auto rounded-lg border border-dark-600 bg-dark-800 px-3 py-2 text-sm text-dark-100 placeholder-dark-500 transition-colors focus:border-blue-500 focus:outline-none resize-none"
                 />
               </div>
 
@@ -898,7 +897,7 @@ export function SettingsModal(): React.ReactNode | null {
                   }
                   placeholder=""
                   rows={4}
-                  className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors resize-y"
+                  className="custom-scrollbar-subtle h-28 w-full overflow-y-auto rounded-lg border border-dark-600 bg-dark-800 px-3 py-2 text-sm text-dark-100 placeholder-dark-500 transition-colors focus:border-blue-500 focus:outline-none resize-none"
                 />
               </div>
 
@@ -1167,7 +1166,60 @@ export function SettingsModal(): React.ReactNode | null {
           {localSettings.llmProvider !== 'openai-oauth' && (
             <>
             {localSettings.llmProvider === 'llama.cpp' ? (
-              <div>
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="block text-xs text-dark-400">Temperature</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="2"
+                      step="0.05"
+                      value={localSettings.llmTemperature ?? 1.0}
+                      onChange={(e) =>
+                        setLocalSettings({
+                          ...localSettings,
+                          llmTemperature: parseFloat(e.target.value) || 1.0
+                        })
+                      }
+                      className="w-full rounded-lg border border-dark-600 bg-dark-800 px-3 py-2 text-sm text-dark-100 placeholder-dark-500 transition-colors [appearance:textfield] focus:outline-none focus:border-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-xs text-dark-400">Top P</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={localSettings.llmTopP ?? 0.95}
+                      onChange={(e) =>
+                        setLocalSettings({
+                          ...localSettings,
+                          llmTopP: parseFloat(e.target.value) || 0.95
+                        })
+                      }
+                      className="w-full rounded-lg border border-dark-600 bg-dark-800 px-3 py-2 text-sm text-dark-100 placeholder-dark-500 transition-colors [appearance:textfield] focus:outline-none focus:border-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-xs text-dark-400">Top K</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      step="1"
+                      value={localSettings.llmTopK ?? 64}
+                      onChange={(e) =>
+                        setLocalSettings({
+                          ...localSettings,
+                          llmTopK: parseInt(e.target.value, 10) || 64
+                        })
+                      }
+                      className="w-full rounded-lg border border-dark-600 bg-dark-800 px-3 py-2 text-sm text-dark-100 placeholder-dark-500 transition-colors [appearance:textfield] focus:outline-none focus:border-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    />
+                  </div>
+                </div>
                 <button
                   type="button"
                   onClick={handleTestLlm}

@@ -157,6 +157,10 @@ const DEFAULT_SETTINGS: AppSettings = {
       : 'MiniMax-M2.7',
   llmLlamaCppModel: DEFAULT_LLM_PROVIDER === 'llama.cpp' ? DEFAULT_ENV_LLM_MODEL : '',
   llmModelDir: process.env.SIGNALDESK_LLM_MODEL_DIR || '',
+  llmTemperature: 1.0,
+  llmTopP: 0.95,
+  llmTopK: 64,
+  historySession: 1,
   transcriptionLanguage:
     process.env.TRANSCRIPTION_LANGUAGE === 'pt' || process.env.VITE_TRANSCRIPTION_LANGUAGE === 'pt'
       ? 'pt'

@@ -291,7 +291,7 @@ Fixed rules:
 - Never invent named tools, products, services, or frameworks just to make the answer sound more complete.
 - If something is not grounded, keep it generic or say what I would check first.
 - Plain text only. No markdown, no bullets, no numbered lists, no headings.
-- Default to 2 sentences. Hard maximum: 3 sentences.
+- Default to 3 sentences. Hard maximum: 5 sentences.
 - Focus on one useful path and stop.
 - Keep the answer easy to say out loud.
 ${intentRules.map((rule) => `- ${rule}`).join('\n')}

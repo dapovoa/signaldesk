@@ -78,6 +78,9 @@ export interface Api {
   clearHistory: () => Promise<{ success: boolean }>
   generateAnswerManually: (questionText: string) => Promise<{ success: boolean }>
   getHistory: () => Promise<AnswerEntry[]>
+  getHistorySession: () => Promise<number>
+  getHistoryExistingSessions: () => Promise<number[]>
+  setHistorySession: (session: number) => Promise<{ success: boolean }>
   saveHistoryEntry: (entry: AnswerEntry) => Promise<{ success: boolean }>
   saveHistoryEntries: (entries: AnswerEntry[]) => Promise<{ success: boolean }>
   clearSavedHistory: () => Promise<{ success: boolean }>

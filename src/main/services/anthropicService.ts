@@ -49,10 +49,10 @@ const normalizeInterviewAnswer = (raw: string): string => {
     .replace(/\s+/g, ' ')
     .trim()
 
-  const sentences = splitSentences(text).slice(0, 3)
+  const sentences = splitSentences(text).slice(0, 5)
 
   text = sentences.join(' ')
-  text = trimToWordLimit(text || raw, 95).trim()
+  text = trimToWordLimit(text || raw, 180).trim()
 
   if (!text) return ''
   if (!/[.!?]$/.test(text)) text += '.'

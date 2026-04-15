@@ -1714,7 +1714,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           apiKey: providerConfig.apiKey,
           baseURL: providerConfig.baseURL,
           model: settings.llmModel,
-          temperature: 1
+          temperature: settings.llmTemperature
         })
         attachAnthropicServiceListeners(anthropicService)
       } else {
@@ -1724,7 +1724,10 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           customHeaders: providerConfig.customHeaders,
           chatgptAccountId: settings.llmOauthAccountId,
           useResponsesApi: shouldUseResponsesApi(settings),
-          model: settings.llmModel
+          model: settings.llmModel,
+          temperature: settings.llmTemperature,
+          topP: settings.llmTopP,
+          topK: settings.llmTopK
         })
         attachOpenAIServiceListeners(openaiService)
       }
@@ -1964,6 +1967,19 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     return historyManager?.getHistory() || []
   })
 
+  ipcMain.handle('get-history-session', () => {
+    return historyManager?.getSession() || 1
+  })
+
+  ipcMain.handle('get-history-existing-sessions', () => {
+    return historyManager?.getExistingSessions() || []
+  })
+
+  ipcMain.handle('set-history-session', (_event, session: number) => {
+    historyManager?.setSession(session)
+    return { success: true }
+  })
+
   ipcMain.handle('save-history-entry', (_event, entry: AnswerEntry) => {
     historyManager?.addEntry(entry)
     return { success: true }
@@ -2122,7 +2138,10 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           customHeaders: providerConfig.customHeaders,
           chatgptAccountId: settings.llmOauthAccountId,
           useResponsesApi: shouldUseResponsesApi(settings),
-          model: settings.llmModel
+          model: settings.llmModel,
+          temperature: settings.llmTemperature,
+          topP: settings.llmTopP,
+          topK: settings.llmTopK
         })
         attachOpenAIServiceListeners(openaiService)
       } else {
@@ -2132,7 +2151,10 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           customHeaders: providerConfig.customHeaders,
           chatgptAccountId: settings.llmOauthAccountId,
           useResponsesApi: shouldUseResponsesApi(settings),
-          model: settings.llmModel
+          model: settings.llmModel,
+          temperature: settings.llmTemperature,
+          topP: settings.llmTopP,
+          topK: settings.llmTopK
         })
       }
       attachOpenAIServiceListeners(openaiService)

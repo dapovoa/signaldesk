@@ -94,6 +94,11 @@ const api = {
   generateAnswerManually: (questionText: string): Promise<{ success: boolean }> =>
     ipcRenderer.invoke('generate-answer-manually', questionText),
   getHistory: (): Promise<AnswerEntry[]> => ipcRenderer.invoke('get-history'),
+  getHistorySession: (): Promise<number> => ipcRenderer.invoke('get-history-session'),
+  getHistoryExistingSessions: (): Promise<number[]> =>
+    ipcRenderer.invoke('get-history-existing-sessions'),
+  setHistorySession: (session: number): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke('set-history-session', session),
   saveHistoryEntry: (entry: AnswerEntry): Promise<{ success: boolean }> =>
     ipcRenderer.invoke('save-history-entry', entry),
   saveHistoryEntries: (entries: AnswerEntry[]): Promise<{ success: boolean }> =>

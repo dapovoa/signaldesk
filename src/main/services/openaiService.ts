@@ -25,6 +25,7 @@ export interface OpenAIConfig {
   maxTokens?: number
   temperature?: number
   topP?: number
+  topK?: number
   extraBody?: Record<string, unknown>
 }
 
@@ -87,10 +88,10 @@ const normalizeInterviewAnswer = (raw: string): string => {
     .replace(/\s+/g, ' ')
     .trim()
 
-  const sentences = splitSentences(text).slice(0, 3)
+  const sentences = splitSentences(text).slice(0, 5)
 
   text = sentences.join(' ')
-  text = trimToWordLimit(text || raw, 95).trim()
+  text = trimToWordLimit(text || raw, 180).trim()
 
   if (!text) return ''
   if (!/[.!?]$/.test(text)) text += '.'
@@ -199,6 +200,16 @@ const getSolutionSystemPrompt = (
     buildAvatarPromptVariables(identityBase, answerStyle, interviewContext, avatarContext),
     questionType
   )
+}
+
+const buildExtraBody = (config: OpenAIConfig): Record<string, unknown> | undefined => {
+  const extraBody = config.extraBody ? { ...config.extraBody } : {}
+
+  if (typeof config.topK === 'number' && Number.isFinite(config.topK) && config.topK > 0) {
+    extraBody.top_k = Math.round(config.topK)
+  }
+
+  return Object.keys(extraBody).length > 0 ? extraBody : undefined
 }
 
 export class OpenAIService extends EventEmitter {
@@ -421,8 +432,9 @@ export class OpenAIService extends EventEmitter {
         request.top_p = this.config.topP
       }
 
-      if (this.config.extraBody) {
-        request.extra_body = this.config.extraBody
+      const extraBody = buildExtraBody(this.config)
+      if (extraBody) {
+        request.extra_body = extraBody
       }
 
       if (OPENAI_VERBOSE_LOGS) {
@@ -556,8 +568,9 @@ export class OpenAIService extends EventEmitter {
 
     const maxTokens = getEffectiveMaxTokens(this.config, options)
 
-    if (this.config.extraBody) {
-      request.extra_body = this.config.extraBody
+    const extraBody = buildExtraBody(this.config)
+    if (extraBody) {
+      request.extra_body = extraBody
     }
 
     if (OPENAI_VERBOSE_LOGS) {
