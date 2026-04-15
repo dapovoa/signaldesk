@@ -924,6 +924,50 @@ export function SettingsModal(): React.ReactNode | null {
             </>
           )}
 
+          {localSettings.transcriptionProvider === 'openai' && (
+            <>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-dark-200">
+                  Transcription Language
+                </label>
+                <select
+                  value={localSettings.transcriptionLanguage}
+                  onChange={(e) =>
+                    setLocalSettings({
+                      ...localSettings,
+                      transcriptionLanguage: e.target.value as AppSettings['transcriptionLanguage']
+                    })
+                  }
+                  className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors"
+                >
+                  <option value="auto">Auto detect</option>
+                  <option value="pt">Portuguese</option>
+                  <option value="en">English</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-dark-200">
+                  Silence Detection
+                  <span className="ml-2 text-xs text-dark-400">
+                    {localSettings.pauseThreshold}ms
+                  </span>
+                </label>
+                <input
+                  type="range"
+                  min="500"
+                  max="3000"
+                  step="100"
+                  value={localSettings.pauseThreshold}
+                  onChange={(e) =>
+                    setLocalSettings({ ...localSettings, pauseThreshold: Number(e.target.value) })
+                  }
+                  className="w-full accent-blue-500"
+                />
+              </div>
+            </>
+          )}
+
           <SectionDivider label="LLM" />
 
           <div className="space-y-2">
@@ -1275,50 +1319,6 @@ export function SettingsModal(): React.ReactNode | null {
                   <span>{connectionMessage || 'LLM test failed.'}</span>
                 </div>
               )}
-            </>
-          )}
-
-          {localSettings.transcriptionProvider !== 'assemblyai' && (
-            <>
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-dark-200">
-                  Transcription Language
-                </label>
-                <select
-                  value={localSettings.transcriptionLanguage}
-                  onChange={(e) =>
-                    setLocalSettings({
-                      ...localSettings,
-                      transcriptionLanguage: e.target.value as AppSettings['transcriptionLanguage']
-                    })
-                  }
-                  className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors"
-                >
-                  <option value="auto">Auto detect</option>
-                  <option value="pt">Portuguese</option>
-                  <option value="en">English</option>
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-dark-200">
-                  Silence Detection
-                  <span className="ml-2 text-xs text-dark-400">
-                    {localSettings.pauseThreshold}ms
-                  </span>
-                </label>
-                <input
-                  type="range"
-                  min="500"
-                  max="3000"
-                  step="100"
-                  value={localSettings.pauseThreshold}
-                  onChange={(e) =>
-                    setLocalSettings({ ...localSettings, pauseThreshold: Number(e.target.value) })
-                  }
-                  className="w-full accent-blue-500"
-                />
-              </div>
             </>
           )}
 
