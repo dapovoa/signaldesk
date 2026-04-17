@@ -54,6 +54,7 @@ export interface Api {
   testTranscriptionConnection: (payload: {
     provider?: 'openai' | 'assemblyai'
     apiKey?: string
+    whisperModel?: string
     language?: 'auto' | 'en' | 'pt'
     assemblyAiSpeechModel?: 'u3-rt-pro' | 'universal-streaming-multilingual' | 'universal-streaming-english'
     assemblyAiLanguageDetection?: boolean
@@ -62,7 +63,20 @@ export interface Api {
     assemblyAiKeytermsPrompt?: string
     assemblyAiPrompt?: string
   }) => Promise<{ success: boolean; message: string }>
-  connectTranscription: () => Promise<{ success: boolean; message: string }>
+  connectTranscription: (payload?: {
+    transcriptionProvider?: 'openai' | 'assemblyai'
+    transcriptionApiKey?: string
+    openaiTranscriptionApiKey?: string
+    whisperModel?: string
+    transcriptionLanguage?: 'auto' | 'en' | 'pt'
+    assemblyAiSpeechModel?: 'u3-rt-pro' | 'universal-streaming-multilingual' | 'universal-streaming-english'
+    assemblyAiLanguageDetection?: boolean
+    assemblyAiMinTurnSilence?: number
+    assemblyAiMaxTurnSilence?: number
+    assemblyAiKeytermsPrompt?: string
+    assemblyAiPrompt?: string
+    pauseThreshold?: number
+  }) => Promise<{ success: boolean; message: string }>
   listTranscriptionModels: (payload: { apiKey?: string }) => Promise<{
     success: boolean
     models: Array<{ id: string; name: string }>

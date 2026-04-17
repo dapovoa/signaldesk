@@ -1,5 +1,5 @@
-import { AlertCircle, CheckCircle, Eye, EyeOff, FolderOpen, Save, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { AlertCircle, CheckCircle, Eye, EyeOff, FolderOpen, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppSettings, useInterviewStore } from '../store/interviewStore'
 import type { WindowCapabilities } from '../../../shared/contracts'
 import {
@@ -38,6 +38,7 @@ function SectionDivider({ label }: { label: string }): React.ReactNode {
 }
 
 const normalizeSettingsForUi = normalizeLlmSettings
+const SETTINGS_AUTOSAVE_DELAY_MS = 400
 
 const getLlmFormState = (settings: AppSettings): LlmFormState => {
   const provider = settings.llmProvider
@@ -172,6 +173,11 @@ export function SettingsModal(): React.ReactNode | null {
     warning: ''
   })
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const settingsAutosaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const saveStatusTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const saveChainRef = useRef<Promise<AppSettings | null>>(Promise.resolve(null))
+  const lastPersistedSettingsRef = useRef<string>(JSON.stringify(normalizeSettingsForUi(settings)))
+  const localSettingsRef = useRef<AppSettings>(localSettings)
   const [llmModelsRefreshTick, setLlmModelsRefreshTick] = useState(0)
   const {
     llmProvider,
@@ -185,8 +191,21 @@ export function SettingsModal(): React.ReactNode | null {
   } = localSettings
 
   useEffect(() => {
-    setLocalSettings(normalizeSettingsForUi(settings))
+    const normalizedSettings = normalizeSettingsForUi(settings)
+    const serializedSettings = JSON.stringify(normalizedSettings)
+    const hasPendingLocalChanges =
+      JSON.stringify(normalizeSettingsForUi(localSettingsRef.current)) !== lastPersistedSettingsRef.current
+
+    lastPersistedSettingsRef.current = serializedSettings
+
+    if (!showSettings || !hasPendingLocalChanges) {
+      setLocalSettings(normalizedSettings)
+    }
   }, [settings, showSettings])
+
+  useEffect(() => {
+    localSettingsRef.current = localSettings
+  }, [localSettings])
 
   useEffect(() => {
     setTranscriptionStatus('idle')
@@ -194,7 +213,9 @@ export function SettingsModal(): React.ReactNode | null {
   }, [
     localSettings.transcriptionProvider,
     localSettings.transcriptionApiKey,
+    localSettings.openaiTranscriptionApiKey,
     localSettings.transcriptionLanguage,
+    localSettings.whisperModel,
     localSettings.assemblyAiSpeechModel,
     localSettings.assemblyAiLanguageDetection,
     localSettings.assemblyAiMinTurnSilence,
@@ -237,6 +258,110 @@ export function SettingsModal(): React.ReactNode | null {
 
     loadWindowCapabilities()
   }, [])
+
+  const clearSaveStatusTimer = useCallback((): void => {
+    if (saveStatusTimeoutRef.current) {
+      clearTimeout(saveStatusTimeoutRef.current)
+      saveStatusTimeoutRef.current = null
+    }
+  }, [])
+
+  const scheduleSaveStatusReset = useCallback((status: 'saved' | 'error'): void => {
+    clearSaveStatusTimer()
+    saveStatusTimeoutRef.current = setTimeout(() => {
+      setSaveStatus((current) => (current === status ? 'idle' : current))
+    }, status === 'saved' ? 1000 : 3000)
+  }, [clearSaveStatusTimer])
+
+  const persistSettings = useCallback(
+    async (settingsToPersist: AppSettings, statusMode: 'show' | 'silent' = 'show'): Promise<AppSettings> => {
+      const normalizedSettings = normalizeSettingsForUi(settingsToPersist)
+      const serializedSettings = JSON.stringify(normalizedSettings)
+
+      if (serializedSettings === lastPersistedSettingsRef.current) {
+        return normalizedSettings
+      }
+
+      if (statusMode === 'show') {
+        clearSaveStatusTimer()
+        setSaveStatus('saving')
+      }
+
+      const saveTask = async (): Promise<AppSettings> => {
+        try {
+          const updatedSettings = normalizeSettingsForUi(
+            (await window.api.updateSettings(normalizedSettings)) as AppSettings
+          )
+          lastPersistedSettingsRef.current = JSON.stringify(updatedSettings)
+          setSettings(updatedSettings)
+          if (statusMode === 'show') {
+            setSaveStatus('saved')
+            scheduleSaveStatusReset('saved')
+          }
+          return updatedSettings
+        } catch (err) {
+          console.error('Failed to save settings:', err)
+          if (statusMode === 'show') {
+            setSaveStatus('error')
+            scheduleSaveStatusReset('error')
+          }
+          throw err
+        }
+      }
+
+      const queuedSave = saveChainRef.current.catch(() => null).then(saveTask)
+      saveChainRef.current = queuedSave
+      return queuedSave
+    },
+    [clearSaveStatusTimer, scheduleSaveStatusReset, setSettings]
+  )
+
+  const flushPendingSettingsSave = useCallback(async (): Promise<AppSettings> => {
+    if (settingsAutosaveTimeoutRef.current) {
+      clearTimeout(settingsAutosaveTimeoutRef.current)
+      settingsAutosaveTimeoutRef.current = null
+    }
+
+    return persistSettings(localSettingsRef.current)
+  }, [persistSettings])
+
+  useEffect(() => {
+    if (!showSettings) {
+      if (settingsAutosaveTimeoutRef.current) {
+        clearTimeout(settingsAutosaveTimeoutRef.current)
+        settingsAutosaveTimeoutRef.current = null
+      }
+      return
+    }
+
+    const serializedSettings = JSON.stringify(normalizeSettingsForUi(localSettings))
+    if (serializedSettings === lastPersistedSettingsRef.current) {
+      return
+    }
+
+    settingsAutosaveTimeoutRef.current = setTimeout(() => {
+      void persistSettings(localSettingsRef.current)
+    }, SETTINGS_AUTOSAVE_DELAY_MS)
+
+    return () => {
+      if (settingsAutosaveTimeoutRef.current) {
+        clearTimeout(settingsAutosaveTimeoutRef.current)
+        settingsAutosaveTimeoutRef.current = null
+      }
+    }
+  }, [localSettings, persistSettings, showSettings])
+
+  useEffect(() => {
+    return () => {
+      if (settingsAutosaveTimeoutRef.current) {
+        clearTimeout(settingsAutosaveTimeoutRef.current)
+      }
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current)
+      }
+      clearSaveStatusTimer()
+    }
+  }, [clearSaveStatusTimer])
 
   useEffect(() => {
     if (fetchTimeoutRef.current) {
@@ -439,18 +564,26 @@ export function SettingsModal(): React.ReactNode | null {
   if (!showSettings) return null
 
   const handleConnectTranscription = async (): Promise<void> => {
-    const apiKey =
-      localSettings.transcriptionProvider === 'assemblyai'
-        ? localSettings.transcriptionApiKey.trim()
-        : localSettings.openaiTranscriptionApiKey.trim()
-
-    if (!apiKey) {
-      setTranscriptionStatus('error')
-      setTranscriptionMessage('Transcription credential is required before connecting.')
-      return
-    }
-
     try {
+      const currentSettings = await flushPendingSettingsSave()
+      const apiKey =
+        currentSettings.transcriptionProvider === 'assemblyai'
+          ? currentSettings.transcriptionApiKey.trim()
+          : currentSettings.openaiTranscriptionApiKey.trim()
+
+      if (!apiKey) {
+        setTranscriptionStatus('error')
+        setTranscriptionMessage('Transcription credential is required before connecting.')
+        return
+      }
+
+      const assemblyAiValidationError = getAssemblyAiPromptValidationError(currentSettings)
+      if (assemblyAiValidationError) {
+        setTranscriptionStatus('error')
+        setTranscriptionMessage(assemblyAiValidationError)
+        return
+      }
+
       setTranscriptionStatus('connecting')
       setTranscriptionMessage('')
 
@@ -465,39 +598,41 @@ export function SettingsModal(): React.ReactNode | null {
   }
 
   const handleTestTranscription = async (): Promise<void> => {
-    const apiKey =
-      localSettings.transcriptionProvider === 'assemblyai'
-        ? localSettings.transcriptionApiKey.trim()
-        : localSettings.openaiTranscriptionApiKey.trim()
-
-    const assemblyAiValidationError = getAssemblyAiPromptValidationError(localSettings)
-
-    if (!apiKey) {
-      setTranscriptionStatus('error')
-      setTranscriptionMessage('Transcription credential is required before testing.')
-      return
-    }
-
-    if (assemblyAiValidationError) {
-      setTranscriptionStatus('error')
-      setTranscriptionMessage(assemblyAiValidationError)
-      return
-    }
-
     try {
+      const currentSettings = await flushPendingSettingsSave()
+      const apiKey =
+        currentSettings.transcriptionProvider === 'assemblyai'
+          ? currentSettings.transcriptionApiKey.trim()
+          : currentSettings.openaiTranscriptionApiKey.trim()
+
+      const assemblyAiValidationError = getAssemblyAiPromptValidationError(currentSettings)
+
+      if (!apiKey) {
+        setTranscriptionStatus('error')
+        setTranscriptionMessage('Transcription credential is required before testing.')
+        return
+      }
+
+      if (assemblyAiValidationError) {
+        setTranscriptionStatus('error')
+        setTranscriptionMessage(assemblyAiValidationError)
+        return
+      }
+
       setTranscriptionStatus('testing')
       setTranscriptionMessage('')
 
       const result = await window.api.testTranscriptionConnection({
-        provider: localSettings.transcriptionProvider,
+        provider: currentSettings.transcriptionProvider,
         apiKey,
-        language: localSettings.transcriptionLanguage,
-        assemblyAiSpeechModel: localSettings.assemblyAiSpeechModel,
-        assemblyAiLanguageDetection: localSettings.assemblyAiLanguageDetection,
-        assemblyAiMinTurnSilence: localSettings.assemblyAiMinTurnSilence,
-        assemblyAiMaxTurnSilence: localSettings.assemblyAiMaxTurnSilence,
-        assemblyAiKeytermsPrompt: localSettings.assemblyAiKeytermsPrompt,
-        assemblyAiPrompt: localSettings.assemblyAiPrompt
+        whisperModel: currentSettings.whisperModel,
+        language: currentSettings.transcriptionLanguage,
+        assemblyAiSpeechModel: currentSettings.assemblyAiSpeechModel,
+        assemblyAiLanguageDetection: currentSettings.assemblyAiLanguageDetection,
+        assemblyAiMinTurnSilence: currentSettings.assemblyAiMinTurnSilence,
+        assemblyAiMaxTurnSilence: currentSettings.assemblyAiMaxTurnSilence,
+        assemblyAiKeytermsPrompt: currentSettings.assemblyAiKeytermsPrompt,
+        assemblyAiPrompt: currentSettings.assemblyAiPrompt
       })
 
       setTranscriptionStatus(result.success ? 'ok' : 'error')
@@ -509,36 +644,37 @@ export function SettingsModal(): React.ReactNode | null {
   }
 
   const handleTestConnection = async (): Promise<void> => {
-    const { provider, authMode, credential, baseURL, usesOAuth } = getLlmFormState(localSettings)
-
-    if (provider === 'openai-oauth' && oauthStatus === 'ok') {
-      setOauthStatus('idle')
-      setOauthMessage('')
-    }
-
-    if (provider !== 'llama.cpp' && !credential) {
-      setConnectionStatus('error')
-      setConnectionMessage(
-        provider === 'openai-oauth'
-          ? 'Connect via browser before testing the OAuth provider.'
-          : 'Credential is required before testing the connection.'
-      )
-      return
-    }
-
-    if (provider === 'anthropic-compatible' && !credential) {
-      setConnectionStatus('error')
-      setConnectionMessage('API Key is required for Anthropic Compatible.')
-      return
-    }
-
-    if (provider === 'openai-compatible' && !baseURL) {
-      setConnectionStatus('error')
-      setConnectionMessage('Base URL is required for OpenAI compatible provider.')
-      return
-    }
-
     try {
+      const currentSettings = await flushPendingSettingsSave()
+      const { provider, authMode, credential, baseURL, usesOAuth } = getLlmFormState(currentSettings)
+
+      if (provider === 'openai-oauth' && oauthStatus === 'ok') {
+        setOauthStatus('idle')
+        setOauthMessage('')
+      }
+
+      if (provider !== 'llama.cpp' && !credential) {
+        setConnectionStatus('error')
+        setConnectionMessage(
+          provider === 'openai-oauth'
+            ? 'Connect via browser before testing the OAuth provider.'
+            : 'Credential is required before testing the connection.'
+        )
+        return
+      }
+
+      if (provider === 'anthropic-compatible' && !credential) {
+        setConnectionStatus('error')
+        setConnectionMessage('API Key is required for Anthropic Compatible.')
+        return
+      }
+
+      if (provider === 'openai-compatible' && !baseURL) {
+        setConnectionStatus('error')
+        setConnectionMessage('Base URL is required for OpenAI compatible provider.')
+        return
+      }
+
       setConnectionStatus('testing')
       setConnectionMessage('')
 
@@ -552,9 +688,9 @@ export function SettingsModal(): React.ReactNode | null {
             ? baseURL
             : undefined,
         customHeaders:
-          provider === 'openai-compatible' ? localSettings.llmCustomHeaders : undefined,
-        model: getActiveLlmModel(localSettings),
-        llmModelDir: provider === 'llama.cpp' ? localSettings.llmModelDir : undefined,
+          provider === 'openai-compatible' ? currentSettings.llmCustomHeaders : undefined,
+        model: getActiveLlmModel(currentSettings),
+        llmModelDir: provider === 'llama.cpp' ? currentSettings.llmModelDir : undefined,
         testKind: 'connect'
       })
 
@@ -571,7 +707,7 @@ export function SettingsModal(): React.ReactNode | null {
               provider === 'openai-compatible' || provider === 'anthropic-compatible'
                 ? baseURL
                 : undefined,
-            customHeaders: provider === 'openai-compatible' ? localSettings.llmCustomHeaders : undefined
+            customHeaders: provider === 'openai-compatible' ? currentSettings.llmCustomHeaders : undefined
           })
           if (modelsResult.success && modelsResult.models.length > 0) {
             setConnectedModels(modelsResult.models.map(m => m.id))
@@ -588,25 +724,26 @@ export function SettingsModal(): React.ReactNode | null {
   }
 
   const handleTestLlm = async (): Promise<void> => {
-    const { provider, authMode, credential, baseURL, usesOAuth } = getLlmFormState(localSettings)
-
-    if (provider !== 'llama.cpp' && !credential) {
-      setLlmTestStatus('error')
-      setConnectionMessage(
-        provider === 'openai-oauth'
-          ? 'Connect via browser before testing the OAuth provider.'
-          : 'Credential is required before testing the LLM.'
-      )
-      return
-    }
-
-    if (provider === 'openai-compatible' && !baseURL) {
-      setLlmTestStatus('error')
-      setConnectionMessage('Base URL is required for OpenAI compatible provider.')
-      return
-    }
-
     try {
+      const currentSettings = await flushPendingSettingsSave()
+      const { provider, authMode, credential, baseURL, usesOAuth } = getLlmFormState(currentSettings)
+
+      if (provider !== 'llama.cpp' && !credential) {
+        setLlmTestStatus('error')
+        setConnectionMessage(
+          provider === 'openai-oauth'
+            ? 'Connect via browser before testing the OAuth provider.'
+            : 'Credential is required before testing the LLM.'
+        )
+        return
+      }
+
+      if (provider === 'openai-compatible' && !baseURL) {
+        setLlmTestStatus('error')
+        setConnectionMessage('Base URL is required for OpenAI compatible provider.')
+        return
+      }
+
       setLlmTestStatus('testing')
       setConnectionMessage('')
       const result = await window.api.testProviderConnection({
@@ -619,9 +756,9 @@ export function SettingsModal(): React.ReactNode | null {
             ? baseURL
             : undefined,
         customHeaders:
-          provider === 'openai-compatible' ? localSettings.llmCustomHeaders : undefined,
-        model: getActiveLlmModel(localSettings),
-        llmModelDir: provider === 'llama.cpp' ? localSettings.llmModelDir : undefined,
+          provider === 'openai-compatible' ? currentSettings.llmCustomHeaders : undefined,
+        model: getActiveLlmModel(currentSettings),
+        llmModelDir: provider === 'llama.cpp' ? currentSettings.llmModelDir : undefined,
         testKind: 'llm'
       })
 
@@ -639,31 +776,6 @@ export function SettingsModal(): React.ReactNode | null {
       setTimeout(() => {
         setLlmTestStatus((current) => current === 'testing' ? 'idle' : current)
       }, 10000)
-    }
-  }
-
-  const handleSave = async (): Promise<void> => {
-    try {
-      const assemblyAiValidationError = getAssemblyAiPromptValidationError(localSettings)
-      if (assemblyAiValidationError) {
-        setSaveStatus('error')
-        setTranscriptionStatus('error')
-        setTranscriptionMessage(assemblyAiValidationError)
-        setTimeout(() => setSaveStatus('idle'), 3000)
-        return
-      }
-
-      setSaveStatus('saving')
-      const updatedSettings = await window.api.updateSettings(normalizeSettingsForUi(localSettings))
-      setSettings(updatedSettings as AppSettings)
-      setSaveStatus('saved')
-      setTimeout(() => {
-        setSaveStatus('idle')
-      }, 1000)
-    } catch (err) {
-      console.error('Failed to save settings:', err)
-      setSaveStatus('error')
-      setTimeout(() => setSaveStatus('idle'), 3000)
     }
   }
 
@@ -691,9 +803,13 @@ export function SettingsModal(): React.ReactNode | null {
     }
   }
 
-  const handleClose = (): void => {
-    setLocalSettings(normalizeSettingsForUi(settings))
-    setShowSettings(false)
+  const handleClose = async (): Promise<void> => {
+    try {
+      await flushPendingSettingsSave()
+      setShowSettings(false)
+    } catch {
+      // Keep the modal open so the user does not lose unsaved changes.
+    }
   }
 
   const activeLlmModel = getActiveLlmModel(localSettings)
@@ -707,6 +823,7 @@ export function SettingsModal(): React.ReactNode | null {
 
   const handleConnectOpenAI = async (): Promise<void> => {
     try {
+      await flushPendingSettingsSave()
       setModels([])
       setModelsError(null)
       setConnectionStatus('idle')
@@ -743,6 +860,7 @@ export function SettingsModal(): React.ReactNode | null {
 
   const handleDisconnectOpenAI = async (): Promise<void> => {
     try {
+      await flushPendingSettingsSave()
       setModels([])
       setModelsError(null)
       setConnectedModels([])
@@ -1271,7 +1389,7 @@ export function SettingsModal(): React.ReactNode | null {
           )}
 
           <div className="space-y-2">
-            {localSettings.llmProvider === 'openai-oauth' && oauthStatus !== 'ok' ? null : (
+            {localSettings.llmProvider === 'openai-oauth' && !hasStoredOAuthSession ? null : (
               <>
                 <label className="block text-sm font-medium text-dark-200">
                   Answer Generation Model
@@ -1469,31 +1587,25 @@ export function SettingsModal(): React.ReactNode | null {
           )}
         </div>
 
-        <div className="flex items-center justify-between border-t border-white/5 px-4 py-3.5">
+        <div className="flex items-center border-t border-white/5 px-4 py-3.5">
           <div className="flex items-center gap-3">
+            {saveStatus === 'saving' && (
+              <div className="flex items-center gap-2 text-sm text-dark-400">
+                <span>Saving changes...</span>
+              </div>
+            )}
             {saveStatus === 'error' && (
               <div className="flex items-center gap-2 text-sm text-red-400">
                 <AlertCircle size={16} />
-                <span>Failed to save</span>
+                <span>Failed to save changes</span>
               </div>
             )}
             {saveStatus === 'saved' && (
               <div className="flex items-center gap-2 text-sm text-green-400">
                 <CheckCircle size={16} />
-                <span>Saved!</span>
+                <span>All changes saved</span>
               </div>
             )}
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              onClick={handleSave}
-              disabled={saveStatus === 'saving'}
-              className="flex items-center gap-2 rounded-lg border border-cyan-400/25 bg-gradient-to-r from-cyan-400 to-teal-400 px-4 py-2 text-sm font-medium text-slate-950 transition-colors hover:from-cyan-300 hover:to-teal-300 disabled:opacity-50"
-            >
-              <Save size={16} />
-              <span>{saveStatus === 'saving' ? 'Saving...' : 'Save'}</span>
-            </button>
           </div>
         </div>
       </div>

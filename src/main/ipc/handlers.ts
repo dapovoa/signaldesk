@@ -394,6 +394,36 @@ const getTranscriptionConfig = (settings: AppSettings): TranscriptionConfig => {
   }
 }
 
+type TranscriptionSettingsInput = Pick<
+  AppSettings,
+  | 'transcriptionProvider'
+  | 'transcriptionApiKey'
+  | 'openaiTranscriptionApiKey'
+  | 'whisperModel'
+  | 'transcriptionLanguage'
+  | 'assemblyAiSpeechModel'
+  | 'assemblyAiLanguageDetection'
+  | 'assemblyAiMinTurnSilence'
+  | 'assemblyAiMaxTurnSilence'
+  | 'assemblyAiKeytermsPrompt'
+  | 'assemblyAiPrompt'
+  | 'pauseThreshold'
+>
+
+const resolveTranscriptionSettings = (
+  payload?: Partial<TranscriptionSettingsInput>
+): AppSettings | null => {
+  const storedSettings = settingsManager?.getSettings()
+  if (!storedSettings) {
+    return null
+  }
+
+  return {
+    ...storedSettings,
+    ...payload
+  }
+}
+
 const validateProviderSettings = (settings: AppSettings): string | null => {
   if (settings.llmProvider === 'llama.cpp') {
     return settings.llmModel?.trim()
@@ -442,7 +472,7 @@ const validateTranscriptionSettings = (settings: AppSettings): string | null => 
     return 'AssemblyAI Universal 3 Pro does not support using prompt and keyterms together.'
   }
 
-  if (settings.transcriptionProvider === 'openai' && !settings.llmApiKey?.trim()) {
+  if (settings.transcriptionProvider === 'openai' && !settings.openaiTranscriptionApiKey?.trim()) {
     return 'OpenAI API key not configured for transcription. Please add it in Settings.'
   }
 
@@ -1599,6 +1629,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       payload: {
         provider?: 'openai' | 'assemblyai'
         apiKey?: string
+        whisperModel?: string
         language?: 'auto' | 'en' | 'pt'
         assemblyAiSpeechModel?: 'u3-rt-pro' | 'universal-streaming-multilingual' | 'universal-streaming-english'
         assemblyAiLanguageDetection?: boolean
@@ -1641,7 +1672,15 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
 
       try {
         const client = createOpenAIClient({ apiKey })
-        await client.models.list()
+        const response = await client.models.list()
+        const whisperModel = payload?.whisperModel?.trim() || 'whisper-1'
+        const hasSelectedModel = response.data.some((model) => model.id === whisperModel)
+        if (!hasSelectedModel) {
+          return {
+            success: false,
+            message: `Selected Whisper model "${whisperModel}" is not available for this API key.`
+          }
+        }
         return { success: true, message: 'OpenAI transcription credential looks valid.' }
       } catch (error) {
         return {
@@ -1652,49 +1691,52 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     }
   )
 
-  ipcMain.handle('connect-transcription', async () => {
-    const settings = settingsManager?.getSettings()
+  ipcMain.handle(
+    'connect-transcription',
+    async (_event, payload?: Partial<TranscriptionSettingsInput>) => {
+      const settings = resolveTranscriptionSettings(payload)
 
-    if (!settings) {
-      return { success: false, message: 'Settings not available' }
-    }
-
-    const transcriptionValidationError = validateTranscriptionSettings(settings)
-    if (transcriptionValidationError) {
-      return { success: false, message: transcriptionValidationError }
-    }
-
-    try {
-      if (whisperService) {
-        whisperService.removeAllListeners()
-        whisperService = null
+      if (!settings) {
+        return { success: false, message: 'Settings not available' }
       }
 
-      const transcriptionConfig = getTranscriptionConfig(settings)
+      const transcriptionValidationError = validateTranscriptionSettings(settings)
+      if (transcriptionValidationError) {
+        return { success: false, message: transcriptionValidationError }
+      }
 
-      whisperService = new WhisperService({
-        provider: transcriptionConfig.provider,
-        apiKey: transcriptionConfig.apiKey,
-        model: settings.whisperModel || 'whisper-1',
-        language: settings.transcriptionLanguage === 'auto' ? undefined : settings.transcriptionLanguage,
-        assemblyAiSpeechModel: settings.assemblyAiSpeechModel,
-        assemblyAiLanguageDetection: settings.assemblyAiLanguageDetection,
-        assemblyAiMinTurnSilence: settings.assemblyAiMinTurnSilence,
-        assemblyAiMaxTurnSilence: settings.assemblyAiMaxTurnSilence,
-        assemblyAiKeytermsPrompt: settings.assemblyAiKeytermsPrompt,
-        assemblyAiPrompt: settings.assemblyAiPrompt,
-        silenceThresholdMs: settings.pauseThreshold
-      })
+      try {
+        if (whisperService) {
+          whisperService.removeAllListeners()
+          whisperService = null
+        }
 
-      await whisperService.start()
-      return { success: true, message: 'Transcription connected successfully.' }
-    } catch (error) {
-      return {
-        success: false,
-        message: error instanceof Error ? error.message : 'Failed to connect transcription'
+        const transcriptionConfig = getTranscriptionConfig(settings)
+
+        whisperService = new WhisperService({
+          provider: transcriptionConfig.provider,
+          apiKey: transcriptionConfig.apiKey,
+          model: settings.whisperModel || 'whisper-1',
+          language: settings.transcriptionLanguage === 'auto' ? undefined : settings.transcriptionLanguage,
+          assemblyAiSpeechModel: settings.assemblyAiSpeechModel,
+          assemblyAiLanguageDetection: settings.assemblyAiLanguageDetection,
+          assemblyAiMinTurnSilence: settings.assemblyAiMinTurnSilence,
+          assemblyAiMaxTurnSilence: settings.assemblyAiMaxTurnSilence,
+          assemblyAiKeytermsPrompt: settings.assemblyAiKeytermsPrompt,
+          assemblyAiPrompt: settings.assemblyAiPrompt,
+          silenceThresholdMs: settings.pauseThreshold
+        })
+
+        await whisperService.start()
+        return { success: true, message: 'Transcription connected successfully.' }
+      } catch (error) {
+        return {
+          success: false,
+          message: error instanceof Error ? error.message : 'Failed to connect transcription'
+        }
       }
     }
-  })
+  )
 
   ipcMain.handle('list-transcription-models', async (_event, payload: { apiKey?: string }) => {
     const apiKey = payload?.apiKey?.trim()
