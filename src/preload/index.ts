@@ -67,6 +67,13 @@ const api = {
     assemblyAiPrompt?: string
   }): Promise<{ success: boolean; message: string }> =>
     ipcRenderer.invoke('test-transcription-connection', payload),
+  connectTranscription: (): Promise<{ success: boolean; message: string }> =>
+    ipcRenderer.invoke('connect-transcription'),
+  listTranscriptionModels: (payload: { apiKey?: string }): Promise<{
+    success: boolean
+    models: Array<{ id: string; name: string }>
+    error?: string
+  }> => ipcRenderer.invoke('list-transcription-models', payload),
   connectOpenAIOAuth: (): Promise<{ success: boolean; settings?: AppSettings; error?: string }> =>
     ipcRenderer.invoke('connect-openai-oauth'),
   disconnectOpenAIOAuth: (): Promise<{

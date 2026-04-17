@@ -150,9 +150,10 @@ export function SettingsModal(): React.ReactNode | null {
   const [modelsLoading, setModelsLoading] = useState(false)
   const [, setModelsError] = useState<string | null>(null)
   const [transcriptionStatus, setTranscriptionStatus] = useState<
-    'idle' | 'testing' | 'ok' | 'error'
+    'idle' | 'connecting' | 'testing' | 'ok' | 'error'
   >('idle')
   const [transcriptionMessage, setTranscriptionMessage] = useState<string>('')
+  const [transcriptionModels, setTranscriptionModels] = useState<string[]>(['whisper-1'])
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>(
     'idle'
   )
@@ -201,6 +202,28 @@ export function SettingsModal(): React.ReactNode | null {
     localSettings.assemblyAiKeytermsPrompt,
     localSettings.assemblyAiPrompt
   ])
+
+  useEffect(() => {
+    if (localSettings.transcriptionProvider !== 'openai') return
+    if (!localSettings.openaiTranscriptionApiKey.trim()) return
+
+    const loadTranscriptionModels = async (): Promise<void> => {
+      try {
+        const result = await window.api.listTranscriptionModels({
+          apiKey: localSettings.openaiTranscriptionApiKey
+        })
+        if (result.success && result.models.length > 0) {
+          setTranscriptionModels(result.models.map((m) => m.id))
+        } else {
+          setTranscriptionModels(['whisper-1'])
+        }
+      } catch {
+        setTranscriptionModels(['whisper-1'])
+      }
+    }
+
+    loadTranscriptionModels()
+  }, [localSettings.transcriptionProvider, localSettings.openaiTranscriptionApiKey])
 
   useEffect(() => {
     const loadWindowCapabilities = async (): Promise<void> => {
@@ -415,11 +438,37 @@ export function SettingsModal(): React.ReactNode | null {
 
   if (!showSettings) return null
 
+  const handleConnectTranscription = async (): Promise<void> => {
+    const apiKey =
+      localSettings.transcriptionProvider === 'assemblyai'
+        ? localSettings.transcriptionApiKey.trim()
+        : localSettings.openaiTranscriptionApiKey.trim()
+
+    if (!apiKey) {
+      setTranscriptionStatus('error')
+      setTranscriptionMessage('Transcription credential is required before connecting.')
+      return
+    }
+
+    try {
+      setTranscriptionStatus('connecting')
+      setTranscriptionMessage('')
+
+      const result = await window.api.connectTranscription()
+
+      setTranscriptionStatus(result.success ? 'ok' : 'error')
+      setTranscriptionMessage(result.message)
+    } catch (err) {
+      setTranscriptionStatus('error')
+      setTranscriptionMessage(err instanceof Error ? err.message : 'Failed to connect transcription.')
+    }
+  }
+
   const handleTestTranscription = async (): Promise<void> => {
     const apiKey =
       localSettings.transcriptionProvider === 'assemblyai'
         ? localSettings.transcriptionApiKey.trim()
-        : localSettings.llmApiKey.trim()
+        : localSettings.openaiTranscriptionApiKey.trim()
 
     const assemblyAiValidationError = getAssemblyAiPromptValidationError(localSettings)
 
@@ -928,6 +977,38 @@ export function SettingsModal(): React.ReactNode | null {
             <>
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-dark-200">
+                  OpenAI Transcription API Key
+                  <a
+                    href="https://platform.openai.com/api-keys"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-2 text-xs text-blue-400 hover:underline"
+                  >
+                    Dashboard →
+                  </a>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showTranscriptionCredential ? 'text' : 'password'}
+                    value={localSettings.openaiTranscriptionApiKey}
+                    onChange={(e) =>
+                      setLocalSettings({ ...localSettings, openaiTranscriptionApiKey: e.target.value })
+                    }
+                    placeholder="Enter your OpenAI API key"
+                    className="w-full px-3 py-2 pr-10 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowTranscriptionCredential(!showTranscriptionCredential)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-dark-400 hover:text-dark-200"
+                  >
+                    {showTranscriptionCredential ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-dark-200">
                   Transcription Language
                 </label>
                 <select
@@ -947,24 +1028,55 @@ export function SettingsModal(): React.ReactNode | null {
               </div>
 
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-dark-200">
-                  Silence Detection
-                  <span className="ml-2 text-xs text-dark-400">
-                    {localSettings.pauseThreshold}ms
-                  </span>
-                </label>
-                <input
-                  type="range"
-                  min="500"
-                  max="3000"
-                  step="100"
-                  value={localSettings.pauseThreshold}
+                <label className="block text-sm font-medium text-dark-200">Whisper Model</label>
+                <select
+                  value={localSettings.whisperModel || 'whisper-1'}
                   onChange={(e) =>
-                    setLocalSettings({ ...localSettings, pauseThreshold: Number(e.target.value) })
+                    setLocalSettings({
+                      ...localSettings,
+                      whisperModel: e.target.value
+                    })
                   }
-                  className="w-full accent-blue-500"
-                />
+                  className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors"
+                >
+                  {transcriptionModels.map((model) => (
+                    <option key={model} value={model}>
+                      {model}
+                    </option>
+                  ))}
+                </select>
               </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={handleConnectTranscription}
+                  disabled={transcriptionStatus === 'connecting'}
+                  className="settings-action px-3 py-2 text-sm transition-colors disabled:opacity-60"
+                >
+                  {transcriptionStatus === 'connecting' ? 'Connecting...' : 'Connect STT'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleTestTranscription}
+                  disabled={transcriptionStatus === 'testing'}
+                  className="settings-action px-3 py-2 text-sm transition-colors disabled:opacity-60"
+                >
+                  {transcriptionStatus === 'testing' ? 'Testing...' : 'Test STT'}
+                </button>
+              </div>
+              {transcriptionStatus === 'ok' && (
+                <div className="settings-status-ok flex items-center gap-1.5 text-xs">
+                  <CheckCircle size={12} />
+                  <span>{transcriptionMessage}</span>
+                </div>
+              )}
+              {transcriptionStatus === 'error' && (
+                <div className="settings-status-error flex items-center gap-1.5 text-xs">
+                  <AlertCircle size={12} />
+                  <span>{transcriptionMessage}</span>
+                </div>
+              )}
             </>
           )}
 
@@ -1008,123 +1120,121 @@ export function SettingsModal(): React.ReactNode | null {
             </select>
           </div>
 
-          <div className="space-y-2">
-            {localSettings.llmProvider === 'openai' && (
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-dark-200">OpenAI Auth Mode</label>
-                <select
-                  value={localSettings.llmAuthMode}
-                  onChange={(e) =>
-                    setLocalSettings(
-                      normalizeSettingsForUi({
-                        ...localSettings,
-                        llmAuthMode: e.target.value as AppSettings['llmAuthMode']
-                      })
-                    )
-                  }
-                  className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors"
-                >
-                  <option value="api-key">API Key</option>
-                  <option value="oauth-token">OAuth Token</option>
-                </select>
-              </div>
-            )}
+          {localSettings.llmProvider === 'openai' && (
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-dark-200">OpenAI Auth Mode</label>
+              <select
+                value={localSettings.llmAuthMode}
+                onChange={(e) =>
+                  setLocalSettings(
+                    normalizeSettingsForUi({
+                      ...localSettings,
+                      llmAuthMode: e.target.value as AppSettings['llmAuthMode']
+                    })
+                  )
+                }
+                className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors"
+              >
+                <option value="api-key">API Key</option>
+                <option value="oauth-token">OAuth Token</option>
+              </select>
+            </div>
+          )}
 
-            {usesManualCredentialInput && (
-              <>
-                <label className="block text-sm font-medium text-dark-200">
-                  {usesOAuthCredentialForInput ? 'OAuth Token' : 'API Key'}
-                  {localSettings.llmProvider === 'openai' &&
-                    localSettings.llmAuthMode === 'api-key' && (
-                      <a
-                        href="https://platform.openai.com/api-keys"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="ml-2 text-xs text-blue-400 hover:underline"
-                      >
-                        Dashboard →
-                      </a>
-                    )}
-                </label>
-                <div className="relative">
-                  <input
-                    type={showCredential ? 'text' : 'password'}
-                    value={getLlmFormState(localSettings).credential}
-                    onChange={(e) => setLocalSettings(setActiveLlmCredential(localSettings, e.target.value))}
-                    placeholder={
-                      usesOAuthCredentialForInput
-                        ? 'Enter your OAuth access token'
-                        : 'Enter your API key'
-                    }
-                    className="w-full px-3 py-2 pr-10 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
-                  />
+          {usesManualCredentialInput && (
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-dark-200">
+                {usesOAuthCredentialForInput ? 'OAuth Token' : 'API Key'}
+                {localSettings.llmProvider === 'openai' &&
+                  localSettings.llmAuthMode === 'api-key' && (
+                    <a
+                      href="https://platform.openai.com/api-keys"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ml-2 text-xs text-blue-400 hover:underline"
+                    >
+                      Dashboard →
+                    </a>
+                  )}
+              </label>
+              <div className="relative">
+                <input
+                  type={showCredential ? 'text' : 'password'}
+                  value={getLlmFormState(localSettings).credential}
+                  onChange={(e) => setLocalSettings(setActiveLlmCredential(localSettings, e.target.value))}
+                  placeholder={
+                    usesOAuthCredentialForInput
+                      ? 'Enter your OAuth access token'
+                      : 'Enter your API key'
+                  }
+                  className="w-full px-3 py-2 pr-10 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCredential(!showCredential)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-dark-400 hover:text-dark-200"
+                >
+                  {showCredential ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+          )}
+          {localSettings.llmProvider === 'openai-oauth' && (
+            <div className="space-y-2">
+              {!hasStoredOAuthSession ? (
+                <button
+                  type="button"
+                  onClick={handleConnectOpenAI}
+                  disabled={oauthStatus === 'connecting'}
+                  className="settings-action w-full px-3 py-2 text-sm transition-colors disabled:opacity-60"
+                >
+                  {oauthStatus === 'connecting' ? 'Opening browser...' : 'Connect via browser'}
+                </button>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => setShowCredential(!showCredential)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-dark-400 hover:text-dark-200"
+                    onClick={handleDisconnectOpenAI}
+                    className="settings-action px-3 py-2 text-sm transition-colors hover:border-red-400/20 hover:bg-red-500/10 hover:text-red-300"
                   >
-                    {showCredential ? <EyeOff size={16} /> : <Eye size={16} />}
+                    Disconnect
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleTestLlm}
+                    disabled={llmTestStatus === 'testing'}
+                    className="settings-action px-3 py-2 text-sm transition-colors disabled:opacity-60"
+                  >
+                    {llmTestStatus === 'testing' ? 'Testing...' : 'Test LLM'}
                   </button>
                 </div>
-              </>
-            )}
-            {localSettings.llmProvider === 'openai-oauth' && (
-              <div className="space-y-2">
-                {!hasStoredOAuthSession ? (
-                  <button
-                    type="button"
-                    onClick={handleConnectOpenAI}
-                    disabled={oauthStatus === 'connecting'}
-                    className="settings-action w-full px-3 py-2 text-sm transition-colors disabled:opacity-60"
-                  >
-                    {oauthStatus === 'connecting' ? 'Opening browser...' : 'Connect via browser'}
-                  </button>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={handleDisconnectOpenAI}
-                      className="settings-action px-3 py-2 text-sm transition-colors hover:border-red-400/20 hover:bg-red-500/10 hover:text-red-300"
-                    >
-                      Disconnect
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleTestLlm}
-                      disabled={llmTestStatus === 'testing'}
-                      className="settings-action px-3 py-2 text-sm transition-colors disabled:opacity-60"
-                    >
-                      {llmTestStatus === 'testing' ? 'Testing...' : 'Test LLM'}
-                    </button>
-                  </div>
-                )}
-                {oauthStatus === 'ok' && (
-                  <div className="settings-status-ok flex items-center gap-1.5 text-xs">
-                    <CheckCircle size={12} />
-                    <span>{oauthMessage}</span>
-                  </div>
-                )}
-                {oauthStatus === 'error' && (
-                  <div className="settings-status-error flex items-center gap-1.5 text-xs">
-                    <AlertCircle size={12} />
-                    <span>{oauthMessage}</span>
-                  </div>
-                )}
-                {llmTestStatus === 'ok' && (
-                  <div className="settings-status-ok flex items-center gap-1.5 text-xs">
-                    <CheckCircle size={12} />
-                    <span>{connectionMessage || 'LLM test passed.'}</span>
-                  </div>
-                )}
-                {llmTestStatus === 'error' && (
-                  <div className="settings-status-error flex items-center gap-1.5 text-xs">
-                    <AlertCircle size={12} />
-                    <span>{connectionMessage || 'LLM test failed.'}</span>
-                  </div>
-                )}
-              </div>
-            )}
+              )}
+              {oauthStatus === 'ok' && (
+                <div className="settings-status-ok flex items-center gap-1.5 text-xs">
+                  <CheckCircle size={12} />
+                  <span>{oauthMessage}</span>
+                </div>
+              )}
+              {oauthStatus === 'error' && (
+                <div className="settings-status-error flex items-center gap-1.5 text-xs">
+                  <AlertCircle size={12} />
+                  <span>{oauthMessage}</span>
+                </div>
+              )}
+              {llmTestStatus === 'ok' && (
+                <div className="settings-status-ok flex items-center gap-1.5 text-xs">
+                  <CheckCircle size={12} />
+                  <span>{connectionMessage || 'LLM test passed.'}</span>
+                </div>
+              )}
+              {llmTestStatus === 'error' && (
+                <div className="settings-status-error flex items-center gap-1.5 text-xs">
+                  <AlertCircle size={12} />
+                  <span>{connectionMessage || 'LLM test failed.'}</span>
+                </div>
+              )}
             </div>
+          )}
 
           {(localSettings.llmProvider === 'openai-compatible' || localSettings.llmProvider === 'anthropic-compatible') && (
             <>
@@ -1161,50 +1271,54 @@ export function SettingsModal(): React.ReactNode | null {
           )}
 
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-dark-200">
-              Answer Generation Model
-            </label>
-            <div className="flex gap-2">
-              {connectedModels.length > 0 ? (
-                <select
-                  value={activeLlmModel}
-                  onChange={(e) =>
-                    setLocalSettings(normalizeSettingsForUi(setActiveLlmModel(localSettings, e.target.value)))
-                  }
-                  className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors"
-                >
-                  {connectedModels.map((model) => (
-                    <option key={model} value={model}>
-                      {model}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  type="text"
-                  value={activeLlmModel}
-                  onChange={(e) =>
-                    setLocalSettings(normalizeSettingsForUi(setActiveLlmModel(localSettings, e.target.value)))
-                  }
-                  placeholder={
-                    localSettings.llmProvider === 'llama.cpp'
-                      ? 'Enter GGUF model filename'
-                      : 'Enter model name (e.g. gpt-4o-mini)'
-                  }
-                  className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
-                />
-              )}
-              {localSettings.llmProvider === 'llama.cpp' && (
-                <button
-                  type="button"
-                  onClick={handleOpenLlmModelFolder}
-                  className="settings-action flex items-center justify-center px-3 py-2 text-sm transition-colors"
-                  title="Open GGUF models folder"
-                >
-                  <FolderOpen size={16} />
-                </button>
-              )}
-            </div>
+            {localSettings.llmProvider === 'openai-oauth' && oauthStatus !== 'ok' ? null : (
+              <>
+                <label className="block text-sm font-medium text-dark-200">
+                  Answer Generation Model
+                </label>
+                <div className="flex gap-2">
+                  {connectedModels.length > 0 ? (
+                    <select
+                      value={activeLlmModel}
+                      onChange={(e) =>
+                        setLocalSettings(normalizeSettingsForUi(setActiveLlmModel(localSettings, e.target.value)))
+                      }
+                      className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors"
+                    >
+                      {connectedModels.map((model) => (
+                        <option key={model} value={model}>
+                          {model}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={activeLlmModel}
+                      onChange={(e) =>
+                        setLocalSettings(normalizeSettingsForUi(setActiveLlmModel(localSettings, e.target.value)))
+                      }
+                      placeholder={
+                        localSettings.llmProvider === 'llama.cpp'
+                          ? 'Enter GGUF model filename'
+                          : 'Enter model name (e.g. gpt-4o-mini)'
+                      }
+                      className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
+                    />
+                  )}
+                  {localSettings.llmProvider === 'llama.cpp' && (
+                    <button
+                      type="button"
+                      onClick={handleOpenLlmModelFolder}
+                      className="settings-action flex items-center justify-center px-3 py-2 text-sm transition-colors"
+                      title="Open GGUF models folder"
+                    >
+                      <FolderOpen size={16} />
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           {localSettings.llmProvider !== 'openai-oauth' && (
@@ -1264,14 +1378,16 @@ export function SettingsModal(): React.ReactNode | null {
                     />
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleTestLlm}
-                  disabled={llmTestStatus === 'testing'}
-                  className="settings-action w-full px-3 py-2 text-sm transition-colors disabled:opacity-60"
-                >
-                  {llmTestStatus === 'testing' ? 'Testing...' : 'Test LLM'}
-                </button>
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={handleTestLlm}
+                    disabled={llmTestStatus === 'testing'}
+                    className="settings-action mt-6 w-full px-3 py-2 text-sm transition-colors disabled:opacity-60"
+                  >
+                    {llmTestStatus === 'testing' ? 'Testing...' : 'Test LLM'}
+                  </button>
+                </div>
               </div>
             ) : (
               <>

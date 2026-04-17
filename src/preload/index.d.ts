@@ -62,6 +62,12 @@ export interface Api {
     assemblyAiKeytermsPrompt?: string
     assemblyAiPrompt?: string
   }) => Promise<{ success: boolean; message: string }>
+  connectTranscription: () => Promise<{ success: boolean; message: string }>
+  listTranscriptionModels: (payload: { apiKey?: string }) => Promise<{
+    success: boolean
+    models: Array<{ id: string; name: string }>
+    error?: string
+  }>
   connectOpenAIOAuth: () => Promise<{ success: boolean; settings?: AppSettings; error?: string }>
   disconnectOpenAIOAuth: () => Promise<{ success: boolean; settings?: AppSettings; error?: string }>
   getAvatarProfile: () => Promise<AvatarProfile>

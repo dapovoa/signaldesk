@@ -94,6 +94,8 @@ const DEFAULT_SETTINGS: AppSettings = {
       ? 'assemblyai'
       : 'openai',
   transcriptionApiKey: process.env.ASSEMBLYAI_API_KEY || process.env.VITE_ASSEMBLYAI_API_KEY || '',
+  openaiTranscriptionApiKey: '',
+  whisperModel: 'whisper-1',
   assemblyAiSpeechModel: DEFAULT_ASSEMBLYAI_SPEECH_MODEL,
   assemblyAiLanguageDetection:
     process.env.ASSEMBLYAI_LANGUAGE_DETECTION === 'false' ||
@@ -419,6 +421,17 @@ export class SettingsManager {
               savedSettings.transcriptionApiKey = ''
             }
           }
+          if (savedSettings.openaiTranscriptionApiKeyEncrypted) {
+            try {
+              savedSettings.openaiTranscriptionApiKey = safeStorage.decryptString(
+                Buffer.from(savedSettings.openaiTranscriptionApiKeyEncrypted, 'base64')
+              )
+              delete savedSettings.openaiTranscriptionApiKeyEncrypted
+              needsSave = true
+            } catch {
+              savedSettings.openaiTranscriptionApiKey = ''
+            }
+          }
         }
 
         const hydratedSettings = hydrateStoredSettings(savedSettings)
@@ -477,6 +490,12 @@ export class SettingsManager {
             .encryptString(settingsToSave.transcriptionApiKey)
             .toString('base64')
           settingsToSave.transcriptionApiKey = ''
+        }
+        if (settingsToSave.openaiTranscriptionApiKey) {
+          ;(settingsToSave as Record<string, unknown>).openaiTranscriptionApiKeyEncrypted = safeStorage
+            .encryptString(settingsToSave.openaiTranscriptionApiKey)
+            .toString('base64')
+          settingsToSave.openaiTranscriptionApiKey = ''
         }
       }
 

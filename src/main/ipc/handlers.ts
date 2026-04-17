@@ -390,7 +390,7 @@ const getTranscriptionConfig = (settings: AppSettings): TranscriptionConfig => {
 
   return {
     provider: 'openai' as const,
-    apiKey: settings.llmApiKey
+    apiKey: settings.openaiTranscriptionApiKey
   }
 }
 
@@ -1652,6 +1652,73 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     }
   )
 
+  ipcMain.handle('connect-transcription', async () => {
+    const settings = settingsManager?.getSettings()
+
+    if (!settings) {
+      return { success: false, message: 'Settings not available' }
+    }
+
+    const transcriptionValidationError = validateTranscriptionSettings(settings)
+    if (transcriptionValidationError) {
+      return { success: false, message: transcriptionValidationError }
+    }
+
+    try {
+      if (whisperService) {
+        whisperService.removeAllListeners()
+        whisperService = null
+      }
+
+      const transcriptionConfig = getTranscriptionConfig(settings)
+
+      whisperService = new WhisperService({
+        provider: transcriptionConfig.provider,
+        apiKey: transcriptionConfig.apiKey,
+        model: settings.whisperModel || 'whisper-1',
+        language: settings.transcriptionLanguage === 'auto' ? undefined : settings.transcriptionLanguage,
+        assemblyAiSpeechModel: settings.assemblyAiSpeechModel,
+        assemblyAiLanguageDetection: settings.assemblyAiLanguageDetection,
+        assemblyAiMinTurnSilence: settings.assemblyAiMinTurnSilence,
+        assemblyAiMaxTurnSilence: settings.assemblyAiMaxTurnSilence,
+        assemblyAiKeytermsPrompt: settings.assemblyAiKeytermsPrompt,
+        assemblyAiPrompt: settings.assemblyAiPrompt,
+        silenceThresholdMs: settings.pauseThreshold
+      })
+
+      await whisperService.start()
+      return { success: true, message: 'Transcription connected successfully.' }
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Failed to connect transcription'
+      }
+    }
+  })
+
+  ipcMain.handle('list-transcription-models', async (_event, payload: { apiKey?: string }) => {
+    const apiKey = payload?.apiKey?.trim()
+    if (!apiKey) {
+      return { success: false, models: [], error: 'API key is required' }
+    }
+
+    try {
+      const client = createOpenAIClient({ apiKey })
+      const response = await client.models.list()
+      const whisperModels = response.data
+        .filter((model) => model.id.startsWith('whisper'))
+        .map((model) => ({ id: model.id, name: model.id }))
+        .sort((a, b) => a.id.localeCompare(b.id))
+      return { success: true, models: whisperModels }
+    } catch (error) {
+      return {
+        success: false,
+        models: [],
+        error: error instanceof Error ? error.message : 'Failed to fetch models'
+      }
+    }
+  })
+
   ipcMain.handle('start-capture', async () => {
     const settings = settingsManager?.getSettings()
 
@@ -1697,7 +1764,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       whisperService = new WhisperService({
         provider: transcriptionConfig.provider,
         apiKey: transcriptionConfig.apiKey,
-        model: 'whisper-1',
+        model: settings.whisperModel || 'whisper-1',
         language:
           settings.transcriptionLanguage === 'auto' ? undefined : settings.transcriptionLanguage,
         assemblyAiSpeechModel: settings.assemblyAiSpeechModel,

@@ -24,6 +24,8 @@ export type AssemblyAiSpeechModel =
 export interface AppSettings {
   transcriptionProvider: 'openai' | 'assemblyai'
   transcriptionApiKey: string
+  openaiTranscriptionApiKey: string
+  whisperModel: string
   assemblyAiSpeechModel: AssemblyAiSpeechModel
   assemblyAiLanguageDetection: boolean
   assemblyAiMinTurnSilence: number

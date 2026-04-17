@@ -87,6 +87,8 @@ interface InterviewState {
 const DEFAULT_SETTINGS: AppSettings = {
   transcriptionProvider: 'assemblyai',
   transcriptionApiKey: '',
+  openaiTranscriptionApiKey: '',
+  whisperModel: 'whisper-1',
   assemblyAiSpeechModel: 'u3-rt-pro',
   assemblyAiLanguageDetection: false,
   assemblyAiMinTurnSilence: 100,
