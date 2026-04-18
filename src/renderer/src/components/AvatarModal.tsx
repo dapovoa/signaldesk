@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AvatarProfile, useInterviewStore } from '../store/interviewStore'
 
@@ -38,9 +38,7 @@ function SectionDivider({ label }: { label: string }): React.ReactNode {
 export function AvatarModal(): React.ReactNode | null {
   const { avatarProfile, showAvatar, setShowAvatar, setAvatarProfile } = useInterviewStore()
   const [localProfile, setLocalProfile] = useState<AvatarProfile>(avatarProfile)
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const autosaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const saveStatusTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const saveChainRef = useRef<Promise<AvatarProfile | null>>(Promise.resolve(null))
   const lastPersistedProfileRef = useRef<string>(JSON.stringify(avatarProfile))
   const localProfileRef = useRef<AvatarProfile>(localProfile)
@@ -61,20 +59,6 @@ export function AvatarModal(): React.ReactNode | null {
     localProfileRef.current = localProfile
   }, [localProfile])
 
-  const clearSaveStatusTimer = useCallback((): void => {
-    if (saveStatusTimeoutRef.current) {
-      clearTimeout(saveStatusTimeoutRef.current)
-      saveStatusTimeoutRef.current = null
-    }
-  }, [])
-
-  const scheduleSaveStatusReset = useCallback((status: 'saved' | 'error'): void => {
-    clearSaveStatusTimer()
-    saveStatusTimeoutRef.current = setTimeout(() => {
-      setSaveStatus((current) => (current === status ? 'idle' : current))
-    }, status === 'saved' ? 1000 : 2500)
-  }, [clearSaveStatusTimer])
-
   const persistProfile = useCallback(async (profileToPersist: AvatarProfile): Promise<AvatarProfile> => {
     const serializedProfile = JSON.stringify(profileToPersist)
 
@@ -82,21 +66,14 @@ export function AvatarModal(): React.ReactNode | null {
       return profileToPersist
     }
 
-    clearSaveStatusTimer()
-    setSaveStatus('saving')
-
     const saveTask = async (): Promise<AvatarProfile> => {
       try {
         const nextProfile = await window.api.updateAvatarProfile(profileToPersist)
         lastPersistedProfileRef.current = JSON.stringify(nextProfile)
         setAvatarProfile(nextProfile)
-        setSaveStatus('saved')
-        scheduleSaveStatusReset('saved')
         return nextProfile
       } catch (error) {
         console.error('Failed to save avatar profile:', error)
-        setSaveStatus('error')
-        scheduleSaveStatusReset('error')
         throw error
       }
     }
@@ -104,7 +81,7 @@ export function AvatarModal(): React.ReactNode | null {
     const queuedSave = saveChainRef.current.catch(() => null).then(saveTask)
     saveChainRef.current = queuedSave
     return queuedSave
-  }, [clearSaveStatusTimer, scheduleSaveStatusReset, setAvatarProfile])
+  }, [setAvatarProfile])
 
   const flushPendingProfileSave = useCallback(async (): Promise<AvatarProfile> => {
     if (autosaveTimeoutRef.current) {
@@ -145,9 +122,8 @@ export function AvatarModal(): React.ReactNode | null {
       if (autosaveTimeoutRef.current) {
         clearTimeout(autosaveTimeoutRef.current)
       }
-      clearSaveStatusTimer()
     }
-  }, [clearSaveStatusTimer])
+  }, [])
 
   const handleClose = async (): Promise<void> => {
     try {
@@ -335,27 +311,6 @@ export function AvatarModal(): React.ReactNode | null {
           </section>
         </div>
 
-        <div className="flex items-center justify-between border-t border-white/5 bg-white/[0.02] px-4 py-3.5">
-          <div className="flex items-center gap-3">
-            {saveStatus === 'saving' && (
-              <div className="flex items-center gap-2 text-sm text-dark-400">
-                <span>Saving changes...</span>
-              </div>
-            )}
-            {saveStatus === 'error' && (
-              <div className="flex items-center gap-2 text-sm text-red-400">
-                <AlertCircle size={16} />
-                <span>Failed to save changes</span>
-              </div>
-            )}
-            {saveStatus === 'saved' && (
-              <div className="flex items-center gap-2 text-sm text-green-400">
-                <CheckCircle size={16} />
-                <span>All changes saved</span>
-              </div>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   )

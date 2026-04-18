@@ -137,7 +137,6 @@ export function SettingsModal(): React.ReactNode | null {
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings)
   const [showCredential, setShowCredential] = useState(false)
   const [showTranscriptionCredential, setShowTranscriptionCredential] = useState(false)
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [models, setModels] = useState<Array<{ id: string; name: string }>>([])
   const [modelsLoading, setModelsLoading] = useState(false)
   const [, setModelsError] = useState<string | null>(null)
@@ -165,7 +164,6 @@ export function SettingsModal(): React.ReactNode | null {
   })
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const settingsAutosaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const saveStatusTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const saveChainRef = useRef<Promise<AppSettings | null>>(Promise.resolve(null))
   const lastPersistedSettingsRef = useRef<string>(JSON.stringify(normalizeSettingsForUi(settings)))
   const localSettingsRef = useRef<AppSettings>(localSettings)
@@ -249,32 +247,13 @@ export function SettingsModal(): React.ReactNode | null {
     loadWindowCapabilities()
   }, [])
 
-  const clearSaveStatusTimer = useCallback((): void => {
-    if (saveStatusTimeoutRef.current) {
-      clearTimeout(saveStatusTimeoutRef.current)
-      saveStatusTimeoutRef.current = null
-    }
-  }, [])
-
-  const scheduleSaveStatusReset = useCallback((status: 'saved' | 'error'): void => {
-    clearSaveStatusTimer()
-    saveStatusTimeoutRef.current = setTimeout(() => {
-      setSaveStatus((current) => (current === status ? 'idle' : current))
-    }, status === 'saved' ? 1000 : 3000)
-  }, [clearSaveStatusTimer])
-
   const persistSettings = useCallback(
-    async (settingsToPersist: AppSettings, statusMode: 'show' | 'silent' = 'show'): Promise<AppSettings> => {
+    async (settingsToPersist: AppSettings): Promise<AppSettings> => {
       const normalizedSettings = normalizeSettingsForUi(settingsToPersist)
       const serializedSettings = JSON.stringify(normalizedSettings)
 
       if (serializedSettings === lastPersistedSettingsRef.current) {
         return normalizedSettings
-      }
-
-      if (statusMode === 'show') {
-        clearSaveStatusTimer()
-        setSaveStatus('saving')
       }
 
       const saveTask = async (): Promise<AppSettings> => {
@@ -284,17 +263,9 @@ export function SettingsModal(): React.ReactNode | null {
           )
           lastPersistedSettingsRef.current = JSON.stringify(updatedSettings)
           setSettings(updatedSettings)
-          if (statusMode === 'show') {
-            setSaveStatus('saved')
-            scheduleSaveStatusReset('saved')
-          }
           return updatedSettings
         } catch (err) {
           console.error('Failed to save settings:', err)
-          if (statusMode === 'show') {
-            setSaveStatus('error')
-            scheduleSaveStatusReset('error')
-          }
           throw err
         }
       }
@@ -303,7 +274,7 @@ export function SettingsModal(): React.ReactNode | null {
       saveChainRef.current = queuedSave
       return queuedSave
     },
-    [clearSaveStatusTimer, scheduleSaveStatusReset, setSettings]
+    [setSettings]
   )
 
   const flushPendingSettingsSave = useCallback(async (): Promise<AppSettings> => {
@@ -349,9 +320,8 @@ export function SettingsModal(): React.ReactNode | null {
       if (fetchTimeoutRef.current) {
         clearTimeout(fetchTimeoutRef.current)
       }
-      clearSaveStatusTimer()
     }
-  }, [clearSaveStatusTimer])
+  }, [])
 
   useEffect(() => {
     if (fetchTimeoutRef.current) {
@@ -1560,27 +1530,6 @@ export function SettingsModal(): React.ReactNode | null {
           )}
         </div>
 
-        <div className="flex items-center border-t border-white/5 px-4 py-3.5">
-          <div className="flex items-center gap-3">
-            {saveStatus === 'saving' && (
-              <div className="flex items-center gap-2 text-sm text-dark-400">
-                <span>Saving changes...</span>
-              </div>
-            )}
-            {saveStatus === 'error' && (
-              <div className="flex items-center gap-2 text-sm text-red-400">
-                <AlertCircle size={16} />
-                <span>Failed to save changes</span>
-              </div>
-            )}
-            {saveStatus === 'saved' && (
-              <div className="flex items-center gap-2 text-sm text-green-400">
-                <CheckCircle size={16} />
-                <span>All changes saved</span>
-              </div>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   )
