@@ -26,6 +26,15 @@ const ANTHROPIC_VERBOSE_LOGS = SIGNALDESK_VERBOSE || process.env.SIGNALDESK_ANTH
 
 const MAX_INTERVIEW_ANSWER_TOKENS = 600
 
+const requireConfiguredModel = (model?: string): string => {
+  const normalizedModel = model?.trim()
+  if (!normalizedModel) {
+    throw new Error('Select or enter an answer generation model before using the LLM.')
+  }
+
+  return normalizedModel
+}
+
 const splitSentences = (text: string): string[] =>
   text
     .split(/(?<=[.!?])\s+/)
@@ -66,7 +75,7 @@ export class AnthropicService extends EventEmitter {
   constructor(config: AnthropicConfig) {
     super()
     this.config = config
-    this.baseURL = (config.baseURL || 'https://api.minimax.io/anthropic').replace(/\/+$/, '')
+    this.baseURL = (config.baseURL || '').replace(/\/+$/, '')
   }
 
   updateConfig(config: Partial<AnthropicConfig>): void {
@@ -91,7 +100,7 @@ export class AnthropicService extends EventEmitter {
 
     if (ANTHROPIC_VERBOSE_LOGS) {
       console.log('[AnthropicService] generateAnswer called:', {
-        model: this.config.model || 'MiniMax-M2.7',
+        model: requireConfiguredModel(this.config.model),
         question
       })
     }
@@ -165,7 +174,7 @@ export class AnthropicService extends EventEmitter {
     messages: AnthropicMessage[],
     options?: { systemPrompt?: string; requestId?: number }
   ): Promise<string> {
-    const model = this.config.model || 'MiniMax-M2.7'
+    const model = requireConfiguredModel(this.config.model)
     const maxTokens = this.config.maxTokens || MAX_INTERVIEW_ANSWER_TOKENS
     const temperature = this.config.temperature ?? 1
 

@@ -1,7 +1,6 @@
 import { BrowserWindow, clipboard, desktopCapturer, ipcMain } from 'electron'
 import type { AnswerEntry } from '../../shared/contracts'
 import {
-  OPENAI_OAUTH_MODEL_OPTIONS,
   resolveLlmCredential,
   usesOAuthCredential
 } from '../../shared/llmSettings'
@@ -86,7 +85,7 @@ interface AnswerTimingTrace {
 interface ProviderConfig {
   apiKey: string
   baseURL?: string
-  customHeaders?: string
+  chatgptAccountId?: string
 }
 
 interface TranscriptionConfig {
@@ -251,8 +250,6 @@ const isAnthropicProvider = (
   provider: AppSettings['llmProvider'] | ProviderPayloadState['provider']
 ): boolean => provider === 'anthropic-compatible'
 
-const ANTHROPIC_BASE_URL = 'https://api.minimax.io/anthropic'
-
 const ensureLocalLlmModelReady = async (
   model?: string,
   modelDir?: string,
@@ -293,16 +290,14 @@ const getProviderConfig = (settings: AppSettings): ProviderConfig => {
   if (settings.llmProvider === 'llama.cpp') {
     return {
       apiKey: 'no-key',
-      baseURL: DEFAULT_LLM_BASE_URL,
-      customHeaders: undefined
+      baseURL: DEFAULT_LLM_BASE_URL
     }
   }
 
   if (settings.llmProvider === 'anthropic-compatible') {
     return {
       apiKey: resolveLlmCredential(settings),
-      baseURL: settings.llmBaseUrl?.trim() || ANTHROPIC_BASE_URL,
-      customHeaders: undefined
+      baseURL: settings.llmBaseUrl?.trim()
     }
   }
 
@@ -311,19 +306,12 @@ const getProviderConfig = (settings: AppSettings): ProviderConfig => {
 
   return {
     apiKey: resolveLlmCredential(settings),
+    chatgptAccountId: settings.llmProvider === 'openai-oauth' ? settings.llmOauthAccountId : undefined,
     baseURL:
       settings.llmProvider === 'openai-oauth'
         ? CHATGPT_CODEX_BASE_URL
         : isOpenAICompatible
           ? settings.llmBaseUrl
-          : undefined,
-    customHeaders:
-      settings.llmProvider === 'openai-oauth'
-        ? settings.llmOauthAccountId
-          ? `ChatGPT-Account-Id: ${settings.llmOauthAccountId}`
-          : undefined
-        : isOpenAICompatible
-          ? settings.llmCustomHeaders
           : undefined
   }
 }
@@ -425,16 +413,22 @@ const resolveTranscriptionSettings = (
 }
 
 const validateProviderSettings = (settings: AppSettings): string | null => {
+  if (!settings.llmModel?.trim()) {
+    return 'Select or enter an answer generation model in Settings before using the LLM provider.'
+  }
+
   if (settings.llmProvider === 'llama.cpp') {
-    return settings.llmModel?.trim()
-      ? null
-      : 'Select a local llama.cpp model in Settings before using the LLM provider.'
+    return null
   }
 
   if (settings.llmProvider === 'anthropic-compatible') {
-    return settings.llmModel?.trim()
+    if (!settings.llmBaseUrl?.trim()) {
+      return 'Anthropic Base URL is required before using the LLM provider.'
+    }
+
+    return resolveLlmCredential(settings)
       ? null
-      : 'Select a MiniMax model (e.g. MiniMax-M2.7) in Settings before using Anthropic.'
+      : 'API Key is required before using the LLM provider.'
   }
 
   const hasCredential = Boolean(resolveLlmCredential(settings))
@@ -474,6 +468,10 @@ const validateTranscriptionSettings = (settings: AppSettings): string | null => 
 
   if (settings.transcriptionProvider === 'openai' && !settings.openaiTranscriptionApiKey?.trim()) {
     return 'OpenAI API key not configured for transcription. Please add it in Settings.'
+  }
+
+  if (settings.transcriptionProvider === 'openai' && !settings.whisperModel?.trim()) {
+    return 'Select or enter a Whisper model in Settings before using OpenAI transcription.'
   }
 
   return null
@@ -717,7 +715,7 @@ const classifyTurnWithModel = async (turnText: string): Promise<ModelClassifierR
     return { supported: false, detection: null }
   }
 
-  const model = settings.llmModel || 'gpt-4o-mini'
+  const model = settings.llmModel
   const classifierPrompt = getModelClassifierPrompt()
   const classifierInput = `Interviewer turn:\n${turnText}`
 
@@ -804,7 +802,9 @@ const classifyTurnWithModel = async (turnText: string): Promise<ModelClassifierR
       const client = createOpenAIClient({
         apiKey: providerConfig.apiKey,
         baseURL: providerConfig.baseURL,
-        customHeaders: providerConfig.customHeaders
+        customHeaders: providerConfig.chatgptAccountId
+          ? `ChatGPT-Account-Id: ${providerConfig.chatgptAccountId}`
+          : undefined
       })
 
       const request: Record<string, unknown> = {
@@ -1148,8 +1148,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         llmOauthToken: tokens.accessToken,
         llmOauthRefreshToken: tokens.refreshToken,
         llmOauthExpiresAt: tokens.expiresAt,
-        llmOauthAccountId: tokens.accountId,
-        llmModel: 'gpt-5.4'
+        llmOauthAccountId: tokens.accountId
       })
       return { success: true, settings: settingsManager?.getSettings() }
     } catch (error) {
@@ -1207,18 +1206,10 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp' | 'anthropic-compatible'
         authMode?: 'api-key' | 'oauth-token'
         baseURL?: string
-        customHeaders?: string
         llmModelDir?: string
       }
     ) => {
       const { provider, usesOAuthCredential, credential } = getProviderPayloadState(payload)
-
-      if (usesOAuthCredential) {
-        return {
-          success: true,
-          models: OPENAI_OAUTH_MODEL_OPTIONS.map((id) => ({ id, name: id }))
-        }
-      }
 
       if (isLlamaCppProvider(provider)) {
         const modelDirectory = ensureModelsDirectory(
@@ -1233,13 +1224,26 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       }
 
       if (isAnthropicProvider(provider)) {
-        const baseURL = payload?.baseURL?.trim() || ANTHROPIC_BASE_URL
+        const baseURL = payload?.baseURL?.trim()
         const apiKey = credential || ''
+        if (!baseURL) {
+          return {
+            success: false,
+            error: 'Anthropic Base URL is required',
+            models: []
+          }
+        }
+        if (!apiKey) {
+          return {
+            success: false,
+            error: 'API key is required',
+            models: []
+          }
+        }
         try {
           const client = createOpenAIClient({
             apiKey,
-            baseURL,
-            customHeaders: payload?.customHeaders
+            baseURL
           })
           const response = await client.models.list()
           const models = response.data.map((model) => ({
@@ -1259,7 +1263,12 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         }
       }
 
-      const baseURL = provider === 'openai-compatible' ? payload?.baseURL?.trim() : undefined
+      const baseURL =
+        provider === 'openai-oauth'
+          ? CHATGPT_CODEX_BASE_URL
+          : provider === 'openai-compatible'
+            ? payload?.baseURL?.trim()
+            : undefined
 
       if (!credential) {
         return {
@@ -1277,11 +1286,22 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         }
       }
 
+      if (provider === 'openai-oauth' && !settingsManager?.getSettings().llmOauthAccountId?.trim()) {
+        return {
+          success: false,
+          error: 'OAuth account metadata is missing. Disconnect and sign in again.',
+          models: []
+        }
+      }
+
       try {
         const client = createOpenAIClient({
           apiKey: credential,
           baseURL,
-          customHeaders: payload?.customHeaders
+          customHeaders:
+            provider === 'openai-oauth' && settingsManager?.getSettings().llmOauthAccountId
+              ? `ChatGPT-Account-Id: ${settingsManager.getSettings().llmOauthAccountId}`
+              : undefined
         })
 
         let models: Array<{ id: string; name: string }> = []
@@ -1317,7 +1337,6 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp' | 'anthropic-compatible'
         authMode?: 'api-key' | 'oauth-token'
         baseURL?: string
-        customHeaders?: string
         model?: string
         llmModelDir?: string
         testKind?: 'connect' | 'llm'
@@ -1341,7 +1360,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
             : provider === 'llama.cpp'
               ? DEFAULT_LLM_BASE_URL
               : provider === 'anthropic-compatible'
-                ? payload?.baseURL?.trim() || ANTHROPIC_BASE_URL
+                ? payload?.baseURL?.trim()
                 : undefined
       const preferredModel = payload?.model?.trim()
       const testKind = payload?.testKind === 'llm' ? 'llm' : 'connect'
@@ -1367,6 +1386,13 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         }
       }
 
+      if (provider === 'anthropic-compatible' && !baseURL) {
+        return {
+          success: false,
+          message: 'Anthropic Base URL is required'
+        }
+      }
+
       if (provider === 'llama.cpp' && !preferredModel) {
         return {
           success: false,
@@ -1377,7 +1403,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       if (provider === 'anthropic-compatible' && !preferredModel) {
         return {
           success: false,
-          message: 'Select a MiniMax model (e.g. MiniMax-M2.7) before testing the connection.'
+          message: 'Enter a model slug before testing the connection.'
         }
       }
 
@@ -1408,7 +1434,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
               'anthropic-dangerous-direct-browser-access': 'true'
             },
             body: JSON.stringify({
-              model: preferredModel || 'MiniMax-M2.7',
+              model: preferredModel,
               max_tokens: 10,
               temperature: 1,
               messages: [
@@ -1437,11 +1463,9 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           apiKey: credential || 'no-key',
           baseURL,
           customHeaders:
-            provider === 'openai-oauth'
-              ? storedSettings?.llmOauthAccountId
-                ? `ChatGPT-Account-Id: ${storedSettings.llmOauthAccountId}`
-                : undefined
-              : payload?.customHeaders
+            provider === 'openai-oauth' && storedSettings?.llmOauthAccountId
+              ? `ChatGPT-Account-Id: ${storedSettings.llmOauthAccountId}`
+              : undefined
         })
 
         if (provider === 'openai-oauth') {
@@ -1466,7 +1490,16 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           }
 
           if (testKind === 'llm') {
-            const oauthModel = preferredModel || 'gpt-5.4'
+            if (!preferredModel) {
+              return {
+                success: false,
+                message: 'Enter a model slug before testing the LLM.',
+                modelCount: 0,
+                hasPreferredModel: false
+              }
+            }
+
+            const oauthModel = preferredModel
             const stream = streamChatGPTCodexResponse({
               accessToken: credential,
               accountId: storedSettings.llmOauthAccountId,
@@ -1520,8 +1553,17 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         }
 
         if (provider === 'openai' && usesOAuthCredential) {
+          if (!preferredModel) {
+            return {
+              success: false,
+              message: 'Enter a model slug before testing the LLM.',
+              modelCount: 0,
+              hasPreferredModel: false
+            }
+          }
+
           await client.chat.completions.create({
-            model: preferredModel || OPENAI_OAUTH_MODEL_OPTIONS[0],
+            model: preferredModel,
             messages: [{ role: 'user', content: 'ping' }],
             max_completion_tokens: 1,
             temperature: 0
@@ -1589,8 +1631,18 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           }
 
           // Fallback probe for endpoints that don't support GET /models
+          if (!preferredModel) {
+            return {
+              success: true,
+              message: 'LLM connection established. Model listing unavailable.',
+              modelCount: 0,
+              models: [],
+              hasPreferredModel: false
+            }
+          }
+
           const probeRequest: Record<string, unknown> = {
-            model: preferredModel || 'qwen3.5-plus',
+            model: preferredModel,
             messages: [{ role: 'user', content: 'ping' }],
             max_completion_tokens: 1,
             temperature: 0
@@ -1673,7 +1725,13 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       try {
         const client = createOpenAIClient({ apiKey })
         const response = await client.models.list()
-        const whisperModel = payload?.whisperModel?.trim() || 'whisper-1'
+        const whisperModel = payload?.whisperModel?.trim()
+        if (!whisperModel) {
+          return {
+            success: false,
+            message: 'Enter a Whisper model slug before testing transcription.'
+          }
+        }
         const hasSelectedModel = response.data.some((model) => model.id === whisperModel)
         if (!hasSelectedModel) {
           return {
@@ -1716,7 +1774,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         whisperService = new WhisperService({
           provider: transcriptionConfig.provider,
           apiKey: transcriptionConfig.apiKey,
-          model: settings.whisperModel || 'whisper-1',
+          model: settings.whisperModel,
           language: settings.transcriptionLanguage === 'auto' ? undefined : settings.transcriptionLanguage,
           assemblyAiSpeechModel: settings.assemblyAiSpeechModel,
           assemblyAiLanguageDetection: settings.assemblyAiLanguageDetection,
@@ -1806,7 +1864,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       whisperService = new WhisperService({
         provider: transcriptionConfig.provider,
         apiKey: transcriptionConfig.apiKey,
-        model: settings.whisperModel || 'whisper-1',
+        model: settings.whisperModel,
         language:
           settings.transcriptionLanguage === 'auto' ? undefined : settings.transcriptionLanguage,
         assemblyAiSpeechModel: settings.assemblyAiSpeechModel,
@@ -1830,7 +1888,9 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         openaiService = new OpenAIService({
           apiKey: providerConfig.apiKey,
           baseURL: providerConfig.baseURL,
-          customHeaders: providerConfig.customHeaders,
+          customHeaders: providerConfig.chatgptAccountId
+            ? `ChatGPT-Account-Id: ${providerConfig.chatgptAccountId}`
+            : undefined,
           chatgptAccountId: settings.llmOauthAccountId,
           useResponsesApi: shouldUseResponsesApi(settings),
           model: settings.llmModel,
@@ -2235,16 +2295,20 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       visionService = new VisionService({
         apiKey: providerConfig.apiKey,
         baseURL: providerConfig.baseURL,
-        customHeaders: providerConfig.customHeaders,
+        customHeaders: providerConfig.chatgptAccountId
+          ? `ChatGPT-Account-Id: ${providerConfig.chatgptAccountId}`
+          : undefined,
         chatgptAccountId: settings.llmOauthAccountId,
-        model: settings.llmModel || 'gpt-4o-mini'
+        model: settings.llmModel
       })
 
       if (!openaiService) {
         openaiService = new OpenAIService({
           apiKey: providerConfig.apiKey,
           baseURL: providerConfig.baseURL,
-          customHeaders: providerConfig.customHeaders,
+          customHeaders: providerConfig.chatgptAccountId
+            ? `ChatGPT-Account-Id: ${providerConfig.chatgptAccountId}`
+            : undefined,
           chatgptAccountId: settings.llmOauthAccountId,
           useResponsesApi: shouldUseResponsesApi(settings),
           model: settings.llmModel,
@@ -2257,7 +2321,9 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         openaiService.updateConfig({
           apiKey: providerConfig.apiKey,
           baseURL: providerConfig.baseURL,
-          customHeaders: providerConfig.customHeaders,
+          customHeaders: providerConfig.chatgptAccountId
+            ? `ChatGPT-Account-Id: ${providerConfig.chatgptAccountId}`
+            : undefined,
           chatgptAccountId: settings.llmOauthAccountId,
           useResponsesApi: shouldUseResponsesApi(settings),
           model: settings.llmModel,

@@ -4,17 +4,11 @@ import { AppSettings, useInterviewStore } from '../store/interviewStore'
 import type { WindowCapabilities } from '../../../shared/contracts'
 import {
   getActiveLlmModel,
-  getSuggestedLlmModels,
   normalizeLlmSettings,
   resolveLlmCredential,
   setActiveLlmModel,
   usesOAuthCredential
 } from '../../../shared/llmSettings'
-
-interface ModelOption {
-  id: string
-  name: string
-}
 
 interface LlmFormState {
   provider: AppSettings['llmProvider']
@@ -23,9 +17,6 @@ interface LlmFormState {
   credential: string
   baseURL: string
 }
-
-const toModelOptions = (modelIds: string[]): ModelOption[] =>
-  modelIds.map((id) => ({ id, name: id }))
 
 function SectionDivider({ label }: { label: string }): React.ReactNode {
   return (
@@ -147,14 +138,14 @@ export function SettingsModal(): React.ReactNode | null {
   const [showCredential, setShowCredential] = useState(false)
   const [showTranscriptionCredential, setShowTranscriptionCredential] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  const [models, setModels] = useState<ModelOption[]>([])
+  const [models, setModels] = useState<Array<{ id: string; name: string }>>([])
   const [modelsLoading, setModelsLoading] = useState(false)
   const [, setModelsError] = useState<string | null>(null)
   const [transcriptionStatus, setTranscriptionStatus] = useState<
     'idle' | 'connecting' | 'testing' | 'ok' | 'error'
   >('idle')
   const [transcriptionMessage, setTranscriptionMessage] = useState<string>('')
-  const [transcriptionModels, setTranscriptionModels] = useState<string[]>(['whisper-1'])
+  const [transcriptionModels, setTranscriptionModels] = useState<string[]>([])
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>(
     'idle'
   )
@@ -186,8 +177,7 @@ export function SettingsModal(): React.ReactNode | null {
     llmOpenAICompatibleApiKey,
     llmAnthropicCompatibleApiKey,
     llmOauthToken,
-    llmBaseUrl,
-    llmCustomHeaders
+    llmBaseUrl
   } = localSettings
 
   useEffect(() => {
@@ -236,10 +226,10 @@ export function SettingsModal(): React.ReactNode | null {
         if (result.success && result.models.length > 0) {
           setTranscriptionModels(result.models.map((m) => m.id))
         } else {
-          setTranscriptionModels(['whisper-1'])
+          setTranscriptionModels([])
         }
       } catch {
-        setTranscriptionModels(['whisper-1'])
+        setTranscriptionModels([])
       }
     }
 
@@ -433,13 +423,6 @@ export function SettingsModal(): React.ReactNode | null {
       return
     }
 
-    if (provider === 'openai-oauth') {
-      setModels([])
-      setModelsError(null)
-      setModelsLoading(false)
-      return
-    }
-
     if (provider === 'openai-compatible' && !baseURL) {
       setModels([])
       setModelsError('Base URL is required for OpenAI compatible provider')
@@ -458,7 +441,6 @@ export function SettingsModal(): React.ReactNode | null {
           provider,
           authMode,
           baseURL: provider === 'openai-compatible' ? baseURL : undefined,
-          customHeaders: provider === 'openai-compatible' ? llmCustomHeaders : undefined
         })
 
         if (result.success) {
@@ -490,7 +472,6 @@ export function SettingsModal(): React.ReactNode | null {
     llmProvider,
     llmAuthMode,
     llmBaseUrl,
-    llmCustomHeaders,
     localSettings.llmModelDir,
     llmModelsRefreshTick
   ])
@@ -524,18 +505,13 @@ export function SettingsModal(): React.ReactNode | null {
 
     const provider = localSettings.llmProvider
     const constrainedModels =
-      provider === 'llama.cpp' ||
-      provider === 'anthropic-compatible' ||
-      usesOAuthCredential(localSettings)
+      provider === 'llama.cpp' || usesOAuthCredential(localSettings)
 
     if (!constrainedModels) {
       return
     }
 
-    const availableModels = (models.length > 0
-      ? models
-      : toModelOptions(getSuggestedLlmModels(localSettings))
-    ).map((model) => model.id)
+    const availableModels = models.map((model) => model.id)
     const activeModel = getActiveLlmModel(localSettings)
 
     if (availableModels.length === 0) {
@@ -545,8 +521,8 @@ export function SettingsModal(): React.ReactNode | null {
       return
     }
 
-    if (!activeModel || !availableModels.includes(activeModel)) {
-      setLocalSettings(normalizeSettingsForUi(setActiveLlmModel(localSettings, availableModels[0])))
+    if (activeModel && !availableModels.includes(activeModel)) {
+      setLocalSettings(normalizeSettingsForUi(setActiveLlmModel(localSettings, '')))
     }
   }, [
     models,
@@ -687,8 +663,6 @@ export function SettingsModal(): React.ReactNode | null {
           provider === 'openai-compatible' || provider === 'anthropic-compatible'
             ? baseURL
             : undefined,
-        customHeaders:
-          provider === 'openai-compatible' ? currentSettings.llmCustomHeaders : undefined,
         model: getActiveLlmModel(currentSettings),
         llmModelDir: provider === 'llama.cpp' ? currentSettings.llmModelDir : undefined,
         testKind: 'connect'
@@ -706,8 +680,7 @@ export function SettingsModal(): React.ReactNode | null {
             baseURL:
               provider === 'openai-compatible' || provider === 'anthropic-compatible'
                 ? baseURL
-                : undefined,
-            customHeaders: provider === 'openai-compatible' ? currentSettings.llmCustomHeaders : undefined
+                : undefined
           })
           if (modelsResult.success && modelsResult.models.length > 0) {
             setConnectedModels(modelsResult.models.map(m => m.id))
@@ -755,8 +728,6 @@ export function SettingsModal(): React.ReactNode | null {
           provider === 'openai-compatible' || provider === 'anthropic-compatible'
             ? baseURL
             : undefined,
-        customHeaders:
-          provider === 'openai-compatible' ? currentSettings.llmCustomHeaders : undefined,
         model: getActiveLlmModel(currentSettings),
         llmModelDir: provider === 'llama.cpp' ? currentSettings.llmModelDir : undefined,
         testKind: 'llm'
@@ -1147,22 +1118,38 @@ export function SettingsModal(): React.ReactNode | null {
 
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-dark-200">Whisper Model</label>
-                <select
-                  value={localSettings.whisperModel || 'whisper-1'}
-                  onChange={(e) =>
-                    setLocalSettings({
-                      ...localSettings,
-                      whisperModel: e.target.value
-                    })
-                  }
-                  className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors"
-                >
-                  {transcriptionModels.map((model) => (
-                    <option key={model} value={model}>
-                      {model}
-                    </option>
-                  ))}
-                </select>
+                {transcriptionModels.length > 0 ? (
+                  <select
+                    value={localSettings.whisperModel}
+                    onChange={(e) =>
+                      setLocalSettings({
+                        ...localSettings,
+                        whisperModel: e.target.value
+                      })
+                    }
+                    className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors"
+                  >
+                    <option value="">Select a model</option>
+                    {transcriptionModels.map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={localSettings.whisperModel}
+                    onChange={(e) =>
+                      setLocalSettings({
+                        ...localSettings,
+                        whisperModel: e.target.value
+                      })
+                    }
+                    placeholder="Enter model slug"
+                    className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
+                  />
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -1371,20 +1358,6 @@ export function SettingsModal(): React.ReactNode | null {
                 />
               </div>
 
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-dark-200">
-                  Custom Headers (optional)
-                </label>
-                <input
-                  type="text"
-                  value={localSettings.llmCustomHeaders}
-                  onChange={(e) =>
-                    setLocalSettings({ ...localSettings, llmCustomHeaders: e.target.value })
-                  }
-                  placeholder="Header1:Value1,Header2:Value2"
-                  className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
-                />
-              </div>
             </>
           )}
 
@@ -1419,7 +1392,7 @@ export function SettingsModal(): React.ReactNode | null {
                       placeholder={
                         localSettings.llmProvider === 'llama.cpp'
                           ? 'Enter GGUF model filename'
-                          : 'Enter model name (e.g. gpt-4o-mini)'
+                          : 'Enter model slug'
                       }
                       className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
                     />

@@ -3,11 +3,7 @@ import { app, safeStorage } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
 import type { AppSettings, AssemblyAiSpeechModel } from '../../shared/contracts'
-import {
-  inferLlmModelStorageKey,
-  normalizeLlmSettings,
-  OPENAI_OAUTH_MODEL_OPTIONS
-} from '../../shared/llmSettings'
+import { inferLlmModelStorageKey, normalizeLlmSettings } from '../../shared/llmSettings'
 import {
   ensureLlamaBinDirectory,
   ensureModelsDirectory,
@@ -29,23 +25,7 @@ const hydrateStoredSettings = (savedSettings: Record<string, unknown>): AppSetti
   return hydratedSettings
 }
 
-const getEnvApiKey = (key: string): string => {
-  return process.env[key] || process.env[`VITE_${key}`] || ''
-}
-
-const DEFAULT_LLM_PROVIDER: AppSettings['llmProvider'] =
-  process.env.LLM_PROVIDER === 'llama.cpp' || process.env.VITE_LLM_PROVIDER === 'llama.cpp'
-    ? 'llama.cpp'
-    : process.env.LLM_PROVIDER === 'anthropic-compatible' ||
-        process.env.VITE_LLM_PROVIDER === 'anthropic-compatible'
-      ? 'anthropic-compatible'
-    : process.env.LLM_PROVIDER === 'openai-compatible' ||
-        process.env.VITE_LLM_PROVIDER === 'openai-compatible'
-      ? 'openai-compatible'
-      : process.env.LLM_PROVIDER === 'openai-oauth' ||
-          process.env.VITE_LLM_PROVIDER === 'openai-oauth'
-        ? 'openai-oauth'
-        : 'openai'
+const DEFAULT_LLM_PROVIDER: AppSettings['llmProvider'] = 'openai'
 
 const ASSEMBLYAI_SPEECH_MODEL_ENV =
   process.env.ASSEMBLYAI_SPEECH_MODEL || process.env.VITE_ASSEMBLYAI_SPEECH_MODEL
@@ -80,13 +60,6 @@ const isAssemblyAiSpeechModel = (value: unknown): value is AssemblyAiSpeechModel
 }
 
 const DEFAULT_ASSEMBLYAI_SILENCE = getAssemblyAiSilenceDefaults(DEFAULT_ASSEMBLYAI_SPEECH_MODEL)
-const DEFAULT_ENV_LLM_MODEL =
-  process.env.LLM_MODEL ||
-  process.env.VITE_LLM_MODEL ||
-  process.env.OPENAI_MODEL ||
-  process.env.VITE_OPENAI_MODEL ||
-  ''
-
 const DEFAULT_SETTINGS: AppSettings = {
   transcriptionProvider:
     process.env.TRANSCRIPTION_PROVIDER === 'assemblyai' ||
@@ -95,7 +68,7 @@ const DEFAULT_SETTINGS: AppSettings = {
       : 'openai',
   transcriptionApiKey: process.env.ASSEMBLYAI_API_KEY || process.env.VITE_ASSEMBLYAI_API_KEY || '',
   openaiTranscriptionApiKey: '',
-  whisperModel: 'whisper-1',
+  whisperModel: '',
   assemblyAiSpeechModel: DEFAULT_ASSEMBLYAI_SPEECH_MODEL,
   assemblyAiLanguageDetection:
     process.env.ASSEMBLYAI_LANGUAGE_DETECTION === 'false' ||
@@ -115,50 +88,22 @@ const DEFAULT_SETTINGS: AppSettings = {
     process.env.ASSEMBLYAI_KEYTERMS_PROMPT || process.env.VITE_ASSEMBLYAI_KEYTERMS_PROMPT || '',
   assemblyAiPrompt: process.env.ASSEMBLYAI_PROMPT || process.env.VITE_ASSEMBLYAI_PROMPT || '',
   llmProvider: DEFAULT_LLM_PROVIDER,
-  llmAuthMode:
-    process.env.LLM_AUTH_MODE === 'oauth-token' || process.env.VITE_LLM_AUTH_MODE === 'oauth-token'
-      ? 'oauth-token'
-      : 'api-key',
-  llmApiKey: getEnvApiKey('LLM_API_KEY') || getEnvApiKey('OPENAI_API_KEY'),
-  llmOpenAICompatibleApiKey: getEnvApiKey('OPENAI_COMPATIBLE_API_KEY'),
-  llmAnthropicCompatibleApiKey: getEnvApiKey('ANTHROPIC_API_KEY'),
-  llmOauthToken:
-    process.env.LLM_OAUTH_TOKEN ||
-    process.env.VITE_LLM_OAUTH_TOKEN ||
-    process.env.OPENAI_OAUTH_TOKEN ||
-    process.env.VITE_OPENAI_OAUTH_TOKEN ||
-    '',
+  llmAuthMode: 'api-key',
+  llmApiKey: '',
+  llmOpenAICompatibleApiKey: '',
+  llmAnthropicCompatibleApiKey: '',
+  llmOauthToken: '',
   llmOauthRefreshToken: '',
   llmOauthExpiresAt: 0,
   llmOauthAccountId: '',
-  llmBaseUrl:
-    process.env.LLM_BASE_URL ||
-    process.env.VITE_LLM_BASE_URL ||
-    process.env.OPENAI_BASE_URL ||
-    process.env.VITE_OPENAI_BASE_URL ||
-    '',
-  llmCustomHeaders:
-    process.env.LLM_CUSTOM_HEADERS ||
-    process.env.VITE_LLM_CUSTOM_HEADERS ||
-    process.env.OPENAI_CUSTOM_HEADERS ||
-    process.env.VITE_OPENAI_CUSTOM_HEADERS ||
-    '',
-  llmModel: DEFAULT_ENV_LLM_MODEL,
-  llmOpenAIModel:
-    DEFAULT_LLM_PROVIDER === 'openai' && DEFAULT_ENV_LLM_MODEL ? DEFAULT_ENV_LLM_MODEL : 'gpt-4o-mini',
-  llmOpenAIOAuthModel: OPENAI_OAUTH_MODEL_OPTIONS.includes(
-    DEFAULT_ENV_LLM_MODEL as (typeof OPENAI_OAUTH_MODEL_OPTIONS)[number]
-  )
-    ? DEFAULT_ENV_LLM_MODEL
-    : OPENAI_OAUTH_MODEL_OPTIONS[0],
-  llmOpenAICompatibleModel:
-    DEFAULT_LLM_PROVIDER === 'openai-compatible' ? DEFAULT_ENV_LLM_MODEL : '',
-  llmAnthropicCompatibleModel:
-    DEFAULT_LLM_PROVIDER === 'anthropic-compatible' && DEFAULT_ENV_LLM_MODEL
-      ? DEFAULT_ENV_LLM_MODEL
-      : 'MiniMax-M2.7',
-  llmLlamaCppModel: DEFAULT_LLM_PROVIDER === 'llama.cpp' ? DEFAULT_ENV_LLM_MODEL : '',
-  llmModelDir: process.env.SIGNALDESK_LLM_MODEL_DIR || '',
+  llmBaseUrl: '',
+  llmModel: '',
+  llmOpenAIModel: '',
+  llmOpenAIOAuthModel: '',
+  llmOpenAICompatibleModel: '',
+  llmAnthropicCompatibleModel: '',
+  llmLlamaCppModel: '',
+  llmModelDir: '',
   llmTemperature: 1.0,
   llmTopP: 0.95,
   llmTopK: 64,
@@ -200,7 +145,6 @@ export class SettingsManager {
   private applyRuntimeSettings(): void {
     const normalized = normalizeSettings(this.settings)
     this.settings = normalized
-    process.env.SIGNALDESK_LLM_MODEL_DIR = normalized.llmModelDir
     ensureModelsDirectory(normalized.llmModelDir)
     ensureLlamaBinDirectory()
   }
@@ -243,10 +187,6 @@ export class SettingsManager {
           savedSettings.llmBaseUrl = savedSettings.openaiBaseUrl
           needsSave = true
         }
-        if (!savedSettings.llmCustomHeaders && savedSettings.openaiCustomHeaders) {
-          savedSettings.llmCustomHeaders = savedSettings.openaiCustomHeaders
-          needsSave = true
-        }
         if (!savedSettings.llmModel && savedSettings.openaiModel) {
           savedSettings.llmModel = savedSettings.openaiModel
           needsSave = true
@@ -275,6 +215,14 @@ export class SettingsManager {
         }
         if ('llmReasoningMode' in savedSettings) {
           delete savedSettings.llmReasoningMode
+          needsSave = true
+        }
+        if ('llmCustomHeaders' in savedSettings) {
+          delete savedSettings.llmCustomHeaders
+          needsSave = true
+        }
+        if ('openaiCustomHeaders' in savedSettings) {
+          delete savedSettings.openaiCustomHeaders
           needsSave = true
         }
         if (!savedSettings.transcriptionProvider) {

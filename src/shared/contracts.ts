@@ -42,7 +42,6 @@ export interface AppSettings {
   llmOauthExpiresAt: number
   llmOauthAccountId: string
   llmBaseUrl: string
-  llmCustomHeaders: string
   llmModel: string
   llmOpenAIModel: string
   llmOpenAIOAuthModel: string

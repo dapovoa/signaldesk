@@ -310,9 +310,15 @@ select {
   border-radius: 0;
 }
 
+.settings-modal .settings-stack {
+  padding-top: 1.15rem;
+  padding-bottom: 1.15rem;
+}
+
 .settings-modal .settings-stack > .space-y-2,
-.settings-modal .settings-stack > .settings-soft-block {
-  padding: 8px 0;
+.settings-modal .settings-stack > .settings-soft-block,
+.settings-modal .settings-stack > section {
+  padding: 0.6rem 0;
   border: 0;
   background: transparent;
   border-radius: 0;
@@ -325,6 +331,14 @@ select {
 
 .settings-modal .space-y-1 > :not([hidden]) ~ :not([hidden]) {
   margin-top: 0.45rem;
+}
+
+.settings-modal .space-y-4 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 1.15rem;
+}
+
+.settings-modal .space-y-5 > :not([hidden]) ~ :not([hidden]) {
+  margin-top: 1.4rem;
 }
 
 .settings-modal label {
@@ -348,14 +362,16 @@ select {
 .settings-modal .settings-action {
   border: 1px solid rgba(255, 255, 255, 0.05);
   background: rgba(255, 255, 255, 0.04);
-  color: var(--dark-100);
-  border-radius: 10px;
+  color: var(--dark-300);
+  border-radius: 12px;
   min-height: 42px;
+  font-weight: 500;
 }
 
 .settings-modal .settings-action:hover {
-  border-color: rgba(103, 232, 249, 0.15);
-  background: rgba(103, 232, 249, 0.07);
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--dark-100);
 }
 
 .settings-modal .settings-status-ok {
@@ -394,8 +410,10 @@ select {
 }
 
 .settings-modal .settings-modal-title {
-  font-size: 1rem;
-  font-weight: 500;
-  color: var(--dark-100);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--dark-300);
   line-height: 1.35;
 }

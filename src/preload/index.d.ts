@@ -31,7 +31,6 @@ export interface Api {
     provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp' | 'anthropic-compatible'
     authMode?: 'api-key' | 'oauth-token'
     baseURL?: string
-    customHeaders?: string
     llmModelDir?: string
   }) => Promise<{ success: boolean; models: Array<{ id: string; name: string }>; error?: string }>
   testProviderConnection: (payload: {
@@ -40,7 +39,6 @@ export interface Api {
     provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp' | 'anthropic-compatible'
     authMode?: 'api-key' | 'oauth-token'
     baseURL?: string
-    customHeaders?: string
     model?: string
     llmModelDir?: string
     testKind?: 'connect' | 'llm'

@@ -212,6 +212,15 @@ const buildExtraBody = (config: OpenAIConfig): Record<string, unknown> | undefin
   return Object.keys(extraBody).length > 0 ? extraBody : undefined
 }
 
+const requireConfiguredModel = (model?: string): string => {
+  const normalizedModel = model?.trim()
+  if (!normalizedModel) {
+    throw new Error('Select or enter an answer generation model before using the LLM.')
+  }
+
+  return normalizedModel
+}
+
 export class OpenAIService extends EventEmitter {
   private client: OpenAI | null = null
   private config: OpenAIConfig
@@ -242,9 +251,10 @@ export class OpenAIService extends EventEmitter {
       options?.avatarContext || ''
     )
     this.systemPrompt = systemPrompt
+    const model = requireConfiguredModel(this.config.model)
     if (OPENAI_VERBOSE_LOGS) {
       console.log('[OpenAIService] generateAnswer called:', {
-        model: this.config.model || 'gpt-4o-mini',
+        model,
         question
       })
       console.log('[OpenAIService] system prompt variables:', buildAvatarPromptVariables(
@@ -348,7 +358,7 @@ export class OpenAIService extends EventEmitter {
     try {
       let fullResponse = ''
       let truncationReason: TruncationReason | null = null
-      const model = this.config.model || 'gpt-4o-mini'
+      const model = requireConfiguredModel(this.config.model)
       const maxTokens = getEffectiveMaxTokens(this.config)
 
       if (isChatGPTCodexBackend(this.config)) {
@@ -555,7 +565,7 @@ export class OpenAIService extends EventEmitter {
     let fullResponse = ''
     let truncationReason: TruncationReason | null = null
     const request: StreamingChatCompletionRequest = {
-      model: this.config.model || 'gpt-4o-mini',
+      model: requireConfiguredModel(this.config.model),
       messages: messages,
       stream: true
     }
@@ -651,7 +661,7 @@ export class OpenAIService extends EventEmitter {
     const maxTokens = getEffectiveMaxTokens(this.config, options)
 
     const request = {
-      model: this.config.model || 'gpt-4o-mini',
+      model: requireConfiguredModel(this.config.model),
       instructions: this.systemPrompt,
       input,
       ...(isChatGPTCodexBackend(this.config)

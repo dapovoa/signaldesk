@@ -1,5 +1,5 @@
-import { AlertCircle, CheckCircle, Save, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { AlertCircle, CheckCircle, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AvatarProfile, useInterviewStore } from '../store/interviewStore'
 
 const AVATAR_LIMITS = {
@@ -39,35 +39,126 @@ export function AvatarModal(): React.ReactNode | null {
   const { avatarProfile, showAvatar, setShowAvatar, setAvatarProfile } = useInterviewStore()
   const [localProfile, setLocalProfile] = useState<AvatarProfile>(avatarProfile)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const autosaveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const saveStatusTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const saveChainRef = useRef<Promise<AvatarProfile | null>>(Promise.resolve(null))
+  const lastPersistedProfileRef = useRef<string>(JSON.stringify(avatarProfile))
+  const localProfileRef = useRef<AvatarProfile>(localProfile)
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLocalProfile(avatarProfile)
+    const serializedProfile = JSON.stringify(avatarProfile)
+    const hasPendingLocalChanges = JSON.stringify(localProfileRef.current) !== lastPersistedProfileRef.current
+
+    lastPersistedProfileRef.current = serializedProfile
+
+    if (!showAvatar || !hasPendingLocalChanges) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLocalProfile(avatarProfile)
+    }
   }, [avatarProfile, showAvatar])
 
-  if (!showAvatar) return null
+  useEffect(() => {
+    localProfileRef.current = localProfile
+  }, [localProfile])
 
-  const handleClose = (): void => {
-    setLocalProfile(avatarProfile)
-    setShowAvatar(false)
-    setSaveStatus('idle')
-  }
+  const clearSaveStatusTimer = useCallback((): void => {
+    if (saveStatusTimeoutRef.current) {
+      clearTimeout(saveStatusTimeoutRef.current)
+      saveStatusTimeoutRef.current = null
+    }
+  }, [])
 
-  const handleSave = async (): Promise<void> => {
+  const scheduleSaveStatusReset = useCallback((status: 'saved' | 'error'): void => {
+    clearSaveStatusTimer()
+    saveStatusTimeoutRef.current = setTimeout(() => {
+      setSaveStatus((current) => (current === status ? 'idle' : current))
+    }, status === 'saved' ? 1000 : 2500)
+  }, [clearSaveStatusTimer])
+
+  const persistProfile = useCallback(async (profileToPersist: AvatarProfile): Promise<AvatarProfile> => {
+    const serializedProfile = JSON.stringify(profileToPersist)
+
+    if (serializedProfile === lastPersistedProfileRef.current) {
+      return profileToPersist
+    }
+
+    clearSaveStatusTimer()
+    setSaveStatus('saving')
+
+    const saveTask = async (): Promise<AvatarProfile> => {
+      try {
+        const nextProfile = await window.api.updateAvatarProfile(profileToPersist)
+        lastPersistedProfileRef.current = JSON.stringify(nextProfile)
+        setAvatarProfile(nextProfile)
+        setSaveStatus('saved')
+        scheduleSaveStatusReset('saved')
+        return nextProfile
+      } catch (error) {
+        console.error('Failed to save avatar profile:', error)
+        setSaveStatus('error')
+        scheduleSaveStatusReset('error')
+        throw error
+      }
+    }
+
+    const queuedSave = saveChainRef.current.catch(() => null).then(saveTask)
+    saveChainRef.current = queuedSave
+    return queuedSave
+  }, [clearSaveStatusTimer, scheduleSaveStatusReset, setAvatarProfile])
+
+  const flushPendingProfileSave = useCallback(async (): Promise<AvatarProfile> => {
+    if (autosaveTimeoutRef.current) {
+      clearTimeout(autosaveTimeoutRef.current)
+      autosaveTimeoutRef.current = null
+    }
+
+    return persistProfile(localProfileRef.current)
+  }, [persistProfile])
+
+  useEffect(() => {
+    if (!showAvatar) {
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current)
+        autosaveTimeoutRef.current = null
+      }
+      return
+    }
+
+    if (JSON.stringify(localProfile) === lastPersistedProfileRef.current) {
+      return
+    }
+
+    autosaveTimeoutRef.current = setTimeout(() => {
+      void persistProfile(localProfileRef.current)
+    }, 400)
+
+    return () => {
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current)
+        autosaveTimeoutRef.current = null
+      }
+    }
+  }, [localProfile, persistProfile, showAvatar])
+
+  useEffect(() => {
+    return () => {
+      if (autosaveTimeoutRef.current) {
+        clearTimeout(autosaveTimeoutRef.current)
+      }
+      clearSaveStatusTimer()
+    }
+  }, [clearSaveStatusTimer])
+
+  const handleClose = async (): Promise<void> => {
     try {
-      setSaveStatus('saving')
-      const nextProfile = await window.api.updateAvatarProfile(localProfile)
-      setAvatarProfile(nextProfile)
-      setSaveStatus('saved')
-      setTimeout(() => {
-        setSaveStatus('idle')
-      }, 900)
-    } catch (error) {
-      console.error('Failed to save avatar profile:', error)
-      setSaveStatus('error')
-      setTimeout(() => setSaveStatus('idle'), 2500)
+      await flushPendingProfileSave()
+      setShowAvatar(false)
+    } catch {
+      // Keep the modal open so the user does not lose pending edits.
     }
   }
+
+  if (!showAvatar) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md">
@@ -82,8 +173,8 @@ export function AvatarModal(): React.ReactNode | null {
           </button>
         </div>
 
-        <div className="settings-stack custom-scrollbar max-h-[32rem] space-y-5 overflow-y-auto px-6 py-4">
-          <section className="space-y-4">
+        <div className="settings-stack custom-scrollbar max-h-[32rem] space-y-4 overflow-y-auto px-6 py-5">
+          <section className="space-y-5">
             <div className="space-y-2 pb-1">
               <div className="flex items-center justify-between gap-3">
                 <label className={fieldLabelClassName}>Identity Base</label>
@@ -152,7 +243,7 @@ export function AvatarModal(): React.ReactNode | null {
 
             <SectionDivider label="Interview Context" />
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-3">
                   <label className={fieldLabelClassName}>Role / Position</label>
@@ -244,31 +335,25 @@ export function AvatarModal(): React.ReactNode | null {
           </section>
         </div>
 
-        <div className="flex items-center justify-between border-t border-white/5 px-4 py-3.5">
+        <div className="flex items-center justify-between border-t border-white/5 bg-white/[0.02] px-4 py-3.5">
           <div className="flex items-center gap-3">
+            {saveStatus === 'saving' && (
+              <div className="flex items-center gap-2 text-sm text-dark-400">
+                <span>Saving changes...</span>
+              </div>
+            )}
             {saveStatus === 'error' && (
               <div className="flex items-center gap-2 text-sm text-red-400">
                 <AlertCircle size={16} />
-                <span>Failed to save</span>
+                <span>Failed to save changes</span>
               </div>
             )}
             {saveStatus === 'saved' && (
               <div className="flex items-center gap-2 text-sm text-green-400">
                 <CheckCircle size={16} />
-                <span>Saved!</span>
+                <span>All changes saved</span>
               </div>
             )}
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              onClick={handleSave}
-              disabled={saveStatus === 'saving'}
-              className="flex items-center gap-2 rounded-lg border border-cyan-400/25 bg-gradient-to-r from-cyan-400 to-teal-400 px-4 py-2 text-sm font-medium text-slate-950 transition-colors hover:from-cyan-300 hover:to-teal-300 disabled:opacity-50"
-            >
-              <Save size={16} />
-              <span>{saveStatus === 'saving' ? 'Saving...' : 'Save'}</span>
-            </button>
           </div>
         </div>
       </div>

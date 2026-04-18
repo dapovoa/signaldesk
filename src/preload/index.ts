@@ -34,7 +34,6 @@ const api = {
     provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp' | 'anthropic-compatible'
     authMode?: 'api-key' | 'oauth-token'
     baseURL?: string
-    customHeaders?: string
     llmModelDir?: string
   }): Promise<{ success: boolean; models: Array<{ id: string; name: string }>; error?: string }> =>
     ipcRenderer.invoke('fetch-llm-models', payload),
@@ -44,7 +43,6 @@ const api = {
     provider?: 'openai' | 'openai-oauth' | 'openai-compatible' | 'llama.cpp' | 'anthropic-compatible'
     authMode?: 'api-key' | 'oauth-token'
     baseURL?: string
-    customHeaders?: string
     model?: string
     llmModelDir?: string
     testKind?: 'connect' | 'llm'

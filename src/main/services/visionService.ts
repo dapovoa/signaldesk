@@ -39,7 +39,11 @@ export class VisionService {
       // Remove data URL prefix if present
       const base64Data = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64
       const dataUrl = `data:image/png;base64,${base64Data}`
-      const model = this.config.model || 'gpt-4o'
+      const model = this.config.model?.trim()
+
+      if (!model) {
+        throw new Error('Select or enter an answer generation model before using screenshot analysis.')
+      }
 
       if (this.isChatGPTCodexBackend()) {
         const stream = streamChatGPTCodexResponse({

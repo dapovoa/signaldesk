@@ -49,6 +49,15 @@ export class WhisperService extends EventEmitter {
   private readonly MAX_BUFFER_DURATION_MS = 20000
   private readonly MAX_TRANSCRIPTION_RETRIES = 2
 
+  private requireConfiguredModel(): string {
+    const model = this.config.model?.trim()
+    if (!model) {
+      throw new Error('Select or enter a Whisper model before using OpenAI transcription.')
+    }
+
+    return model
+  }
+
   constructor(config: WhisperConfig) {
     super()
     this.config = config
@@ -295,7 +304,7 @@ export class WhisperService extends EventEmitter {
 
         return await this.client.audio.transcriptions.create({
           file: fs.createReadStream(tempFile),
-          model: this.config.model || 'whisper-1',
+          model: this.requireConfiguredModel(),
           language: this.config.language,
           response_format: 'json'
         })
