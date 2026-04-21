@@ -52,10 +52,6 @@ export class WhisperService extends EventEmitter {
   private requireConfiguredModel(): string {
     const model = this.config.model?.trim()
     if (!model) {
-      const provider = this.config.provider || 'openai'
-      if (provider === 'groq') {
-        return 'whisper-large-v3-turbo'
-      }
       throw new Error('Select or enter a Whisper model before using transcription.')
     }
 

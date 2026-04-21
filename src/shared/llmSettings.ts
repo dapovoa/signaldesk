@@ -151,8 +151,17 @@ export const normalizeLlmSettings = (settings: AppSettings): AppSettings => {
     llmAuthMode
   }
 
+  // Get the model from the provider-specific field
+  const activeModelFromSpecificField = getActiveLlmModel(nextSettings)
+  // Preserve the current llmModel value as fallback
+  const fallbackModel = settings.llmModel?.trim() || ''
+
+  // If the provider-specific field is empty but llmModel has a value, use llmModel
+  // This preserves the model when switching providers until the user explicitly selects a new model
+  const finalModel = activeModelFromSpecificField || fallbackModel
+
   return {
     ...nextSettings,
-    llmModel: getActiveLlmModel(nextSettings)
+    llmModel: finalModel
   }
 }

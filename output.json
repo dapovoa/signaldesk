@@ -1,0 +1,361 @@
+[
+  {
+    "id": "1776263859313",
+    "question": "¿Y la diferencia más que menor?",
+    "answer": "I'd say the biggest difference is the scope of responsibility. At DuploClique, I was often the sole person managing the full stack, from hardware repair to AWS migrations. At the retail company, I was responsible for reverse-engineering a completely undocumented, flat network environment for 100 users while simultaneously building out the whole modern infrastructure.",
+    "timestamp": 1776263859313,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776263853640",
+    "question": "Também é igual, né? Sim, o que eu digo é que nós, por nós recursos humanos, também tentamos fazer com que eles façam um bocadinho presencial, porque acaba por nos conhecermos um bocadinho melhor uns aos outros, né? E há esse contacto.",
+    "answer": "Sim, é verdade. Eu acho que esse contacto pessoal faz muita diferença. Eu prefiro começar por ver o problema concreto, e esse contacto ajuda a entender o contexto por trás do ticket ou da falha.",
+    "timestamp": 1776263853640,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776263818886",
+    "question": "OK, por norma eles têm efeito online também, Vítor. Por norma têm efeito online, mas se fosse presencial havia algum problema?",
+    "answer": "Na verdade, o efeito online é o padrão, mas se fosse presencial, não haveria problema algum. Eu só verificaria primeiro se a latência de rede estava alta ou se havia alguma limitação de banda no local específico.",
+    "timestamp": 1776263818886,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776263786745",
+    "question": "E ele, ele vai ser um bocadinho equiparado por todo, né? Que é a regulação salarial.",
+    "answer": "Okay, so if the question is about salary benchmarking or regulation, I'd start by looking at what the current role is actually doing. Then I would compare that against similar roles in the local market, using concrete data from recent hiring trends.",
+    "timestamp": 1776263786745,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776263781621",
+    "question": "Bom, da minha parte, acho que também tenho aqui todos os elementos necessários também para apresentar aqui ao responsável, que é ele que está um bocadinho mais em cima do processo. Apesar de se reportar diretamente à coordenadora, é o responsável que está um bocadinho mais em cima do processo, precisamente porque ele é que está mais com a equipa aqui no Norte, não é? E acaba por dar mais— — presencial à equipa?",
+    "answer": "Sim, ele é a referência mais alta para a equipa do Norte. Ele tem uma visão mais abrangente do processo, porque é quem está mais envolvido fisicamente com o trabalho diário deles.",
+    "timestamp": 1776263781621,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776263751765",
+    "question": "Vocês têm mais alguma questão?",
+    "answer": "Yes, I do. Can you walk me through a recent, messy production issue where the documentation was almost nonexistent, and how you got it solved?",
+    "timestamp": 1776263751765,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776263748973",
+    "question": "— no caso desta função em si, tá bom?",
+    "answer": "Okay, if you mean my day-to-day role, I usually start by looking at the concrete thing that broke or is slow. Then I dig into the logs or the system configuration to find the root cause, whether it's a misbehaving server process or a slow SQL query.",
+    "timestamp": 1776263748973,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776263746223",
+    "question": "— esse valor já é integrado, sim. Ele está separado nesse sentido de rúbrica, não é? Mas já está integrado a nível de valor apresentado. Sim. Ok. É— no fundo é só uma— ser uma salvaguarda também de— mas é o que eu lhe digo, até à data de hoje — e nós temos aí vários colegas com a mesma função, que são 3, se não estou em erro— não é o caso de ficarem muito mais tempo. É uma situação ou outra, não é? É um projeto ou outro, mas não é algo que— como temos, por exemplo, aqui na análise de crédito. Mas tem um sábado rotativo para contemplar cada um, sabe?",
+    "answer": "Para ser direto, sim, o valor já está integrado no valor apresentado, mas a separação em rúbrica serve como uma salvaguarda. O ponto principal é que, embora haja esta separação para controlo, o montante já está contabilizado no total.",
+    "timestamp": 1776263746223,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776263705377",
+    "question": "É o que eu digo, esta função em si tem a parte da isenção horária, precisamente para esses casos, não é? Mas não é algo—",
+    "answer": "Yeah, that's right. The function itself definitely handles the time exemption part, especially for those specific situations. But it isn't a complete solution on its own.",
+    "timestamp": 1776263705377,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776263664389",
+    "question": "No fundo, ela pode ter— atenção, não quer dizer que não tenha— ela pode ter, agora, sendo usada Vai sendo usada, mas como é que eu lhe dizer isto? Não é algo que— como já vi muitos casos, algumas funções, até de alguns colegas meus, que estão quase sempre depois da hora, não é? Porque fazem muito trabalho, estão quase sempre depois da hora. Não é este o caso, ok? Pode acontecer uma vez ou outra, mas não, não é algo que seja diário também.",
+    "answer": "Eu diria que a funcionalidade está operacional e ativa neste momento. É um recurso que está a ser usado continuamente, embora talvez não seja um uso constante e massivo a todo o tempo.",
+    "timestamp": 1776263664389,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776263636659",
+    "question": "Mas não por norma, são 7 horas, sim. O horário fixo— nós temos neste momento fixo, entre aspas, que eu— para definir é das 9 às 5:30, né? Mas lá está, isso pode alterar. E, e a Nilo trabalha suplementar só quando — quando necessário, no fundo. Quer, quase um bocadinho por cada função, não é? Quando necessário mesmo, e falando com as pessoas. Mas a função em si não tem essa IHTX que ela estava a perguntar.",
+    "answer": "Para mim, o mais concreto é que o horário base é das 9 às 17h30. Mas, claro, isso é flexível e pode mudar. A Nilo só trabalha suplementar quando a necessidade surge, dependendo da função.",
+    "timestamp": 1776263636659,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776263605918",
+    "question": "— Não, até à data não tenho isso. Houve ali a situação com ele dessa migração dos dados e tudo devidamente aprovado como foi e as pessoas concordaram, vai acontecendo. Tem um trabalho suplementar aqui, sim. É — será de um trabalho suplementar.",
+    "answer": "Não, neste momento não tenho. A situação que houve foi na migração de dados, e foi aprovado como aconteceu, as pessoas concordaram. Está a acontecer, sim, é um trabalho suplementar.",
+    "timestamp": 1776263605918,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776263584061",
+    "question": "Sim, pode haver aqui— não lhe vou dizer que é— que não, não, não, não, não. Pode haver aqui uma situação ou outra, como houve aqui atrasado na imigração de dados que tivemos, ou para um trabalho especial. So, Carl, say to me one more time.",
+    "answer": "Pode haver muitas coisas. Normalmente, eu começo pelo mais concreto. Por exemplo, se for um atraso de dados, eu verifico primeiro os logs da aplicação.",
+    "timestamp": 1776263584061,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776263548895",
+    "question": "E, e pronto, eventualmente se o Vitor tiver outros filhos no futuro, essa parte do infantil começa outra vez, não é? Porque o filho é um outro filho que tem, e tem direito à mesma, ok? Não é só sobre o que tem agora, mas tem até do futuro. Sim, sim, sim, se tiver— imaginamos que tenha 5 filhos, dá para todos também. Tem a ver a nível com os filhos que tem, mas era uma maior carga de trabalho. Mas sim, tem, sim, tem direito por cada filho que tenha, no fundo. enfim. E, portanto, a nível da Corte de Imprensa também temos 3 dias de trabalho, de, de trabalho, de acordo com a equipa e com a coordenadora, vai responsável, os dois, mas a nível do IT e tudo mais não não tem que ter esse problema. No início fazem sempre um bocado mais de presencial, mas depois, sim, autónomos e tudo mais, não há qualquer tipo de problema também. E pronto, vai rondando aqui um bocadinho. Acho que lhe falei um bocadinho, pelo menos os grandes benefícios que nós temos tido ultimamente —Farias—",
+    "answer": "Sim, basicamente é por cada filho que ele tiver, tem direito à parte, certo? Não se limita só aos filhos que tem agora, mas abrange todos os futuros também.",
+    "timestamp": 1776263548895,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776263417463",
+    "question": "Assim, temos um bocadinho aqui um leque vasto, algumas até nem me lembro assim de cor, mas é que, pronto, não sei se o Vítor tem filhos.",
+    "answer": "Since you're asking generally, I'd start by looking at the most concrete thing first. If it's a system issue, I'd check the logs on the specific server or application that's throwing the error.",
+    "timestamp": 1776263417463,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776263365875",
+    "question": "É difícil. A nível da saúde, ok, nosso sistema de saúde é através do SAMS, ok? O SAMS que é aquele sistema de saúde dos bancários, no fundo. Antigamente eles eram mais ou menos direcionados a nível da função. — nós, pelo menos aqui, consegue escolher o melhor entender. Pode ser o quadros, pode ser o norte, pode ser o mais— e depois, no fundo, o vídeo é que faz essa análise, que aquilo compensa mais assim, e escolhe, ok? A nível de compartilhação, aquilo vai— mínimo 1,5% do ordenado, ok? E nós, como participamos com valor quase na casa dos 145, nós e imprensa, ok? Depois o colaborador só faz aquele ajuste do— que é obrigatório, no manual do sindicato é obrigatório. — esse valor. Depois também tem um valor a nível de taxa complementar, mas isso depois já, já é opcional. Depois a nível— e vendo as— estamos — acho que o Vítor vê melhor, como lhe dá mais jeito também. Depois, o que é que eu lhe posso dizer mais? Nós também somos uma empresa que apostamos muito na formação, temos uma plataforma disponível 24/7, então para além de um plano anual que fazemos sempre das 40 horas obrigatórias de formação, tentamos sempre ir um bocadinho ao encontro do que a própria pessoa quer e do que o próprio responsável da área vai criando para a equipa, ok? Mas imaginemos, o Vítor quer fazer uma formação específica em X, que até faz sentido da sua função e tudo mais, mas até não foi colocado a nível do plano formação, mas quer fazê-la em abordagem com o próprio responsável e estando tudo ok, a empresa em si também, por norma, não se opõe, ok? Porque nós tentamos, ah, apostar forte na vossa formação porque é uma mais-valia também para nós, ok? Nesse envolvimento. Okay.",
+    "answer": "Como pragmático, começaria por ver a documentação do SAMS para entender como é a regra base de direcionamento. Depois, verificaria como a nossa empresa aplica o ajuste de 1.45% sobre o valor mínimo de 1.5% que é obrigatório.",
+    "timestamp": 1776263365875,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776263256455",
+    "question": "mas depois a nível de IRS já não. Ou seja, cada uma delas tem aqui alguma diferença a níveis fiscais, ok? Que acaba por chegar ao prémio e ele tentar chegar ao mais real do, do bruto, que é tornar-se líquido, não é? E depois, pronto, tentar o cara vários bolsas e durante o ano vai justificando aquele valor. Chegando a dezembro, está tudo justificado, tudo como disse que, que ia estar repartido assim, é tudo bem. Não tanto, pois faz um ajuste de contas no fundo só, ok? Que o que devia ser descontado no início, desconta no fim do ano, no fundo. Também desenvolveu nessa plataforma porque achámos que seria uma mais-valia, no fundo, porque às vezes em valores altos assim como, como é este um deles também, acaba por depois ter um corte grande, não é? E acaba por não representar diretamente o valor total. E é assim que eu fico sempre um bocadinho— fugir um bocadinho a esses impostos todos. Depois, a nível também aqui de direitos que nós temos contra Nós, a nível da banca, temos 25 dias de férias, trabalhamos 7 horas por dia, ok, 35 semanais, temos 1 hora e meia de almoço. Nós, como empresa familiarmente responsável, temos aqui a flexibilidade do horário, ou seja, pode entrar— — aqui numa pool variável entre 4 horários, fixando, ok? Ou seja, hoje não venho às 8h, amanhã quero às 9h— não, tenta fixando, ok? Mas consegue vir, por exemplo, o horário das 8h30 ou das 9h, 9h30 e o das 10h, ok? Têm esta possibilidade aqui, fixando o horário, mas não quer dizer que o Vítor— olha, a partir de agora quero das 8, ok, 8:30 aliás, mas daqui a meio ano até lhe dá mais jeito entrar às 9:30, digamos, ok, consegue, consegue alterar, não há problema. — não pode ser dia sim, dia não, mas sim, mas consegue fazer essa alteração. E depois, pronto, trabalhar 7 horas diárias com 1 hora e meia de almoço. Depois também temos aqui um grande benefício",
+    "answer": "Sim, basicamente é isso. Cada prémio tem a sua tributação específica que afeta o valor líquido final. O ajuste de contas no final do ano garante que tudo o que foi descontado ao longo do ano esteja correto, mesmo que o valor não represente diretamente o bruto.",
+    "timestamp": 1776263256455,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776263136399",
+    "question": "Ótimo, ótimo, ótimo. Pronto, para além disto tudo, nós também, pronto, é— é mais que importante salvaguardarmos nesse sentido que nós aqui na 321— não sei como é que era no passado, mas nós aqui na 321, o que é que nós temos a nível de pack completo? como eu costumo chamar. Mas para além do, do ordenado fixo, não é, temos aqui também a parte de socialamentação, que são 11,60 €, em que até 10,35 € vai para cartão, ok, o diferencial vai para ordenado. Depois, para além disto, também temos uma RVA anual. O que é que é RVA anual? Uma remuneração variável anual, hum, que pressupõe-se que venha através da— dos— do sucesso dos cowboys, no fundo, que como por todos os cowboys proprios PIs e depois é avaliado a nível de desempenho. Uma parte desse prémio é corporativo, ok, outra parte é individual. Juntando os dois, o valor de referência para esta área está nos 2.500— Okay. É sempre sobre o ano anterior e é avaliado e é pago mais ou menos em maio, junho. Ok? Depois, a grande vantagem que nós temos— a partir do ano passado nós desenvolvemos também aqui uma plataforma de benefícios fiscais, flexíveis fiscais, e passa a explicar o que é que isso quer dizer. Sobre a RVA, se quiser ter o valor todo em ordenado, nós mandamos o valor todo em ordenado. Se quiser ter um valor X ou Y desse, dessa RVA para essa plataforma, funciona da seguinte forma— por exemplo, Vítor, vou Vou pôr números redondos que mais fazem para explicar. Tem 1000 euros que vai querer associar a uma bolsa de ginásio repartida, ginásio, de— hum— mobilidade, de PPR, tem várias, tem para 10 ou 12. Pronto, e cada uma delas tem umas coisas específicas ginásio sei que há isenção de IRS e Segurança Social. De mobilidade e ginásio acho que é mesmo a isenção. Depois, pelo PPR, tem isenção de Segurança Social",
+    "answer": "A RVA anual é uma Remuneração Variável Anual. Funciona como um bónus que depende do sucesso geral da empresa e do teu desempenho individual. O valor de referência é de 2.500€ e é pago mais ou menos entre maio e junho do ano seguinte.",
+    "timestamp": 1776263136399,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776263010258",
+    "question": "É, é um bocadinho por aí, é também é ter essa noção que eu apresentar-lhe uma proposta",
+    "answer": "So, I start by looking at the concrete thing. I check the existing setup first to see what's actually broken or what needs improvement. Then, I build the simplest thing that gives me real signal, and from there, I improve it into a stable proposal.",
+    "timestamp": 1776263010258,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776263004646",
+    "question": "Podíamos rodar por aqui, porque lá está, é feito— é uma margem grande a nível de valores, sei completamente isso, é grande, é, mas, mas não lhe tenho valores ao concreto para lhe falar.",
+    "answer": "Olha, a minha abordagem seria começar pelo ponto mais concreto que tivermos, tipo um log de erro ou um métrica baixa. Depois, ando para o exterior disso, tentando perceber a causa raiz no ambiente.",
+    "timestamp": 1776263004646,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776262986321",
+    "question": "Bom, e, e esse valor— só para ter mesmo aqui uma noção, Vítor, porque é um bocadinho ingrato também estar a falar aqui sem valores concretos, porque nós— o que é que nós fazemos também para explicar um bocadinho porque às vezes não ter este valor para vos apresentar a vocês candidatos? Nós Tentamos sempre alinhar um bocadinho as preces que o próprio candidato tem e depois com tudo aquilo que a própria equipa tem, que é para não haver muitas discrepâncias, não é? E tentamos sempre trabalhar num valor mais justo possível para o próprio candidato, para a própria equipa em si, e tentamos rondar muito por aqui. — E eu gostaria de saber se a nível de intervalo, margem de trabalho entre nós, para lhe apresentar aqui uma proposta real, não é? Porque acho que não faz sentido estar a lhe apresentar uma proposta em que depois o Victor me diga: \"Ok, eu até disse que era um bocado flexível, mas isto, pá, isto é ridículo, percebe?\" Um, Eu diria aqui, sem ter— vai ser uma margem grande, mas eu diria aqui entre os 30 a 34 anual.",
+    "answer": "Olha, dado o que falei sobre o meu percurso, diria que o intervalo entre 30 e 34 mil euros anuais faz sentido para mim. Isso reflete a mistura de infraestrutura que construí e a automação que implementei, começando pelo mais básico e subindo para o SAP HANA.",
+    "timestamp": 1776262986321,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776262902966",
+    "question": "Porque eu vou lhe ser o mais sincero possível, eu também acho que fazia sentido fazer essa entrevista consigo para conhecer um bocadinho e também esta parte é sempre aquele tema um bocadinho mais— não digo delicado, mas é sempre um tema a falar, não é? Nós aqui a nível da própria função em si— o nosso máximo para a função não chega aqui a bater nos 35. É por isso, é tentar perceber se era negociável este, este valor, se não é de todo. Não quer dizer que no futuro isto a nível de alinhamento da função em si não tem tenha outro valor, ok? Porque está sempre a evoluir e na vossa área aquilo vai ter muito mais, não é? Hum...",
+    "answer": "Para ser sincero, o meu ponto de partida é sempre o que está no terreno. Vou analisar a responsabilidade real do cargo, o que já fiz e o que sei que preciso de fazer, e a partir daí, digo o valor que acho justo. Se o valor proposto for muito longe, eu pergunto qual a margem de negociação ou quais são os critérios para chegarmos mais perto.",
+    "timestamp": 1776262902966,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776262851223",
+    "question": "OK, c'est marge— nous c'est ça en équipe, hein, non Victor?",
+    "answer": "Yeah, I'm Victor. In an team setting, I really start by looking at what's concrete first. Then I build out from there, usually by getting a simple, working signal from the problem area.",
+    "timestamp": 1776262851223,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776262821101",
+    "question": "No caso aqui das expectativas salariais, conseguem falar um bocadinho também por aqui? Havia texto também— deu-me aqui um feedback, mas— conseguir enquadrar melhor?",
+    "answer": "I'm looking for something that reflects the current market rate for someone with my mix of infrastructure and automation experience. Based on the role description, I think a range between [Insert Lower End] and [Insert Upper End] would be a fair starting point for discussion.",
+    "timestamp": 1776262821101,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776262808557",
+    "question": "Eu queria também saber aqui um bocadinho— solidariedade imediata, não é, Vítor?",
+    "answer": "Sure. If you're asking about immediate solidarity, I'd say my first thought is always getting the system functional again. I jump straight to what's broken and try the simplest fix that gets me real signal.",
+    "timestamp": 1776262808557,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776262804597",
+    "question": "— passar um bocadinho mais à frente— que a nível de— ou seja, funções técnicas e tudo mais, acho que o Vítor em si também já passou por muitas várias, já acabou por desenvolver vários projetos, esteve integrado em outros estandes, acaba por ter aqui o knowledge geral do que, do que nós —propres problèmes.",
+    "answer": "So, technically speaking, Victor has done quite a bit. He's developed several projects and integrated into different setups. He has a general understanding of our specific problems.",
+    "timestamp": 1776262804597,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776262767517",
+    "question": "Porque o último registro que eu tenho aqui é no final de—",
+    "answer": "Porque o último registo que eu tenho é no final de, presumo que esteja a falar da linha de tempo do meu trabalho mais recente. Neste caso, o meu último registo é de 2025, quando estava na função de Engenheiro de Sistemas de TI numa empresa retalhista.",
+    "timestamp": 1776262767517,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776262761026",
+    "question": "— Não, no fundo— pode explicar um bocadinho mais ao centro— ou seja, está desde julho do ano passado aqui sem algum tipo de atividade, correto?",
+    "answer": "Yeah, that's right. Basically, there hasn't been any real activity in the system since July of last year. I'd start by checking the application logs for that specific period to pinpoint the last successful operation.",
+    "timestamp": 1776262761026,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776262732376",
+    "question": "E aqui nesta fase, eu, eu também perguntei aqui um bocadinho, saiu mais ou menos em julho do ano passado, é o que eu quero dizer, acaba por passar aqui quase, não digo um ano, mas caminhamos para lá, não é? Esta diferença também saiu de um lado e do outro. Reparei aqui que também a nível período histórico no— é, CGI, não sei se estou dizendo bem.",
+    "answer": "Okay, so focusing on the historical period, I noticed things like the time difference between my roles. For example, in the retail company, I was building out the infrastructure from scratch, which was a massive initial effort. Then, as we moved toward July of last year, the focus shifted more toward automation and refining the stability of those new systems.",
+    "timestamp": 1776262732376,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776262684925",
+    "question": "Sim, claro, todas as partes do negócio dependemos sempre todos uns dos outros, não é? Tem que saber sempre aquela inteira— ajuda no fundo.",
+    "answer": "Yeah, exactly. Everything is linked together. I usually start by looking at the most concrete thing that's failing, like a specific service or log line, and then I trace it back through the dependencies until I see the root cause.",
+    "timestamp": 1776262684925,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776262616147",
+    "question": "Nesse período de lá até aqui, ehm, o que é que tem feito? No fundo, um bocadinho também trabalha de forma autónoma, não sei, estou a supor, não sei se faz algum tipo de—",
+    "answer": "Mostly, I've been focused on making things reliable. At the retail company, I started by reverse-engineering the existing setup, then I built out the core infrastructure like VLANs and Active Directory.",
+    "timestamp": 1776262616147,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776262599790",
+    "question": "Mas no fundo, essa motivação, essa aí foi a— foi muito sobre posição de trabalho, sozinho, não é?",
+    "answer": "Sim, no fundo, era muito sobre estar na linha da frente. Gostava de ser a pessoa que consegue olhar para um problema, por mais caótico que seja, e começar a reconstruí-lo ou otimizá-lo com algo simples e funcional.",
+    "timestamp": 1776262599790,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776262538452",
+    "question": "E aqui, isto é uma parte um bocadinho não tanto para a parte funcional da função em si, a nível técnico, mas sim tentar perceber aqui um bocadinho— o, o Vítor teve aqui da Mike Davis até 2025, não é, o ano passado. Saiu para o final do ano, foi mais ou menos. Que que motivou, no fundo, também?",
+    "answer": "Ele ficou por umas razões práticas. No início, foi porque precisava de construir a infraestrutura do zero, tirando a base totalmente inexistente. Depois, ele ficou porque conseguiu migrar a função para automatização e trabalhar com dados, o que é onde ele realmente gostava de estar.",
+    "timestamp": 1776262538452,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776262512194",
+    "question": "Então, no fundo, acabou por passar um bocadinho por todas as partes aqui do Haiti também, não é? Acaba por—",
+    "answer": "Yes, pretty much. I started on the hardware side, then moved into infrastructure, and now I spend most of my time on the automation and development side. I feel most comfortable working close to whatever part of the system is actually misbehaving.",
+    "timestamp": 1776262512194,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776262460170",
+    "question": "— Essa da duplo clique, o, o produto deles no fundo era a venda de softwares?",
+    "answer": "Sim, basicamente era venda de software e serviços. Eu fazia a parte de infraestrutura e desenvolvimento para os clientes. Por exemplo, montava tudo no AWS Lightsail ou criava sites em WordPress e WooCommerce para eles.",
+    "timestamp": 1776262460170,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776262349914",
+    "question": "Não, é só no fundo um bocadinho high level, não é? Porque os termos mais específicos da função— Please.",
+    "answer": "É, é um bocadinho high level, sim. O meu foco é sempre partir da coisa mais concreta. Por exemplo, se falarmos de sincronização, não falo só \"sincronização de dados\"; falo sobre a sincronização real entre o SAP HANA e o backend FastAPI.",
+    "timestamp": 1776262349914,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776262201699",
+    "question": "É um bocadinho se conseguir falar também algum tipo de grande projeto que tenha inserido, que tenha desenvolvido também, que tenha utilizado sobretudo ferramentas de C#, SQL— isso se calhar é o teu dia a dia também, não?",
+    "answer": "Definitely. A big one was migrating and integrating POS data with SAP B1. I developed a C# .NET application specifically for that reconciliation.",
+    "timestamp": 1776262201699,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776261972212",
+    "question": "Por isso, se me conseguisse contextualizar assim um bocadinho do— de si e também da sua vida profissional, e depois já uma questão também vou lhe fazer, está bem?",
+    "answer": "Sure. I'm a pragmatic engineer. I usually start with what's concrete, like fixing a broken server or a slow query, and then work outward from there.",
+    "timestamp": 1776261972212,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776261960083",
+    "question": "se apresentar um bocadinho, um bocadinho de si também, um bocadinho do trabalho feito até agora também. Vi que neste momento não está, não está a desempenhar funções na área, pelo menos a nível de alguma empresa assim, não é?",
+    "answer": "Eu sou engenheiro prático. Comecei com reparação de hardware e andei para infraestrutura e sistemas, chegando à automação e desenvolvimento. Na última empresa, basicamente reconstruí tudo do zero, segmentando a rede, implementando AD e depois construí pipelines de sincronização SAP com Python.",
+    "timestamp": 1776261960083,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776261872300",
+    "question": "Há algumas funções que, que reportam diretamente ao responsável. Neste caso era para a coordenadora, está bem? Okay.",
+    "answer": "Sim, faz sentido. Assim, as tarefas ou funções que precisam de acompanhamento direto ficam vinculadas à coordenadora. Isso garante que ela tenha visibilidade imediata sobre o status delas.",
+    "timestamp": 1776261872300,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776261859216",
+    "question": "Sim, mas no caso da equipa de— do Haiti, então, está toda aqui no Porto. Só o coordenador é que é de Lisboa. Ou seja, já vem isto de uma questão do passado também, não é? Mas atualmente estamos divididos assim. A equipa está toda— — A equipa já existe há algum tempo, houve uma reestruturação uns anos atrás, entretanto o ano passado também houve uma reestruturação em algumas áreas, não afetou esta parte do IT, mas no fundo esta questão do negócio vai reestruturando várias vezes algumas áreas início e tudo, mas não houve— com essa mudança do passado para o recente, e quando digo essa mudança— passagem do passado para o recente, é com este envolvimento todo que a empresa em si teve, não é? Ou seja, potenciar a BPN, depois entretanto teve como individualizar— aliás, foi jogava por uma internacional, mas depois gosto muito de individualizada, agora é de grupo outra vez, acaba por sempre haver aqui uma reestruturação, não é? Mas sim, a equipa está toda aqui no Porto, a coordenadora é que é de Lisboa, porque nós também—",
+    "answer": "Sim, percebo. Então, a situação é que a equipa de IT está toda baseada no Porto, mas o coordenador é de Lisboa. Isto reflete um histórico de reestruturações da empresa, certo?",
+    "timestamp": 1776261859216,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776261762455",
+    "question": "A nível do nosso negócio e processo de negócio, tem sempre crescido todos os anos. Esta necessidade que nós temos para a área é de acréscimo de pessoas, ou seja, nesse sentido de suportar o trabalho que tem havido também. No caso dessa área em si, contam com alguns colegas— Colegas, a área está dividida em várias funções. Temos os colegas em desktop suporte, temos aqui— decorro— que eu acho que não estou em erro, mas 4 colegas da parte do técnico da IT suporte ao negócio. — temos as colegas com a gestão de projetos também, uma coordenadora de área e, e o responsável de área também. Neste caso, se esta função ia reportar diretamente para a coordenadora, que pessoa devemos reportar aqui para o responsável?",
+    "answer": "If I were to report directly to the Coordinator, I'd first clarify what the primary focus of that specific role is. Then, I'd ask the Responsible person if they need someone focused on infrastructure stability or business process automation to report into them directly.",
+    "timestamp": 1776261762455,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776261630280",
+    "question": "Mas é que não desconhecia, mas depois— no fundo explorou aqui um bocadinho— e aí—",
+    "answer": "I would start by looking at the concrete evidence. I'd check the logs for the specific component that seems to be failing or behaving unexpectedly. That usually gives me a very clear signal about where to start digging.",
+    "timestamp": 1776261630280,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776261610376",
+    "question": "— Já está. �� Vítor, deixa ele dar ouvido nos últimos 20, 20, 30 segundinhos. 20 segundinhos pelo menos, deixa ele dar ouvido.",
+    "answer": "Okay, so I'll listen for the last 20 to 30 seconds. I'll focus on seeing what specific events or symptoms happen right at the tail end of whatever this issue is.",
+    "timestamp": 1776261610376,
+    "isStreaming": false,
+    "truncated": false
+  },
+  {
+    "id": "1776261601853",
+    "question": "— O sistema assim muito embaixo também, né?",
+    "answer": "Sim, estou confortável com isso. Eu sempre tento começar pelo ponto mais concreto, seja um servidor com problemas ou um processo que falha. A partir daí, vou trabalhar para entender o porquê e subir a solução.",
+    "timestamp": 1776261601853,
+    "isStreaming": false,
+    "truncated": false
+  }

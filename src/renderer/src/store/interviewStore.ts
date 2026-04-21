@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { AnswerEntry, AppSettings, AvatarProfile } from '../../../shared/contracts'
+import { DEFAULT_AVATAR_PROFILE, DEFAULT_SETTINGS } from '../../../shared/defaults'
 export type { AnswerEntry, AppSettings, AvatarProfile } from '../../../shared/contracts'
 
 export interface TranscriptEntry {
@@ -82,60 +83,6 @@ interface InterviewState {
 
   setError: (error: string | null) => void
   clearAll: () => void
-}
-
-const DEFAULT_SETTINGS: AppSettings = {
-  transcriptionProvider: 'assemblyai',
-  transcriptionApiKey: '',
-  openaiTranscriptionApiKey: '',
-  groqTranscriptionApiKey: '',
-  groqTranscriptionModel: 'whisper-large-v3-turbo',
-  whisperModel: '',
-  assemblyAiSpeechModel: 'u3-rt-pro',
-  assemblyAiLanguageDetection: false,
-  assemblyAiMinTurnSilence: 100,
-  assemblyAiMaxTurnSilence: 1000,
-  assemblyAiKeytermsPrompt: '',
-  assemblyAiPrompt: '',
-  llmProvider: 'openai',
-  llmAuthMode: 'api-key',
-  llmApiKey: '',
-  llmOpenAICompatibleApiKey: '',
-  llmAnthropicCompatibleApiKey: '',
-  llmOauthToken: '',
-  llmOauthRefreshToken: '',
-  llmOauthExpiresAt: 0,
-  llmOauthAccountId: '',
-  llmBaseUrl: '',
-  llmModel: '',
-  llmOpenAIModel: '',
-  llmOpenAIOAuthModel: '',
-  llmOpenAICompatibleModel: '',
-  llmAnthropicCompatibleModel: '',
-  llmLlamaCppModel: '',
-  llmModelDir: '',
-  llmTemperature: 1.0,
-  llmTopP: 0.95,
-  llmTopK: 64,
-  historySession: 1,
-  transcriptionLanguage: 'auto',
-  alwaysOnTop: true,
-  windowOpacity: 1.0,
-  pauseThreshold: 1500,
-  captureSourceId: '',
-  captureSourceType: 'auto'
-}
-
-const DEFAULT_AVATAR_PROFILE: AvatarProfile = {
-  id: 'default',
-  identityBase: '',
-  answerStyle: '',
-  jobTitle: '',
-  companyName: '',
-  jobDescription: '',
-  companyContext: '',
-  candidateKnowledge: '',
-  updatedAt: 0
 }
 
 export const useInterviewStore = create<InterviewState>((set, get) => ({

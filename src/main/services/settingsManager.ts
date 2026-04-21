@@ -1,8 +1,11 @@
-import { config } from 'dotenv'
 import { app, safeStorage } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
 import type { AppSettings, AssemblyAiSpeechModel } from '../../shared/contracts'
+import {
+  ASSEMBLYAI_SPEECH_MODEL_DEFAULT,
+  DEFAULT_SETTINGS
+} from '../../shared/defaults'
 import { inferLlmModelStorageKey, normalizeLlmSettings } from '../../shared/llmSettings'
 import {
   ensureLlamaBinDirectory,
@@ -10,8 +13,6 @@ import {
   getDefaultModelsDirectory
 } from './localEmbeddingPaths'
 export type { AppSettings } from '../../shared/contracts'
-
-config()
 
 const hydrateStoredSettings = (savedSettings: Record<string, unknown>): AppSettings => {
   const hydratedSettings = { ...DEFAULT_SETTINGS }
@@ -25,32 +26,6 @@ const hydrateStoredSettings = (savedSettings: Record<string, unknown>): AppSetti
   return hydratedSettings
 }
 
-const DEFAULT_LLM_PROVIDER: AppSettings['llmProvider'] = 'openai'
-
-const ASSEMBLYAI_SPEECH_MODEL_ENV =
-  process.env.ASSEMBLYAI_SPEECH_MODEL || process.env.VITE_ASSEMBLYAI_SPEECH_MODEL
-
-const DEFAULT_ASSEMBLYAI_SPEECH_MODEL: AssemblyAiSpeechModel =
-  ASSEMBLYAI_SPEECH_MODEL_ENV === 'universal-streaming-english'
-      ? 'universal-streaming-english'
-      : ASSEMBLYAI_SPEECH_MODEL_ENV === 'universal-streaming-multilingual'
-        ? 'universal-streaming-multilingual'
-        : 'u3-rt-pro'
-
-const getAssemblyAiLanguageDetectionDefault = (speechModel: AssemblyAiSpeechModel): boolean => {
-  return speechModel === 'universal-streaming-multilingual'
-}
-
-const getAssemblyAiSilenceDefaults = (
-  speechModel: AssemblyAiSpeechModel
-): { minTurnSilence: number; maxTurnSilence: number } => {
-  if (speechModel === 'u3-rt-pro') {
-    return { minTurnSilence: 100, maxTurnSilence: 1000 }
-  }
-
-  return { minTurnSilence: 400, maxTurnSilence: 1280 }
-}
-
 const isAssemblyAiSpeechModel = (value: unknown): value is AssemblyAiSpeechModel => {
   return (
     value === 'u3-rt-pro' ||
@@ -59,72 +34,21 @@ const isAssemblyAiSpeechModel = (value: unknown): value is AssemblyAiSpeechModel
   )
 }
 
-const DEFAULT_ASSEMBLYAI_SILENCE = getAssemblyAiSilenceDefaults(DEFAULT_ASSEMBLYAI_SPEECH_MODEL)
-const DEFAULT_SETTINGS: AppSettings = {
-  transcriptionProvider:
-    process.env.TRANSCRIPTION_PROVIDER === 'assemblyai' ||
-    process.env.VITE_TRANSCRIPTION_PROVIDER === 'assemblyai'
-      ? 'assemblyai'
-      : process.env.TRANSCRIPTION_PROVIDER === 'groq' ||
-          process.env.VITE_TRANSCRIPTION_PROVIDER === 'groq'
-        ? 'groq'
-        : 'openai',
-  transcriptionApiKey: process.env.ASSEMBLYAI_API_KEY || process.env.VITE_ASSEMBLYAI_API_KEY || '',
-  openaiTranscriptionApiKey: '',
-  groqTranscriptionApiKey: '',
-  whisperModel: '',
-  groqTranscriptionModel: 'whisper-large-v3-turbo',
-  assemblyAiSpeechModel: DEFAULT_ASSEMBLYAI_SPEECH_MODEL,
-  assemblyAiLanguageDetection:
-    process.env.ASSEMBLYAI_LANGUAGE_DETECTION === 'false' ||
-    process.env.VITE_ASSEMBLYAI_LANGUAGE_DETECTION === 'false'
-      ? false
-      : process.env.ASSEMBLYAI_LANGUAGE_DETECTION === 'true' ||
-          process.env.VITE_ASSEMBLYAI_LANGUAGE_DETECTION === 'true'
-        ? true
-        : getAssemblyAiLanguageDetectionDefault(DEFAULT_ASSEMBLYAI_SPEECH_MODEL),
-  assemblyAiMinTurnSilence: Number(
-    process.env.ASSEMBLYAI_MIN_TURN_SILENCE || DEFAULT_ASSEMBLYAI_SILENCE.minTurnSilence
-  ),
-  assemblyAiMaxTurnSilence: Number(
-    process.env.ASSEMBLYAI_MAX_TURN_SILENCE || DEFAULT_ASSEMBLYAI_SILENCE.maxTurnSilence
-  ),
-  assemblyAiKeytermsPrompt:
-    process.env.ASSEMBLYAI_KEYTERMS_PROMPT || process.env.VITE_ASSEMBLYAI_KEYTERMS_PROMPT || '',
-  assemblyAiPrompt: process.env.ASSEMBLYAI_PROMPT || process.env.VITE_ASSEMBLYAI_PROMPT || '',
-  llmProvider: DEFAULT_LLM_PROVIDER,
-  llmAuthMode: 'api-key',
-  llmApiKey: '',
-  llmOpenAICompatibleApiKey: '',
-  llmAnthropicCompatibleApiKey: '',
-  llmOauthToken: '',
-  llmOauthRefreshToken: '',
-  llmOauthExpiresAt: 0,
-  llmOauthAccountId: '',
-  llmBaseUrl: '',
-  llmModel: '',
-  llmOpenAIModel: '',
-  llmOpenAIOAuthModel: '',
-  llmOpenAICompatibleModel: '',
-  llmAnthropicCompatibleModel: '',
-  llmLlamaCppModel: '',
-  llmModelDir: '',
-  llmTemperature: 1.0,
-  llmTopP: 0.95,
-  llmTopK: 64,
-  historySession: 1,
-  transcriptionLanguage:
-    process.env.TRANSCRIPTION_LANGUAGE === 'pt' || process.env.VITE_TRANSCRIPTION_LANGUAGE === 'pt'
-      ? 'pt'
-      : process.env.TRANSCRIPTION_LANGUAGE === 'en' ||
-          process.env.VITE_TRANSCRIPTION_LANGUAGE === 'en'
-        ? 'en'
-        : 'auto',
-  alwaysOnTop: true,
-  windowOpacity: 1.0,
-  pauseThreshold: 1500,
-  captureSourceId: '',
-  captureSourceType: 'auto'
+const DEFAULT_LLM_PROVIDER: AppSettings['llmProvider'] = 'openai'
+
+const getAssemblyAiTurnSilenceDefaults = (
+  speechModel: AssemblyAiSpeechModel
+): { minTurnSilence: number; maxTurnSilence: number } => {
+  if (speechModel === 'u3-rt-pro') {
+    return { minTurnSilence: 100, maxTurnSilence: 1000 }
+  }
+  return { minTurnSilence: 400, maxTurnSilence: 1280 }
+}
+
+const getAssemblyAiLanguageDetectionDefault = (
+  speechModel: AssemblyAiSpeechModel
+): boolean => {
+  return speechModel === 'universal-streaming-multilingual'
 }
 
 const normalizeSettings = (settings: AppSettings): AppSettings =>
@@ -235,15 +159,15 @@ export class SettingsManager {
           needsSave = true
         }
         if (!savedSettings.assemblyAiSpeechModel) {
-          savedSettings.assemblyAiSpeechModel = DEFAULT_ASSEMBLYAI_SPEECH_MODEL
+          savedSettings.assemblyAiSpeechModel = ASSEMBLYAI_SPEECH_MODEL_DEFAULT
           needsSave = true
         }
         if (!isAssemblyAiSpeechModel(savedSettings.assemblyAiSpeechModel)) {
-          savedSettings.assemblyAiSpeechModel = DEFAULT_ASSEMBLYAI_SPEECH_MODEL
+          savedSettings.assemblyAiSpeechModel = ASSEMBLYAI_SPEECH_MODEL_DEFAULT
           needsSave = true
         }
         const speechModel = savedSettings.assemblyAiSpeechModel as AssemblyAiSpeechModel
-        const silenceDefaults = getAssemblyAiSilenceDefaults(speechModel)
+        const silenceDefaults = getAssemblyAiTurnSilenceDefaults(speechModel)
         if (savedSettings.assemblyAiLanguageDetection === undefined) {
           savedSettings.assemblyAiLanguageDetection =
             getAssemblyAiLanguageDetectionDefault(speechModel)

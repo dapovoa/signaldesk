@@ -638,7 +638,8 @@ const restartPendingQuestionTimer = (
       return
     }
 
-    void generateAnswerForQuestion(fullQuestion, epoch).catch((error) => {
+    // Use current pipelineEpoch instead of stale epoch from closure
+    void generateAnswerForQuestion(fullQuestion, pipelineEpoch).catch((error) => {
       console.error('[Pipeline] queued detector answer failed:', error)
       mainWindow?.webContents.send('answer-error', (error as Error).message)
     })
@@ -1080,7 +1081,7 @@ const attachAnthropicServiceListeners = (service: AnthropicService): void => {
 }
 
 const scheduleAnswerForDetectedQuestion = (questionText: string, epoch = pipelineEpoch): void => {
-  if (epoch !== pipelineEpoch) {
+  if (epoch !== pipelineEpoch || isGeneratingAnswer) {
     return
   }
 
@@ -2138,6 +2139,12 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     if (openaiService) {
       const service = openaiService
       openaiService = null
+      service.removeAllListeners()
+    }
+
+    if (anthropicService) {
+      const service = anthropicService
+      anthropicService = null
       service.removeAllListeners()
     }
 

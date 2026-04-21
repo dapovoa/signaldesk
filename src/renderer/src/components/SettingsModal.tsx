@@ -3,6 +3,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppSettings, useInterviewStore } from '../store/interviewStore'
 import type { WindowCapabilities } from '../../../shared/contracts'
 import {
+  getAssemblyAiLanguageDetectionDefault,
+  getAssemblyAiTurnSilenceDefaults
+} from '../../../shared/defaults'
+import {
   getActiveLlmModel,
   normalizeLlmSettings,
   resolveLlmCredential,
@@ -64,22 +68,6 @@ const setActiveLlmCredential = (settings: AppSettings, value: string): AppSettin
   return { ...settings, llmApiKey: value }
 }
 
-const getAssemblyAiTurnSilenceDefaults = (
-  speechModel: AppSettings['assemblyAiSpeechModel']
-): { minTurnSilence: number; maxTurnSilence: number } => {
-  if (speechModel === 'u3-rt-pro') {
-    return { minTurnSilence: 100, maxTurnSilence: 1000 }
-  }
-
-  return { minTurnSilence: 400, maxTurnSilence: 1280 }
-}
-
-const getAssemblyAiLanguageDetectionDefault = (
-  speechModel: AppSettings['assemblyAiSpeechModel']
-): boolean => {
-  return speechModel === 'universal-streaming-multilingual'
-}
-
 const supportsAssemblyAiLanguageDetection = (
   speechModel: AppSettings['assemblyAiSpeechModel']
 ): boolean => {
@@ -139,7 +127,7 @@ export function SettingsModal(): React.ReactNode | null {
   const [showTranscriptionCredential, setShowTranscriptionCredential] = useState(false)
   const [models, setModels] = useState<Array<{ id: string; name: string }>>([])
   const [modelsLoading, setModelsLoading] = useState(false)
-  const [, setModelsError] = useState<string | null>(null)
+  const [modelsError, setModelsError] = useState<string | null>(null)
   const [transcriptionStatus, setTranscriptionStatus] = useState<
     'idle' | 'connecting' | 'testing' | 'ok' | 'error'
   >('idle')
@@ -1493,7 +1481,31 @@ export function SettingsModal(): React.ReactNode | null {
                   Answer Generation Model
                 </label>
                 <div className="flex gap-2">
-                  {connectedModels.length > 0 ? (
+                  {modelsLoading ? (
+                    <div className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-500 flex items-center">
+                      Loading models...
+                    </div>
+                  ) : modelsError ? (
+                    <div className="w-full space-y-2">
+                      <input
+                        type="text"
+                        value={activeLlmModel}
+                        onChange={(e) =>
+                          setLocalSettings(normalizeSettingsForUi(setActiveLlmModel(localSettings, e.target.value)))
+                        }
+                        placeholder={
+                          localSettings.llmProvider === 'llama.cpp'
+                            ? 'Enter GGUF model filename'
+                            : 'Enter model slug'
+                        }
+                        className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
+                      />
+                      <div className="settings-status-error flex items-center gap-1.5 text-xs">
+                        <AlertCircle size={12} />
+                        <span>{modelsError}</span>
+                      </div>
+                    </div>
+                  ) : connectedModels.length > 0 ? (
                     <select
                       value={activeLlmModel}
                       onChange={(e) =>
