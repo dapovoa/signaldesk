@@ -22,10 +22,12 @@ export type AssemblyAiSpeechModel =
   | 'universal-streaming-english'
 
 export interface AppSettings {
-  transcriptionProvider: 'openai' | 'assemblyai'
+  transcriptionProvider: 'openai' | 'assemblyai' | 'groq'
   transcriptionApiKey: string
   openaiTranscriptionApiKey: string
+  groqTranscriptionApiKey: string
   whisperModel: string
+  groqTranscriptionModel: string
   assemblyAiSpeechModel: AssemblyAiSpeechModel
   assemblyAiLanguageDetection: boolean
   assemblyAiMinTurnSilence: number

@@ -65,10 +65,15 @@ const DEFAULT_SETTINGS: AppSettings = {
     process.env.TRANSCRIPTION_PROVIDER === 'assemblyai' ||
     process.env.VITE_TRANSCRIPTION_PROVIDER === 'assemblyai'
       ? 'assemblyai'
-      : 'openai',
+      : process.env.TRANSCRIPTION_PROVIDER === 'groq' ||
+          process.env.VITE_TRANSCRIPTION_PROVIDER === 'groq'
+        ? 'groq'
+        : 'openai',
   transcriptionApiKey: process.env.ASSEMBLYAI_API_KEY || process.env.VITE_ASSEMBLYAI_API_KEY || '',
   openaiTranscriptionApiKey: '',
+  groqTranscriptionApiKey: '',
   whisperModel: '',
+  groqTranscriptionModel: 'whisper-large-v3-turbo',
   assemblyAiSpeechModel: DEFAULT_ASSEMBLYAI_SPEECH_MODEL,
   assemblyAiLanguageDetection:
     process.env.ASSEMBLYAI_LANGUAGE_DETECTION === 'false' ||
@@ -380,6 +385,17 @@ export class SettingsManager {
               savedSettings.openaiTranscriptionApiKey = ''
             }
           }
+          if (savedSettings.groqTranscriptionApiKeyEncrypted) {
+            try {
+              savedSettings.groqTranscriptionApiKey = safeStorage.decryptString(
+                Buffer.from(savedSettings.groqTranscriptionApiKeyEncrypted, 'base64')
+              )
+              delete savedSettings.groqTranscriptionApiKeyEncrypted
+              needsSave = true
+            } catch {
+              savedSettings.groqTranscriptionApiKey = ''
+            }
+          }
         }
 
         const hydratedSettings = hydrateStoredSettings(savedSettings)
@@ -444,6 +460,12 @@ export class SettingsManager {
             .encryptString(settingsToSave.openaiTranscriptionApiKey)
             .toString('base64')
           settingsToSave.openaiTranscriptionApiKey = ''
+        }
+        if (settingsToSave.groqTranscriptionApiKey) {
+          ;(settingsToSave as Record<string, unknown>).groqTranscriptionApiKeyEncrypted = safeStorage
+            .encryptString(settingsToSave.groqTranscriptionApiKey)
+            .toString('base64')
+          settingsToSave.groqTranscriptionApiKey = ''
         }
       }
 

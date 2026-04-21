@@ -202,6 +202,8 @@ export function SettingsModal(): React.ReactNode | null {
     localSettings.transcriptionProvider,
     localSettings.transcriptionApiKey,
     localSettings.openaiTranscriptionApiKey,
+    localSettings.groqTranscriptionApiKey,
+    localSettings.groqTranscriptionModel,
     localSettings.transcriptionLanguage,
     localSettings.whisperModel,
     localSettings.assemblyAiSpeechModel,
@@ -213,6 +215,29 @@ export function SettingsModal(): React.ReactNode | null {
   ])
 
   useEffect(() => {
+    if (localSettings.transcriptionProvider === 'groq') {
+      if (!localSettings.groqTranscriptionApiKey.trim()) {
+        setTranscriptionModels([])
+        return
+      }
+      const loadGroqModels = async (): Promise<void> => {
+        try {
+          const result = await window.api.listTranscriptionModels({
+            apiKey: localSettings.groqTranscriptionApiKey,
+            provider: 'groq'
+          })
+          if (result.success && result.models.length > 0) {
+            setTranscriptionModels(result.models.map((m) => m.id))
+          } else {
+            setTranscriptionModels([])
+          }
+        } catch {
+          setTranscriptionModels([])
+        }
+      }
+      loadGroqModels()
+      return
+    }
     if (localSettings.transcriptionProvider !== 'openai') return
     if (!localSettings.openaiTranscriptionApiKey.trim()) return
 
@@ -232,7 +257,7 @@ export function SettingsModal(): React.ReactNode | null {
     }
 
     loadTranscriptionModels()
-  }, [localSettings.transcriptionProvider, localSettings.openaiTranscriptionApiKey])
+  }, [localSettings.transcriptionProvider, localSettings.openaiTranscriptionApiKey, localSettings.groqTranscriptionApiKey])
 
   useEffect(() => {
     const loadWindowCapabilities = async (): Promise<void> => {
@@ -515,7 +540,9 @@ export function SettingsModal(): React.ReactNode | null {
       const apiKey =
         currentSettings.transcriptionProvider === 'assemblyai'
           ? currentSettings.transcriptionApiKey.trim()
-          : currentSettings.openaiTranscriptionApiKey.trim()
+          : currentSettings.transcriptionProvider === 'groq'
+            ? currentSettings.groqTranscriptionApiKey.trim()
+            : currentSettings.openaiTranscriptionApiKey.trim()
 
       if (!apiKey) {
         setTranscriptionStatus('error')
@@ -549,7 +576,9 @@ export function SettingsModal(): React.ReactNode | null {
       const apiKey =
         currentSettings.transcriptionProvider === 'assemblyai'
           ? currentSettings.transcriptionApiKey.trim()
-          : currentSettings.openaiTranscriptionApiKey.trim()
+          : currentSettings.transcriptionProvider === 'groq'
+            ? currentSettings.groqTranscriptionApiKey.trim()
+            : currentSettings.openaiTranscriptionApiKey.trim()
 
       const assemblyAiValidationError = getAssemblyAiPromptValidationError(currentSettings)
 
@@ -571,7 +600,10 @@ export function SettingsModal(): React.ReactNode | null {
       const result = await window.api.testTranscriptionConnection({
         provider: currentSettings.transcriptionProvider,
         apiKey,
-        whisperModel: currentSettings.whisperModel,
+        whisperModel:
+          currentSettings.transcriptionProvider === 'groq'
+            ? currentSettings.groqTranscriptionModel
+            : currentSettings.whisperModel,
         language: currentSettings.transcriptionLanguage,
         assemblyAiSpeechModel: currentSettings.assemblyAiSpeechModel,
         assemblyAiLanguageDetection: currentSettings.assemblyAiLanguageDetection,
@@ -855,6 +887,7 @@ export function SettingsModal(): React.ReactNode | null {
             >
               <option value="assemblyai">AssemblyAI</option>
               <option value="openai">OpenAI</option>
+              <option value="groq">Groq</option>
             </select>
           </div>
 
@@ -1114,6 +1147,128 @@ export function SettingsModal(): React.ReactNode | null {
                       setLocalSettings({
                         ...localSettings,
                         whisperModel: e.target.value
+                      })
+                    }
+                    placeholder="Enter model slug"
+                    className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
+                  />
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={handleConnectTranscription}
+                  disabled={transcriptionStatus === 'connecting'}
+                  className="settings-action px-3 py-2 text-sm transition-colors disabled:opacity-60"
+                >
+                  {transcriptionStatus === 'connecting' ? 'Connecting...' : 'Connect STT'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleTestTranscription}
+                  disabled={transcriptionStatus === 'testing'}
+                  className="settings-action px-3 py-2 text-sm transition-colors disabled:opacity-60"
+                >
+                  {transcriptionStatus === 'testing' ? 'Testing...' : 'Test STT'}
+                </button>
+              </div>
+              {transcriptionStatus === 'ok' && (
+                <div className="settings-status-ok flex items-center gap-1.5 text-xs">
+                  <CheckCircle size={12} />
+                  <span>{transcriptionMessage}</span>
+                </div>
+              )}
+              {transcriptionStatus === 'error' && (
+                <div className="settings-status-error flex items-center gap-1.5 text-xs">
+                  <AlertCircle size={12} />
+                  <span>{transcriptionMessage}</span>
+                </div>
+              )}
+            </>
+          )}
+
+          {localSettings.transcriptionProvider === 'groq' && (
+            <>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-dark-200">
+                  Groq API Key
+                  <a
+                    href="https://console.groq.com/api-keys"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-2 text-xs text-blue-400 hover:underline"
+                  >
+                    Console →
+                  </a>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showTranscriptionCredential ? 'text' : 'password'}
+                    value={localSettings.groqTranscriptionApiKey}
+                    onChange={(e) =>
+                      setLocalSettings({ ...localSettings, groqTranscriptionApiKey: e.target.value })
+                    }
+                    placeholder="Enter your Groq API key"
+                    className="w-full px-3 py-2 pr-10 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 placeholder-dark-500 focus:outline-none focus:border-blue-500 transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowTranscriptionCredential(!showTranscriptionCredential)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-dark-400 hover:text-dark-200"
+                  >
+                    {showTranscriptionCredential ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-dark-200">
+                  Transcription Language
+                </label>
+                <select
+                  value={localSettings.transcriptionLanguage}
+                  onChange={(e) =>
+                    setLocalSettings({
+                      ...localSettings,
+                      transcriptionLanguage: e.target.value as AppSettings['transcriptionLanguage']
+                    })
+                  }
+                  className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors"
+                >
+                  <option value="auto">Auto detect</option>
+                  <option value="en">English</option>
+                  <option value="pt">Portuguese</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-dark-200">Whisper Model</label>
+                {transcriptionModels.length > 0 ? (
+                  <select
+                    value={localSettings.groqTranscriptionModel}
+                    onChange={(e) =>
+                      setLocalSettings({
+                        ...localSettings,
+                        groqTranscriptionModel: e.target.value
+                      })
+                    }
+                    className="w-full px-3 py-2 bg-dark-800 border border-dark-600 rounded-lg text-sm text-dark-100 focus:outline-none focus:border-blue-500 transition-colors"
+                  >
+                    {transcriptionModels.map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={localSettings.groqTranscriptionModel}
+                    onChange={(e) =>
+                      setLocalSettings({
+                        ...localSettings,
+                        groqTranscriptionModel: e.target.value
                       })
                     }
                     placeholder="Enter model slug"

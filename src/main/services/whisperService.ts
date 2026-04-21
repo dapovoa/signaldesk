@@ -17,7 +17,7 @@ export interface TranscriptEvent {
 }
 
 export interface WhisperConfig {
-  provider?: 'openai' | 'assemblyai'
+  provider?: 'openai' | 'assemblyai' | 'groq'
   apiKey: string
   baseURL?: string
   customHeaders?: string
@@ -52,7 +52,11 @@ export class WhisperService extends EventEmitter {
   private requireConfiguredModel(): string {
     const model = this.config.model?.trim()
     if (!model) {
-      throw new Error('Select or enter a Whisper model before using OpenAI transcription.')
+      const provider = this.config.provider || 'openai'
+      if (provider === 'groq') {
+        return 'whisper-large-v3-turbo'
+      }
+      throw new Error('Select or enter a Whisper model before using transcription.')
     }
 
     return model
@@ -61,8 +65,15 @@ export class WhisperService extends EventEmitter {
   constructor(config: WhisperConfig) {
     super()
     this.config = config
-    this.client =
-      (config.provider || 'openai') === 'openai' ? createOpenAIClient(config) : null
+    const provider = config.provider || 'openai'
+    if (provider === 'openai' || provider === 'groq') {
+      this.client = createOpenAIClient({
+        apiKey: config.apiKey,
+        baseURL: provider === 'groq' ? 'https://api.groq.com/openai/v1' : config.baseURL
+      })
+    } else {
+      this.client = null
+    }
   }
 
   async start(): Promise<void> {

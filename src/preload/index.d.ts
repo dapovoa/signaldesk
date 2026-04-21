@@ -50,7 +50,7 @@ export interface Api {
     hasPreferredModel?: boolean
   }>
   testTranscriptionConnection: (payload: {
-    provider?: 'openai' | 'assemblyai'
+    provider?: 'openai' | 'assemblyai' | 'groq'
     apiKey?: string
     whisperModel?: string
     language?: 'auto' | 'en' | 'pt'
@@ -75,7 +75,7 @@ export interface Api {
     assemblyAiPrompt?: string
     pauseThreshold?: number
   }) => Promise<{ success: boolean; message: string }>
-  listTranscriptionModels: (payload: { apiKey?: string }) => Promise<{
+  listTranscriptionModels: (payload: { apiKey?: string; provider?: string }) => Promise<{
     success: boolean
     models: Array<{ id: string; name: string }>
     error?: string

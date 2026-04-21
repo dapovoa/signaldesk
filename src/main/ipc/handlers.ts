@@ -1,4 +1,4 @@
-import { BrowserWindow, clipboard, desktopCapturer, ipcMain } from 'electron'
+import { BrowserWindow, clipboard, desktopCapturer, ipcMain, shell } from 'electron'
 import type { AnswerEntry } from '../../shared/contracts'
 import {
   resolveLlmCredential,
@@ -89,7 +89,7 @@ interface ProviderConfig {
 }
 
 interface TranscriptionConfig {
-  provider: 'openai' | 'assemblyai'
+  provider: 'openai' | 'assemblyai' | 'groq'
   apiKey: string
 }
 
@@ -141,6 +141,17 @@ const IPC_HANDLE_CHANNELS = [
   'analyze-screenshot'
 ] as const
 const IPC_EVENT_CHANNELS = ['audio-data'] as const
+
+ipcMain.handle('open-llm-models-folder', async () => {
+  const settings = settingsManager?.getSettings()
+  const modelsDir = settings?.llmModelDir?.trim() || getDefaultModelsDirectory()
+  ensureModelsDirectory(modelsDir)
+  const result = await shell.openPath(modelsDir)
+  if (result) {
+    return { success: false, path: modelsDir, error: result }
+  }
+  return { success: true, path: modelsDir }
+})
 
 const isNotFoundError = (error: unknown): boolean => {
   if (!error) return false
@@ -376,6 +387,13 @@ const getTranscriptionConfig = (settings: AppSettings): TranscriptionConfig => {
     }
   }
 
+  if (settings.transcriptionProvider === 'groq') {
+    return {
+      provider: 'groq' as const,
+      apiKey: settings.groqTranscriptionApiKey
+    }
+  }
+
   return {
     provider: 'openai' as const,
     apiKey: settings.openaiTranscriptionApiKey
@@ -472,6 +490,10 @@ const validateTranscriptionSettings = (settings: AppSettings): string | null => 
 
   if (settings.transcriptionProvider === 'openai' && !settings.whisperModel?.trim()) {
     return 'Select or enter a Whisper model in Settings before using OpenAI transcription.'
+  }
+
+  if (settings.transcriptionProvider === 'groq' && !settings.groqTranscriptionApiKey?.trim()) {
+    return 'Groq API key not configured. Please add it in Settings.'
   }
 
   return null
@@ -1679,7 +1701,7 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     async (
       _event,
       payload: {
-        provider?: 'openai' | 'assemblyai'
+        provider?: 'openai' | 'assemblyai' | 'groq'
         apiKey?: string
         whisperModel?: string
         language?: 'auto' | 'en' | 'pt'
@@ -1720,6 +1742,36 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
           keytermsPrompt: payload?.assemblyAiKeytermsPrompt,
           prompt: payload?.assemblyAiPrompt
         })
+      }
+
+      if (provider === 'groq') {
+        const groqModel = payload?.whisperModel?.trim()
+        if (!groqModel) {
+          return {
+            success: false,
+            message: 'Enter a Whisper model slug before testing transcription.'
+          }
+        }
+        try {
+          const client = createOpenAIClient({
+            apiKey,
+            baseURL: 'https://api.groq.com/openai/v1'
+          })
+          const response = await client.models.list()
+          const hasModel = response.data.some((m) => m.id === groqModel)
+          if (!hasModel) {
+            return {
+              success: false,
+              message: `Model "${groqModel}" is not available for this API key.`
+            }
+          }
+          return { success: true, message: 'Groq transcription credential looks valid.' }
+        } catch (error) {
+          return {
+            success: false,
+            message: error instanceof Error ? error.message : 'Groq transcription test failed'
+          }
+        }
       }
 
       try {
@@ -1774,7 +1826,10 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
         whisperService = new WhisperService({
           provider: transcriptionConfig.provider,
           apiKey: transcriptionConfig.apiKey,
-          model: settings.whisperModel,
+          model:
+            settings.transcriptionProvider === 'groq'
+              ? settings.groqTranscriptionModel
+              : settings.whisperModel,
           language: settings.transcriptionLanguage === 'auto' ? undefined : settings.transcriptionLanguage,
           assemblyAiSpeechModel: settings.assemblyAiSpeechModel,
           assemblyAiLanguageDetection: settings.assemblyAiLanguageDetection,
@@ -1796,10 +1851,33 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
     }
   )
 
-  ipcMain.handle('list-transcription-models', async (_event, payload: { apiKey?: string }) => {
+  ipcMain.handle('list-transcription-models', async (_event, payload: { apiKey?: string; provider?: string }) => {
     const apiKey = payload?.apiKey?.trim()
+    const provider = payload?.provider || 'openai'
+
     if (!apiKey) {
       return { success: false, models: [], error: 'API key is required' }
+    }
+
+    if (provider === 'groq') {
+      try {
+        const client = createOpenAIClient({
+          apiKey,
+          baseURL: 'https://api.groq.com/openai/v1'
+        })
+        const response = await client.models.list()
+        const whisperModels = response.data
+          .filter((model) => model.id.startsWith('whisper'))
+          .map((model) => ({ id: model.id, name: model.id }))
+          .sort((a, b) => a.id.localeCompare(b.id))
+        return { success: true, models: whisperModels }
+      } catch (error) {
+        return {
+          success: false,
+          models: [],
+          error: error instanceof Error ? error.message : 'Failed to fetch Groq models'
+        }
+      }
     }
 
     try {
@@ -1864,7 +1942,10 @@ export function initializeIpcHandlers(window: BrowserWindow, waylandFlag = false
       whisperService = new WhisperService({
         provider: transcriptionConfig.provider,
         apiKey: transcriptionConfig.apiKey,
-        model: settings.whisperModel,
+        model:
+          settings.transcriptionProvider === 'groq'
+            ? settings.groqTranscriptionModel
+            : settings.whisperModel,
         language:
           settings.transcriptionLanguage === 'auto' ? undefined : settings.transcriptionLanguage,
         assemblyAiSpeechModel: settings.assemblyAiSpeechModel,

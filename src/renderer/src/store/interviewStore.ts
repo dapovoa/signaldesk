@@ -88,6 +88,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   transcriptionProvider: 'assemblyai',
   transcriptionApiKey: '',
   openaiTranscriptionApiKey: '',
+  groqTranscriptionApiKey: '',
+  groqTranscriptionModel: 'whisper-large-v3-turbo',
   whisperModel: '',
   assemblyAiSpeechModel: 'u3-rt-pro',
   assemblyAiLanguageDetection: false,
