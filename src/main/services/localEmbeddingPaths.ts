@@ -84,10 +84,6 @@ const isExecutableFile = (candidate: string): boolean => {
   }
 }
 
-const getLlamaBinaryOverride = (binaryName: LlamaBinaryName): string =>
-  binaryName === 'llama-server'
-    ? process.env.SIGNALDESK_LLAMA_SERVER?.trim() || ''
-    : process.env.SIGNALDESK_LLAMA_CLI?.trim() || ''
 const getLlamaProjectRoots = (): string[] => {
   const candidates = [process.cwd(), process.resourcesPath || '']
 
@@ -122,7 +118,6 @@ const getBundledLlamaDirectories = (): string[] =>
 
 const getConfiguredLlamaBinDirectory = (configuredDir?: string): string =>
   configuredDir?.trim() ||
-  process.env.SIGNALDESK_LLAMA_BIN_DIR?.trim() ||
   getDefaultLlamaBinDirectory()
 
 const normalizePathEntries = (value?: string): string[] =>
@@ -135,7 +130,6 @@ const collectLlamaBinaryCandidates = (
   binaryName: LlamaBinaryName,
   configuredDir?: string
 ): string[] => {
-  const override = getLlamaBinaryOverride(binaryName)
   const overrideDir = getConfiguredLlamaBinDirectory(configuredDir)
   const pathDirs = (process.env.PATH || '')
     .split(path.delimiter)
@@ -143,7 +137,6 @@ const collectLlamaBinaryCandidates = (
     .filter(Boolean)
 
   return unique([
-    override,
     overrideDir ? path.join(overrideDir, binaryName) : '',
     ...getBundledLlamaDirectories().map((dir) => path.join(dir, binaryName)),
     ...pathDirs.map((dir) => path.join(dir, binaryName))
@@ -160,31 +153,13 @@ const resolveLlamaBinary = (binaryName: LlamaBinaryName, configuredDir?: string)
   return ''
 }
 
-const getMissingBinaryEnvVar = (binaryName: LlamaBinaryName): string =>
-  binaryName === 'llama-server' ? 'SIGNALDESK_LLAMA_SERVER' : 'SIGNALDESK_LLAMA_CLI'
-
-const formatLookupTail = (candidates: string[]): string => {
-  const visibleCandidates = candidates.slice(0, 12)
-  const remainder = candidates.length - visibleCandidates.length
-  const lines = visibleCandidates.map((candidate) => `- ${candidate}`)
-
-  if (remainder > 0) {
-    lines.push(`- ... plus ${remainder} more PATH candidates`)
-  }
-
-  return lines.join('\n')
-}
-
 export const buildLlamaBinaryNotFoundError = (
   binaryName: LlamaBinaryName,
   configuredDir?: string
 ): string => {
-  const envVar = getMissingBinaryEnvVar(binaryName)
   const resolvedBinDir = getConfiguredLlamaBinDirectory(configuredDir)
-  const candidates = collectLlamaBinaryCandidates(binaryName, configuredDir)
-  const configuredPrefix = resolvedBinDir ? `Configured llama.cpp bin dir: ${resolvedBinDir}\n` : ''
 
-  return `${binaryName} binary not found.\n${configuredPrefix}Choose a llama.cpp binaries folder in Settings, set ${envVar} or SIGNALDESK_LLAMA_BIN_DIR, install ${binaryName} in PATH, or bundle it under resources/vendor/llama/bin.\nChecked:\n${formatLookupTail(candidates)}`
+  return `${binaryName} binary not found.\nCopy to: ${path.join(resolvedBinDir, binaryName)}`
 }
 
 export const resolveLlamaServerBinary = (configuredDir?: string): string =>

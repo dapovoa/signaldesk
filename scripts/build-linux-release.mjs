@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 
 const rawVersion = process.argv[2]
 
@@ -26,7 +27,16 @@ const run = (command, args) => {
   }
 }
 
-run('npm', ['version', version, '--no-git-tag-version'])
+// Check current version to avoid unnecessary bump
+const packageJson = JSON.parse(readFileSync('./package.json', 'utf-8'))
+const currentVersion = packageJson.version
+
+if (currentVersion !== version) {
+  run('npm', ['version', version, '--no-git-tag-version'])
+} else {
+  console.log(`Version ${version} unchanged, skipping version bump`)
+}
+
 run('npm', ['run', 'build:clean-dist'])
 run('npm', ['run', 'build'])
 run('npx', ['electron-builder', '--linux', '--config', 'electron-builder.release.yml'])

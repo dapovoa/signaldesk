@@ -201,6 +201,45 @@ export function SettingsModal(): React.ReactNode | null {
     localSettings.assemblyAiPrompt
   ])
 
+  // Auto-reset transcription status after success
+  useEffect(() => {
+    if (transcriptionStatus !== 'ok') return
+    const timer = setTimeout(() => {
+      setTranscriptionStatus('idle')
+      setTranscriptionMessage('')
+    }, 4000)
+    return () => clearTimeout(timer)
+  }, [transcriptionStatus])
+
+  // Auto-reset connection status after success
+  useEffect(() => {
+    if (connectionStatus !== 'ok') return
+    const timer = setTimeout(() => {
+      setConnectionStatus('idle')
+      setConnectionMessage('')
+    }, 4000)
+    return () => clearTimeout(timer)
+  }, [connectionStatus])
+
+  // Auto-reset LLM test status after success
+  useEffect(() => {
+    if (llmTestStatus !== 'ok') return
+    const timer = setTimeout(() => {
+      setLlmTestStatus('idle')
+    }, 4000)
+    return () => clearTimeout(timer)
+  }, [llmTestStatus])
+
+  // Auto-reset OAuth status after success
+  useEffect(() => {
+    if (oauthStatus !== 'ok') return
+    const timer = setTimeout(() => {
+      setOauthStatus('idle')
+      setOauthMessage('')
+    }, 4000)
+    return () => clearTimeout(timer)
+  }, [oauthStatus])
+
   useEffect(() => {
     if (localSettings.transcriptionProvider === 'groq') {
       if (!localSettings.groqTranscriptionApiKey.trim()) {
@@ -215,6 +254,9 @@ export function SettingsModal(): React.ReactNode | null {
           })
           if (result.success && result.models.length > 0) {
             setTranscriptionModels(result.models.map((m) => m.id))
+            if (!localSettings.groqTranscriptionModel.trim()) {
+              setLocalSettings((prev) => ({ ...prev, groqTranscriptionModel: result.models[0].id }))
+            }
           } else {
             setTranscriptionModels([])
           }
@@ -235,6 +277,9 @@ export function SettingsModal(): React.ReactNode | null {
         })
         if (result.success && result.models.length > 0) {
           setTranscriptionModels(result.models.map((m) => m.id))
+          if (!localSettings.whisperModel.trim()) {
+            setLocalSettings((prev) => ({ ...prev, whisperModel: result.models[0].id }))
+          }
         } else {
           setTranscriptionModels([])
         }
@@ -341,6 +386,9 @@ export function SettingsModal(): React.ReactNode | null {
     }
     setConnectionStatus('idle')
     setConnectionMessage('')
+    setLlmTestStatus('idle')
+    setOauthStatus('idle')
+    setOauthMessage('')
 
     const provider = llmProvider
     const authMode = llmAuthMode
@@ -378,6 +426,10 @@ export function SettingsModal(): React.ReactNode | null {
             setModels(result.models)
             setConnectedModels(result.models.map(m => m.id))
             setModelsError(null)
+            // Auto-select first model if none selected
+            if (!getActiveLlmModel(localSettings) && result.models.length > 0) {
+              setLocalSettings((prev) => setActiveLlmModel(prev, result.models[0].id))
+            }
           } else {
             setModels([])
             setModelsError(result.error || 'Failed to fetch models')
@@ -428,6 +480,10 @@ export function SettingsModal(): React.ReactNode | null {
         if (result.success) {
           setModels(result.models)
           setModelsError(null)
+          // Auto-select first model if none selected
+          if (!getActiveLlmModel(localSettings) && result.models.length > 0) {
+            setLocalSettings((prev) => setActiveLlmModel(prev, result.models[0].id))
+          }
         } else {
           setModels([])
           setModelsError(result.error || 'Failed to fetch models')
@@ -1552,9 +1608,9 @@ export function SettingsModal(): React.ReactNode | null {
             <>
             {localSettings.llmProvider === 'llama.cpp' ? (
               <div className="space-y-1">
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-4 gap-2">
                   <div className="space-y-1">
-                    <label className="settings-subtitle block text-[11px]">Temperature</label>
+                    <label className="settings-subtitle block text-[10px]">Temp</label>
                     <input
                       type="number"
                       min="0"
@@ -1564,14 +1620,14 @@ export function SettingsModal(): React.ReactNode | null {
                       onChange={(e) =>
                         setLocalSettings({
                           ...localSettings,
-                          llmTemperature: parseFloat(e.target.value) || 1.0
+                          llmTemperature: parseFloat(e.target.value) ?? 1.0
                         })
                       }
-                      className="w-full rounded-lg border border-dark-600 bg-dark-800 px-3 py-2 text-sm text-dark-100 placeholder-dark-500 transition-colors [appearance:textfield] focus:outline-none focus:border-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                      className="w-full rounded border border-dark-600 bg-dark-800 px-2 py-1 text-xs text-dark-100 placeholder-dark-500 [appearance:textfield] focus:outline-none focus:border-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="settings-subtitle block text-[11px]">Top P</label>
+                    <label className="settings-subtitle block text-[10px]">Top P</label>
                     <input
                       type="number"
                       min="0"
@@ -1581,14 +1637,14 @@ export function SettingsModal(): React.ReactNode | null {
                       onChange={(e) =>
                         setLocalSettings({
                           ...localSettings,
-                          llmTopP: parseFloat(e.target.value) || 0.95
+                          llmTopP: parseFloat(e.target.value) ?? 0.95
                         })
                       }
-                      className="w-full rounded-lg border border-dark-600 bg-dark-800 px-3 py-2 text-sm text-dark-100 placeholder-dark-500 transition-colors [appearance:textfield] focus:outline-none focus:border-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                      className="w-full rounded border border-dark-600 bg-dark-800 px-2 py-1 text-xs text-dark-100 placeholder-dark-500 [appearance:textfield] focus:outline-none focus:border-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="settings-subtitle block text-[11px]">Top K</label>
+                    <label className="settings-subtitle block text-[10px]">Top K</label>
                     <input
                       type="number"
                       min="1"
@@ -1598,10 +1654,28 @@ export function SettingsModal(): React.ReactNode | null {
                       onChange={(e) =>
                         setLocalSettings({
                           ...localSettings,
-                          llmTopK: parseInt(e.target.value, 10) || 64
+                          llmTopK: parseInt(e.target.value, 10) ?? 64
                         })
                       }
-                      className="w-full rounded-lg border border-dark-600 bg-dark-800 px-3 py-2 text-sm text-dark-100 placeholder-dark-500 transition-colors [appearance:textfield] focus:outline-none focus:border-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                      className="w-full rounded border border-dark-600 bg-dark-800 px-2 py-1 text-xs text-dark-100 placeholder-dark-500 [appearance:textfield] focus:outline-none focus:border-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="settings-subtitle block text-[10px]">Penalty</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="2"
+                      step="0.05"
+                      value={localSettings.llmRepeatPenalty ?? ''}
+                      onChange={(e) =>
+                        setLocalSettings({
+                          ...localSettings,
+                          llmRepeatPenalty: e.target.value === '' ? null : parseFloat(e.target.value) ?? null
+                        })
+                      }
+                      placeholder="-"
+                      className="w-full rounded border border-dark-600 bg-dark-800 px-2 py-1 text-xs text-dark-100 placeholder-dark-500 [appearance:textfield] focus:outline-none focus:border-blue-500 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     />
                   </div>
                 </div>

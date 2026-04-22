@@ -54,6 +54,7 @@ export interface AppSettings {
   llmTemperature: number
   llmTopP: number
   llmTopK: number
+  llmRepeatPenalty: number | null
   historySession: number
   transcriptionLanguage: 'auto' | 'en' | 'pt'
   alwaysOnTop: boolean

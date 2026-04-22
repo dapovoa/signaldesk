@@ -52,6 +52,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   llmTemperature: 1.0,
   llmTopP: 0.95,
   llmTopK: 64,
+  llmRepeatPenalty: null,
   historySession: 1,
   transcriptionLanguage: 'auto',
   alwaysOnTop: true,

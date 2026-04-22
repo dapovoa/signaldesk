@@ -15,6 +15,14 @@ Desktop app for live interview support. Captures interviewer audio, transcribes 
 
 ---
 
+## llama.cpp Binaries
+
+Place `llama-server` in `~/.config/signaldesk/llama/bin/` (or the folder configured in Settings).
+
+Alternatively, add `llama-server` to your system PATH.
+
+---
+
 ## Install
 
 ```bash
@@ -53,22 +61,10 @@ npm run typecheck
 
 ### Debug Flags
 
-Everything:
+Enable verbose logging:
 
 ```bash
 SIGNALDESK_VERBOSE=1 npm run dev:linux
-```
-
-Granular flags:
-
-```bash
-SIGNALDESK_PIPELINE_VERBOSE=1 npm run dev:linux
-SIGNALDESK_AVATAR_VERBOSE=1 npm run dev:linux
-SIGNALDESK_ASSEMBLYAI_VERBOSE=1 npm run dev:linux
-SIGNALDESK_OPENAI_VERBOSE=1 npm run dev:linux
-SIGNALDESK_ANTHROPIC_VERBOSE=1 npm run dev:linux
-SIGNALDESK_EMBED_SERVER_VERBOSE=1 npm run dev:linux
-SIGNALDESK_LLM_SERVER_VERBOSE=1 npm run dev:linux
 ```
 
 ---
