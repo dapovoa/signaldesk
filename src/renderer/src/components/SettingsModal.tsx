@@ -172,9 +172,8 @@ export function SettingsModal(): React.ReactNode | null {
     const hasPendingLocalChanges =
       JSON.stringify(normalizeSettingsForUi(localSettingsRef.current)) !== lastPersistedSettingsRef.current
 
-    lastPersistedSettingsRef.current = serializedSettings
-
     if (!showSettings || !hasPendingLocalChanges) {
+      lastPersistedSettingsRef.current = serializedSettings
       setLocalSettings(normalizedSettings)
     }
   }, [settings, showSettings])
@@ -769,7 +768,7 @@ export function SettingsModal(): React.ReactNode | null {
       await flushPendingSettingsSave()
       setShowSettings(false)
     } catch {
-      // Keep the modal open so the user does not lose unsaved changes.
+      // Keep the modal to saved changes
     }
   }
 
